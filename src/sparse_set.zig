@@ -1,10 +1,13 @@
 const std = @import("std");
 
+const page_size: usize = std.heap.pageSize();
+
 pub const SparseSetOptions = struct {
     T: type,
     /// mask to get the page number from the data
     PageMask: usize = 4096,
 };
+
 pub fn SparseSet(comptime options: SparseSetOptions) type {
     const data_bits = @typeInfo(options.T).int.bits;
     const usize_bits = @typeInfo(usize).int.bits;
@@ -12,7 +15,7 @@ pub fn SparseSet(comptime options: SparseSetOptions) type {
     return struct {
         const Null = std.math.maxInt(options.T);
 
-        sparse: std.ArrayList(options.T) = .empty,
+        sparse: std.ArrayList(?[]options.T) = .empty,
         dense: std.ArrayList(options.T) = .empty,
         allocator: std.mem.Allocator,
 
@@ -23,12 +26,25 @@ pub fn SparseSet(comptime options: SparseSetOptions) type {
         }
 
         pub fn deinit(self: *@This()) void {
+            for (self.sparse.items) |opt| {
+                if (opt) |p| {
+                    self.allocator.free(p);
+                }
+            }
             self.sparse.deinit(self.allocator);
             self.dense.deinit(self.allocator);
         }
 
         pub fn len(self: *@This()) usize {
             return self.dense.items.len;
+        }
+
+        pub fn page(_: *@This(), data: options.T) usize {
+            return (toUsize(data) & options.PageMask) / page_size;
+        }
+
+        pub fn offset(_: *@This(), data: options.T) usize {
+            return toUsize(data) & (page_size - 1);
         }
 
         fn toUsize(data: options.T) usize {
@@ -47,22 +63,37 @@ pub fn SparseSet(comptime options: SparseSetOptions) type {
 
         /// check if set already contains integer
         pub fn contains(self: *@This(), data: options.T) bool {
-            return toUsize(data) < self.sparse.items.len and
-                self.sparse.items[toUsize(data)] != Null;
+            const p = self.page(data);
+            return p < self.sparse.items.len and self.sparse.items[p] != null and self.sparse.items[p].?[self.offset(data)] != Null;
+        }
+
+        /// get page, creating it if it doesn't exist
+        fn getPage(self: *@This(), page_index: usize) ![]options.T {
+            if (page_index >= self.sparse.items.len) {
+                const diff = page_index - self.sparse.items.len + 1;
+                try self.sparse.appendNTimes(self.allocator, null, diff);
+            }
+
+            if (self.sparse.items[page_index] == null) {
+                const new_page = try self.allocator.alloc(options.T, page_size);
+                @memset(new_page, Null);
+                self.sparse.items[page_index] = new_page;
+            }
+
+            return self.sparse.items[page_index].?;
+        }
+
+        fn getElementSparsePtr(self: *@This(), data: options.T) !*options.T {
+            const p = try self.getPage(self.page(data));
+            return &p[self.offset(data)];
         }
 
         /// adds integer to set. Nothing happens if integer is already contained
         pub fn add(self: *@This(), data: options.T) !void {
             std.debug.assert(!self.contains(data));
             std.debug.assert(data != Null);
-            // is not within sparse range
-            if (!(toUsize(data) < self.sparse.items.len)) {
-                // get difference between sparse size and element
-                // append that many times to set dense index
-                const diff = toUsize(data) - self.sparse.items.len + 1;
-                try self.sparse.appendNTimes(self.allocator, Null, diff);
-            }
-            self.sparse.items[toUsize(data)] = toData(self.dense.items.len);
+            const data_ptr = try self.getElementSparsePtr(data);
+            data_ptr.* = toData(self.dense.items.len);
             try self.dense.append(self.allocator, data);
         }
 
@@ -71,18 +102,14 @@ pub fn SparseSet(comptime options: SparseSetOptions) type {
             std.debug.assert(self.contains(data));
             std.debug.assert(data != Null);
 
-            // get dense index
-            const dense_index = toUsize(self.sparse.items[toUsize(data)]);
-            // nullify dense index
-            self.sparse.items[toUsize(data)] = Null;
+            const data_ptr = try self.getElementSparsePtr(data);
+            const last_ptr = try self.getElementSparsePtr(self.dense.getLast());
+            // 1. set 'data' in dense array to be the value of the last element in the dense array
+            const dense_index = data_ptr.*;
+            last_ptr.* = dense_index;
+            // 2. set 'data' in the sparse array to set to Null
+            data_ptr.* = Null;
 
-            // if this isn't the last item in the dense array, update the last item
-            // index in the sparse array
-            if (self.dense.getLastOrNull()) |last_sparse_index| {
-                if (dense_index + 1 != self.dense.items.len) {
-                    self.sparse.items[toUsize(last_sparse_index)] = toData(dense_index);
-                }
-            }
             _ = self.dense.swapRemove(dense_index);
         }
     };
