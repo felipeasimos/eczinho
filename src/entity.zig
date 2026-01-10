@@ -13,11 +13,11 @@ pub fn EntityTypeFactory(comptime options: EntityOptions) type {
     const EntityBackingInt = std.meta.Int(.unsigned, total_bits);
 
     return packed struct(EntityBackingInt) {
-        pub const IndexInt = std.meta.Int(.unsigned, options.index_bits);
-        pub const VersionInt = std.meta.Int(.unsigned, options.version_bits);
+        pub const Index = std.meta.Int(.unsigned, options.index_bits);
+        pub const Version = std.meta.Int(.unsigned, options.version_bits);
 
-        index: IndexInt,
-        version: VersionInt,
+        index: Index,
+        version: Version,
     };
 }
 
@@ -29,4 +29,8 @@ test EntityTypeFactory {
     try std.testing.expectEqual(Small.Index, u12);
     try std.testing.expectEqual(Medium.Index, u20);
     try std.testing.expectEqual(Large.Index, u32);
+
+    try std.testing.expectEqual(Small.Version, u4);
+    try std.testing.expectEqual(Medium.Version, u12);
+    try std.testing.expectEqual(Large.Version, u32);
 }

@@ -13,7 +13,7 @@ pub fn build(b: *std.Build) void {
 
     // library tests
     const lib_tests_mod = b.createModule(.{
-        .root_source_file = b.path("tests/tests.zig"),
+        .root_source_file = b.path("src/eczinho.zig"),
         .target = target,
         .optimize = optimize,
         .imports = &.{
@@ -29,7 +29,7 @@ pub fn build(b: *std.Build) void {
 
     // add check step for fast ZLS diagnostics on tests and library
     const check_lib_tests_mod = b.createModule(.{
-        .root_source_file = b.path("tests/tests.zig"),
+        .root_source_file = b.path("src/eczinho.zig"),
         .target = target,
         .optimize = optimize,
     });

@@ -7,7 +7,7 @@ pub fn ArchetypeOptions(comptime ComponentTypes: []type) type {
     };
 }
 
-pub fn Archetype(comptime World: type) type {
+pub fn Archetype(comptime ComponentTypes: []type) type {
     return struct {
         dense: std.ArrayList(World.Entity.IndexInt),
         sparse: std.ArrayList(World.Entity.IndexInt),
