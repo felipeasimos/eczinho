@@ -101,4 +101,6 @@ pub fn Registry(comptime options: RegistryOptions) type {
 
 test RegistryOptions {
     _ = @import("type_id.zig");
+    _ = @import("sparse_set.zig");
+    _ = @import("archetype.zig");
 }

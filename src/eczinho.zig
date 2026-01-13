@@ -20,6 +20,4 @@ pub fn Eczinho(comptime registry_options: registry.RegistryOptions) type {
 
 test Eczinho {
     _ = @import("registry.zig").Registry;
-    _ = @import("sparse_set.zig");
 }
-

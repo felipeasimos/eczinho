@@ -13,11 +13,23 @@ pub fn EntityTypeFactory(comptime options: EntityOptions) type {
     const EntityBackingInt = std.meta.Int(.unsigned, total_bits);
 
     return packed struct(EntityBackingInt) {
+        pub const Int = EntityBackingInt;
         pub const Index = std.meta.Int(.unsigned, options.index_bits);
         pub const Version = std.meta.Int(.unsigned, options.version_bits);
 
+        pub const entity_mask: Index = std.math.maxInt(Index);
+        pub const version_mask: EntityBackingInt = std.math.maxInt(Version) << options.index_bits;
+
         index: Index,
         version: Version,
+
+        pub inline fn toInt(self: @This()) Int {
+            return @bitCast(self);
+        }
+
+        pub inline fn fromInt(integer: Int) @This() {
+            return @bitCast(integer);
+        }
     };
 }
 
