@@ -44,11 +44,19 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             self.entities_to_component_index.deinit();
         }
 
-        pub fn containsEntity(self: *@This(), entt: options.EntityType) bool {
+        pub fn len(self: *@This()) usize {
+            return self.entities_to_component_index.len();
+        }
+
+        pub fn has(comptime Component: type) bool {
+            return comptime std.mem.indexOfScalar(type, options.Signature, Component) != null;
+        }
+
+        pub fn contains(self: *@This(), entt: options.EntityType) bool {
             return self.entities_to_component_index.contains(entt.toInt());
         }
 
-        pub fn addEntity(self: *@This(), entt: options.EntityType, values: anytype) !void {
+        pub fn add(self: *@This(), entt: options.EntityType, values: anytype) !void {
             inline for (&self.component_arrays, options.Signature, values) |*arr, SigType, value| {
                 if (@sizeOf(SigType) != 0) {
                     try @as(*std.ArrayList(SigType), @ptrCast(arr)).append(self.allocator, value);
@@ -57,7 +65,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             try self.entities_to_component_index.add(entt.toInt());
         }
 
-        pub fn removeEntity(self: *@This(), entt: options.EntityType) void {
+        pub fn remove(self: *@This(), entt: options.EntityType) void {
             const entt_index = self.entities_to_component_index.remove(entt.toInt());
             inline for (&self.component_arrays, options.Signature) |*arr, SigType| {
                 if (@sizeOf(SigType) != 0) {
@@ -69,22 +77,30 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
 }
 
 test Archetype {
+    _ = @import("iter.zig");
     const typeA = u64;
     const typeB = u32;
     const typeC = struct {};
     const typeD = struct { a: u43 };
     const typeE = struct { a: u32, b: u54 };
-    var archetype = Archetype(.{
+    const ArchetypeType = Archetype(.{
         .EntityType = entity.EntityTypeFactory(.medium),
         .ComponentBitSet = components.Components(&[_]type{ typeA, typeB, typeC, typeD, typeE }),
         .Signature = &[_]type{ typeA, typeC, typeD, typeE },
-    }).init(std.testing.allocator);
+    });
+    var archetype = ArchetypeType.init(std.testing.allocator);
     defer archetype.deinit();
+
+    try std.testing.expect(ArchetypeType.has(typeA));
+    try std.testing.expect(!ArchetypeType.has(typeB));
+    try std.testing.expect(ArchetypeType.has(typeC));
+    try std.testing.expect(ArchetypeType.has(typeD));
+    try std.testing.expect(ArchetypeType.has(typeE));
 
     var values = .{ 4, typeC{}, typeD{ .a = 34 }, typeE{ .a = 23, .b = 342 } };
     const entt_id = entity.EntityTypeFactory(.medium){ .index = 1, .version = 0 };
-    try archetype.addEntity(entt_id, &values);
-    try std.testing.expect(archetype.containsEntity(entt_id));
-    archetype.removeEntity(entt_id);
-    try std.testing.expect(!archetype.containsEntity(entt_id));
+    try archetype.add(entt_id, &values);
+    try std.testing.expect(archetype.contains(entt_id));
+    archetype.remove(entt_id);
+    try std.testing.expect(!archetype.contains(entt_id));
 }
