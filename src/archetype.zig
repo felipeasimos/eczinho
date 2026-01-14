@@ -1,6 +1,7 @@
 const std = @import("std");
 const sparseset = @import("sparse_set.zig");
 const entity = @import("entity.zig");
+const type_id = @import("type_id.zig");
 const components = @import("components.zig");
 
 pub const ArchetypeOptions = struct {
@@ -11,36 +12,48 @@ pub const ArchetypeOptions = struct {
 
 /// use ArchetypeOptions as options
 pub fn Archetype(comptime options: ArchetypeOptions) type {
-    const num_active_components = options.Signature.len;
-    const signature = options.ComponentBitSet.init(options.Signature);
     return struct {
-        const Signature = signature;
-        component_arrays: [num_active_components]std.ArrayList(u8),
+        const Entity = options.EntityType;
+        pub const Signature = options.ComponentBitSet.init(options.Signature);
+        signature: options.ComponentBitSet = Signature,
+        components: std.AutoHashMap(type_id.TypeId, std.ArrayList(u8)),
         entities_to_component_index: sparseset.SparseSet(.{
             .T = options.EntityType.Int,
             .PageMask = options.EntityType.entity_mask,
         }),
         allocator: std.mem.Allocator,
 
-        fn toComponentArrayIndex(comptime Component: type) usize {
-            if (std.mem.indexOfScalar(type, options.Signature, Component)) |idx| {
-                return idx;
-            }
-            @compileError(std.fmt.print("Component {} doesn't belong in archetype {}", .{ Component, options.Signature }));
+        fn tryGetComponentArrayPtr(self: *@This(), comptime Component: type) !?*std.ArrayList(Component) {
+            const entry = try self.components.getOrPutValue(type_id.hash(Component), .empty);
+            return @ptrCast(entry.value_ptr);
+        }
+
+        fn getComponentArrayPtr(self: *@This(), comptime Component: type) ?*std.ArrayList(Component) {
+            return @ptrCast(self.components.getEntry(type_id.hash(Component)).?.value_ptr);
+        }
+
+        fn canHaveArray(comptime Component: type) bool {
+            return comptime @sizeOf(Component) != 0;
         }
 
         pub fn init(alloc: std.mem.Allocator) @This() {
             return .{
-                .component_arrays = .{std.ArrayList(u8).empty} ** num_active_components,
+                .components = @FieldType(@This(), "components").init(alloc),
                 .entities_to_component_index = @FieldType(@This(), "entities_to_component_index").init(alloc),
                 .allocator = alloc,
             };
         }
 
         pub fn deinit(self: *@This()) void {
-            inline for (&self.component_arrays, options.Signature) |*arr, SigType| {
-                @as(*std.ArrayList(SigType), @ptrCast(arr)).deinit(self.allocator);
+            inline for (options.Signature) |Component| {
+                if (comptime !canHaveArray(Component)) {
+                    continue;
+                }
+                if (self.getComponentArrayPtr(Component)) |arr| {
+                    arr.deinit(self.allocator);
+                }
             }
+            self.components.deinit();
             self.entities_to_component_index.deinit();
         }
 
@@ -52,24 +65,60 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             return comptime std.mem.indexOfScalar(type, options.Signature, Component) != null;
         }
 
+        pub fn entities(self: *@This()) []Entity {
+            return self.entities_to_component_index.items();
+        }
+
+        pub fn get(self: *@This(), comptime Component: type, entt: Entity) Component {
+            if (comptime !canHaveArray(Component)) {
+                @compileError("This function can't be called for zero-sized components");
+            }
+            comptime std.debug.assert(has(Component));
+            std.debug.assert(self.contains(entt.toInt()));
+
+            const entt_index = self.entities_to_component_index.getDenseIndex(entt.toInt());
+            return &self.getComponentArrayPtr(Component).items[entt_index];
+        }
+
+        pub fn getConst(self: *@This(), comptime Component: type, entt: Entity) Component {
+            if (comptime !canHaveArray(Component)) {
+                @compileError("This function can't be called for zero-sized components");
+            }
+            comptime std.debug.assert(has(Component));
+            std.debug.assert(self.contains(entt.toInt()));
+
+            const entt_index = self.entities_to_component_index.getDenseIndex(entt.toInt());
+            return self.getComponentArrayPtr(Component).items[entt_index];
+        }
+
         pub fn contains(self: *@This(), entt: options.EntityType) bool {
             return self.entities_to_component_index.contains(entt.toInt());
         }
 
         pub fn add(self: *@This(), entt: options.EntityType, values: anytype) !void {
-            inline for (&self.component_arrays, options.Signature, values) |*arr, SigType, value| {
-                if (@sizeOf(SigType) != 0) {
-                    try @as(*std.ArrayList(SigType), @ptrCast(arr)).append(self.allocator, value);
+            std.debug.assert(!self.contains(entt));
+
+            inline for (options.Signature, values) |Component, value| {
+                if (comptime !canHaveArray(Component)) {
+                    continue;
+                }
+                if (try self.tryGetComponentArrayPtr(Component)) |arr| {
+                    try arr.append(self.allocator, value);
                 }
             }
             try self.entities_to_component_index.add(entt.toInt());
         }
 
-        pub fn remove(self: *@This(), entt: options.EntityType) void {
+        pub fn remove(self: *@This(), entt: Entity) void {
+            std.debug.assert(self.contains(entt));
+
             const entt_index = self.entities_to_component_index.remove(entt.toInt());
-            inline for (&self.component_arrays, options.Signature) |*arr, SigType| {
-                if (@sizeOf(SigType) != 0) {
-                    _ = @as(*std.ArrayList(SigType), @ptrCast(arr)).swapRemove(entt_index);
+            inline for (options.Signature) |Component| {
+                if (comptime !canHaveArray(Component)) {
+                    continue;
+                }
+                if (self.getComponentArrayPtr(Component)) |arr| {
+                    _ = arr.swapRemove(entt_index);
                 }
             }
         }

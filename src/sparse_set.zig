@@ -44,11 +44,16 @@ pub fn SparseSet(comptime options: SparseSetOptions) type {
             return self.dense.items.len;
         }
 
-        pub fn page(_: *@This(), data: options.T) usize {
+        pub fn getDenseIndex(self: *@This(), data: options.T) usize {
+            std.debug.assert(self.contains(data));
+            return self.getPage(self.page(data))[self.offset(data)];
+        }
+
+        fn page(_: *@This(), data: options.T) usize {
             return (toUsize(data) & options.PageMask) / page_size;
         }
 
-        pub fn offset(_: *@This(), data: options.T) usize {
+        fn offset(_: *@This(), data: options.T) usize {
             return toUsize(data) & (page_size - 1);
         }
 
@@ -126,6 +131,10 @@ pub fn SparseSet(comptime options: SparseSetOptions) type {
 
             _ = self.dense.swapRemove(dense_index);
             return dense_index;
+        }
+
+        pub fn items(self: *@This()) []options.T {
+            return self.dense.items;
         }
     };
 }
