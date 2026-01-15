@@ -1,11 +1,13 @@
 const std = @import("std");
 
-const page_size: usize = std.heap.pageSize();
+var os_page_size: usize = std.heap.pageSize();
 
 pub const SparseSetOptions = struct {
     T: type,
     /// mask to get the page number from the data
     PageMask: usize = 4096,
+    /// if null, OS page size will be used
+    PageSize: ?usize = null,
 };
 
 pub fn SparseSet(comptime options: SparseSetOptions) type {
@@ -13,7 +15,6 @@ pub fn SparseSet(comptime options: SparseSetOptions) type {
     const usize_bits = @typeInfo(usize).int.bits;
 
     const Page = struct {
-        num_items: usize = 0,
         data: []options.T,
     };
 
@@ -23,9 +24,17 @@ pub fn SparseSet(comptime options: SparseSetOptions) type {
         sparse: std.ArrayList(?Page) = .empty,
         dense: std.ArrayList(options.T) = .empty,
         allocator: std.mem.Allocator,
+        page_size: usize,
 
         pub fn init(alloc: std.mem.Allocator) @This() {
+            const psize = page_size: {
+                if (comptime options.PageSize) |p| {
+                    break :page_size p;
+                }
+                break :page_size os_page_size;
+            };
             return .{
+                .page_size = psize,
                 .allocator = alloc,
             };
         }
@@ -46,15 +55,15 @@ pub fn SparseSet(comptime options: SparseSetOptions) type {
 
         pub fn getDenseIndex(self: *@This(), data: options.T) usize {
             std.debug.assert(self.contains(data));
-            return self.getPage(self.page(data))[self.offset(data)];
+            return self.getPage(self.page(data)).data[self.offset(data)];
         }
 
-        fn page(_: *@This(), data: options.T) usize {
-            return (toUsize(data) & options.PageMask) / page_size;
+        fn page(self: *@This(), data: options.T) usize {
+            return (toUsize(data) & options.PageMask) / self.page_size;
         }
 
-        fn offset(_: *@This(), data: options.T) usize {
-            return toUsize(data) & (page_size - 1);
+        fn offset(self: *@This(), data: options.T) usize {
+            return toUsize(data) & (self.page_size - 1);
         }
 
         fn toUsize(data: options.T) usize {
@@ -85,11 +94,10 @@ pub fn SparseSet(comptime options: SparseSetOptions) type {
             }
 
             if (self.sparse.items[page_index] == null) {
-                const new_page_data = try self.allocator.alloc(options.T, page_size);
+                const new_page_data = try self.allocator.alloc(options.T, self.page_size);
                 @memset(new_page_data, Null);
                 self.sparse.items[page_index] = Page{
                     .data = new_page_data,
-                    .num_items = 0,
                 };
             }
         }

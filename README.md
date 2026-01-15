@@ -2,4 +2,6 @@
 
 - [x] paged sparse set
 - [x] archetype with comptime types
-- [ ] optimize for zero-width types
+- [x] optimize for zero-width types
+- [x] bitset component type id iterator
+- [x] components: integer increment id for each component
