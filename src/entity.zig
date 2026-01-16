@@ -23,6 +23,12 @@ pub fn EntityTypeFactory(comptime options: EntityOptions) type {
         index: Index,
         version: Version,
 
+        pub inline fn castSliceToInt(self: []@This()) []Int {
+            const ptr: [*]@This() = self.ptr;
+            const int_ptr: [*]Int = @ptrCast(ptr);
+            return int_ptr[0..self.len];
+        }
+
         pub inline fn toInt(self: @This()) Int {
             return @bitCast(self);
         }

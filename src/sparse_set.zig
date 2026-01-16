@@ -82,6 +82,7 @@ pub fn SparseSet(comptime options: SparseSetOptions) type {
 
         /// check if set already contains integer
         pub fn contains(self: *@This(), data: options.T) bool {
+            std.debug.assert(data != Null);
             const p = self.page(data);
             return p < self.sparse.items.len and self.sparse.items[p] != null and self.sparse.items[p].?.data[self.offset(data)] != Null;
         }
@@ -107,10 +108,9 @@ pub fn SparseSet(comptime options: SparseSetOptions) type {
             return &self.sparse.items[page_index].?;
         }
 
-        /// adds integer to set. Nothing happens if integer is already contained
+        /// adds integer to set
         pub fn add(self: *@This(), data: options.T) !void {
             std.debug.assert(!self.contains(data));
-            std.debug.assert(data != Null);
             const page_index = self.page(data);
             try self.createPage(page_index);
             const p = self.getPage(page_index);
@@ -127,7 +127,6 @@ pub fn SparseSet(comptime options: SparseSetOptions) type {
         // return dense index
         pub fn remove(self: *@This(), data: options.T) usize {
             std.debug.assert(self.contains(data));
-            std.debug.assert(data != Null);
 
             const p = self.getPage(self.page(data));
             const last_ptr = self.getElementSparsePtr(self.dense.getLast());

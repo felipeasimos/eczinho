@@ -45,6 +45,14 @@ pub fn Components(comptime ComponentTypes: []const type) type {
             }
             break :TypeIdSizeMap map;
         };
+        const TypeIdAlignmentMap = TypeIdAlignmentMap: {
+            var map = std.EnumArray(ComponentTypeId, usize).initUndefined();
+            for (ComponentTypes) |Component| {
+                const component_type_id = std.meta.stringToEnum(ComponentTypeId, @typeName(Component)).?;
+                map.set(component_type_id, @alignOf(Component));
+            }
+            break :TypeIdAlignmentMap map;
+        };
         /// for functions receiving a tid, use a static enum map to return info in O(1)
         const TypeIdIndexMap = TypeIdIndexMap: {
             var map = std.EnumArray(ComponentTypeId, usize).initUndefined();
@@ -137,8 +145,22 @@ pub fn Components(comptime ComponentTypes: []const type) type {
             @compileError("'has' can only be called using a TypeId or Component type");
         }
 
-        pub fn getSize(tid: ComponentTypeId) usize {
-            return TypeIdSizeMap.get(tid);
+        pub inline fn getSize(tid_or_component: anytype) usize {
+            if (comptime @TypeOf(tid_or_component) == ComponentTypeId) {
+                return TypeIdSizeMap.get(tid_or_component);
+            } else if (comptime isComponent(tid_or_component)) {
+                return @sizeOf(tid_or_component);
+            }
+            @compileError("invalid type " ++ @typeName(@TypeOf(tid_or_component)) ++ ": must be a ComponentTypeId or a type in the component list");
+        }
+
+        pub inline fn getAlignment(tid_or_component: anytype) usize {
+            if (comptime @TypeOf(tid_or_component) == ComponentTypeId) {
+                return TypeIdAlignmentMap.get(tid_or_component);
+            } else if (comptime isComponent(tid_or_component)) {
+                return @alignOf(tid_or_component);
+            }
+            @compileError("invalid type " ++ @typeName(@TypeOf(tid_or_component)) ++ ": must be a ComponentTypeId or a type in the component list");
         }
 
         pub fn iterator(self: @This()) Iterator {

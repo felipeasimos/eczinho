@@ -55,16 +55,6 @@ pub fn Registry(comptime options: RegistryOptions) type {
             return self.archetypes.getPtr(signature).?;
         }
 
-        fn getArchetypeFromComptimeSignature(self: *@This(), comptime Signature: []const type) !*Archetype {
-            const signature = ComponentBitSet.init(Signature);
-            const entry = try self.archetypes.getOrPut(signature.bitset);
-            if (entry.found_existing) {
-                return @ptrCast(entry.value_ptr);
-            }
-            entry.value_ptr.* = Archetype.init(self.allocator, signature);
-            return Archetype(entry.value_ptr, Signature);
-        }
-
         fn getArchetypeFromSignature(self: *@This(), signature: ComponentBitSet) !*Archetype {
             const entry = try self.archetypes.getOrPut(signature);
             if (entry.found_existing) {
@@ -111,11 +101,28 @@ pub fn Registry(comptime options: RegistryOptions) type {
             return self.getEntityArchetype(entt).has(Component);
         }
 
-        pub fn addTyped(self: *@This(), comptime Component: type, entt: Entity, value: Component) void {
+        pub fn remove(self: *@This(), comptime Component: type, entt: Entity) void {
             std.debug.assert(self.valid(entt));
             const old_arch = self.getEntityArchetype(entt);
             var new_signature = old_arch.signature;
+            new_signature.remove(Component);
+            const new_arch = self.getArchetypeFromSignature(new_signature) catch unreachable;
+            old_arch.moveTo(
+                entt,
+                new_arch,
+            ) catch unreachable;
+            self.entities_to_locations.items[entt.index].signature = new_arch.signature;
+        }
+
+        pub fn add(self: *@This(), entt: Entity, value: anytype) void {
+            std.debug.assert(self.valid(entt));
+            const Component = @TypeOf(value);
+
+            const old_arch = self.getEntityArchetype(entt);
+
+            var new_signature = old_arch.signature;
             new_signature.add(Component);
+
             const new_arch = self.getArchetypeFromSignature(new_signature) catch unreachable;
             old_arch.moveTo(
                 entt,
@@ -126,16 +133,15 @@ pub fn Registry(comptime options: RegistryOptions) type {
             new_arch.get(Component, entt).* = value;
         }
 
-        // pub fn get(self: *@This(), comptime Component: type, entt: Entity) Component {
-        //     std.debug.assert(self.valid(entt));
-        //     const archetype_ptr = self.entities_to_locations.items[entt.index].archetype_ptr.?;
-        //     archetype_ptr
-        // }
+        pub fn get(self: *@This(), comptime Component: type, entt: Entity) *Component {
+            std.debug.assert(self.valid(entt));
+            return self.getEntityArchetype(entt).get(Component, entt);
+        }
 
-        // add component to entity
-        // pub fn add(self: *@This(), entt: Entity, value: anytype) void {
-        //     std.debug.assert(self.valid(entt));
-        // }
+        pub fn getConst(self: *@This(), comptime Component: type, entt: Entity) Component {
+            std.debug.assert(self.valid(entt));
+            return self.getEntityArchetype(entt).getConst(Component, entt);
+        }
 
         // Destroy an entity
         // pub fn destroy(self: *@This(), id: Entity) void {
@@ -184,11 +190,41 @@ test Registry {
     const typeC = struct {};
     const typeD = struct { a: u43 };
     const typeE = struct { a: u32, b: u54 };
+
     var registry = Registry(.{
-        .ComponentTypes = &[_]type{ typeA, typeB, typeC, typeD, typeE },
+        .ComponentTypes = &.{ typeA, typeB, typeC, typeD, typeE },
         .Entity = entity.EntityTypeFactory(.medium),
     }).init(std.testing.allocator);
     defer registry.deinit();
+
     const entt_id = registry.create();
-    registry.addTyped(typeE, entt_id, typeE{ .a = 1, .b = 2 });
+    registry.add(entt_id, typeE{ .a = 1, .b = 2 });
+
+    try std.testing.expect(registry.has(typeE, entt_id));
+    try std.testing.expect(!registry.has(typeD, entt_id));
+
+    try std.testing.expectEqual(1, registry.get(typeE, entt_id).a);
+    try std.testing.expectEqual(2, registry.get(typeE, entt_id).b);
+
+    try std.testing.expectEqual(1, registry.getConst(typeE, entt_id).a);
+    try std.testing.expectEqual(2, registry.getConst(typeE, entt_id).b);
+}
+
+test "registry initialization test" {
+    var registry = Registry(.{
+        .ComponentTypes = &.{ u64, bool, struct {} },
+        .Entity = entity.EntityTypeFactory(.small),
+    }).init(std.testing.allocator);
+    defer registry.deinit();
+}
+
+test "registry remove test" {
+    var registry = Registry(.{
+        .ComponentTypes = &.{ u64, bool, struct {} },
+        .Entity = entity.EntityTypeFactory(.small),
+    }).init(std.testing.allocator);
+    const entt_id = registry.create();
+    registry.add(entt_id, @as(u64, 7));
+    registry.remove(u64, entt_id);
+    defer registry.deinit();
 }
