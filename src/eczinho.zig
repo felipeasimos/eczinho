@@ -2,6 +2,7 @@ const std = @import("std");
 
 pub const registry = @import("registry.zig");
 pub const entity = @import("entity.zig");
+pub const App = @import("app.zig").App;
 
 pub fn Eczinho(comptime registry_options: registry.RegistryOptions) type {
     return struct {
@@ -20,4 +21,6 @@ pub fn Eczinho(comptime registry_options: registry.RegistryOptions) type {
 
 test Eczinho {
     _ = @import("registry.zig").Registry;
+    _ = @import("query/query.zig");
+    _ = @import("query/factory.zig");
 }

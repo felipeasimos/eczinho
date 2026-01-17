@@ -1,12 +1,12 @@
 const std = @import("std");
-const System = @import("../system.zig").System;
-const SchedulerLabel = @import("../scheduler.zig").SchedulerLabel;
-const EntityOptions = @import("../entity.zig").EntityOptions;
-const EntityTypeFactory = @import("../entity.zig").EntityTypeFactory;
+const System = @import("system.zig").System;
+const SchedulerLabel = @import("scheduler.zig").SchedulerLabel;
+const EntityOptions = @import("entity.zig").EntityOptions;
+const EntityTypeFactory = @import("entity.zig").EntityTypeFactory;
 const app = @import("app.zig");
 
 pub const AppBuilder = struct {
-    options: app.AppOptions,
+    options: app.AppOptions = .{},
     pub fn init() @This() {
         return .{};
     }
@@ -39,6 +39,9 @@ pub const AppBuilder = struct {
         var new = self;
         new.options.Entity = EntityTypeFactory(options);
         return new;
+    }
+    pub fn getQuery(self: @This()) app.App(self).Query {
+        return app.App(self).Query;
     }
     pub fn build(self: @This(), allocator: std.mem.Allocator) app.App(self) {
         return app.App(self).init(allocator);
