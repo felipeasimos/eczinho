@@ -109,11 +109,14 @@ test AppContextBuilder {
 test AppBuilder {
     const typeA = struct { a: f32 };
     const typeB = struct { a: u32 };
+
     const Context = AppContextBuilder.init()
         .addComponent(typeA)
         .addComponents(&.{typeB})
         .build();
+
     const Query = Context.Query;
+
     var test_app = AppBuilder.init(Context)
         .addSystem(.Update, struct {
             pub fn execute(_: Query(.{ .q = &.{ typeA, *typeB } })) void {}

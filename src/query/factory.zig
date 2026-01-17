@@ -17,6 +17,7 @@ pub const QueryFactoryOptions = struct {
 /// checkout QueryRequest for more information
 pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
     const Components = options.Components;
+
     const req = options.request;
     var fields: [req.q.len]std.builtin.Type.StructField = undefined;
     for (req.q, 0..) |AccessibleType, i| {

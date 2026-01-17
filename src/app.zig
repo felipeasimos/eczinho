@@ -38,19 +38,6 @@ pub fn App(comptime options: AppOptions) type {
         pub fn deinit(self: *@This()) void {
             self.registry.deinit();
         }
-
-        /// use in systems to obtain a query. System signature should be like:
-        /// fn systemExample(q: Query(.{.q = &.{typeA, *typeB}, .with = &.{typeC}}) !void {
-        ///     ...
-        /// }
-        /// checkout QueryRequest for more information
-        pub fn Query(comptime req: query.Request) type {
-            return query.Factory(.{
-                .request = req,
-                .Entity = Entity,
-                .Components = Components,
-            });
-        }
     };
 }
 

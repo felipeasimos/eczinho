@@ -6,7 +6,7 @@
 - [x] bitset component type id iterator
 - [x] components: integer increment id for each component
 - [ ] app
-   - [ ] app builder
+   - [x] app builder
    - [ ] systems
       - [ ] query
          - [ ] with
@@ -16,14 +16,3 @@
          - [ ] added -> component added tick and system run tick
          - [ ] removed -> component removed tick and system run tick
       - [ ] Scheduler
-   - [ ] registry
-      - [ ] entity iterator
-   - [ ] tests
-   - [ ] bulk operations
-   - [ ] add
-   - [ ] remove
-- [ ] resources
-- [ ] systems
-- [ ] event system
-- [ ] test games with raylib
-   - [ ] simulation
