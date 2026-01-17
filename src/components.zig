@@ -145,6 +145,29 @@ pub fn Components(comptime ComponentTypes: []const type) type {
             @compileError("'has' can only be called using a TypeId or Component type");
         }
 
+        pub inline fn checkType(tid_or_component: anytype) void {
+            if (comptime @TypeOf(tid_or_component) != ComponentTypeId and !@This().isComponent(tid_or_component)) {
+                const T = T: {
+                    if (comptime @TypeOf(tid_or_component) == type) {
+                        break :T tid_or_component;
+                    }
+                    break :T @TypeOf(tid_or_component);
+                };
+                @compileError("invalid type " ++ @typeName(T) ++ ": must be a ComponentTypeId or a type in the component list");
+            }
+        }
+
+        pub inline fn checkSize(tid_or_component: anytype) void {
+            checkType(tid_or_component);
+            if (comptime @TypeOf(tid_or_component) == ComponentTypeId) {
+                std.debug.assert(@This().getSize(tid_or_component) != 0);
+            } else if (comptime @This().isComponent(tid_or_component)) {
+                if (comptime @sizeOf(tid_or_component) == 0) {
+                    @compileError("function called with zero-sized Component type '" ++ @typeName(tid_or_component) ++ "' as argument!");
+                }
+            }
+        }
+
         pub inline fn getSize(tid_or_component: anytype) usize {
             if (comptime @TypeOf(tid_or_component) == ComponentTypeId) {
                 return TypeIdSizeMap.get(tid_or_component);

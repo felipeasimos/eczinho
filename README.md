@@ -5,21 +5,21 @@
 - [x] optimize for zero-width types
 - [x] bitset component type id iterator
 - [x] components: integer increment id for each component
-- [ ] systems
-   - [ ] query
-      // options: Query{.req = .{ Position, *Velocity }, .with = .{ Solid }, .without = .{ Enemy }}
-      - [ ] with
-      - [ ] without
-      - [ ] optional
-      - [ ] changed -> event system needed
-      - [ ] added -> event system needed
-      - [ ] removed -> event system needed
-- [ ] registry entity iterator
-- [ ] archetype sort
-- [ ] visibility
-- [ ] asserts
-- [ ] tests
-- [ ] bulk operations
+- [ ] app
+   - [ ] app builder
+   - [ ] systems
+      - [ ] query
+         - [ ] with
+         - [ ] without
+         - [ ] optional
+         - [ ] changed -> component changed tick and system run tick
+         - [ ] added -> component added tick and system run tick
+         - [ ] removed -> component removed tick and system run tick
+      - [ ] Scheduler
+   - [ ] registry
+      - [ ] entity iterator
+   - [ ] tests
+   - [ ] bulk operations
    - [ ] add
    - [ ] remove
 - [ ] resources

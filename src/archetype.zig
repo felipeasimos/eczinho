@@ -35,26 +35,9 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             }
         }
 
-        inline fn checkType(tid_or_component: anytype) void {
-            if (comptime @TypeOf(tid_or_component) != ComponentTypeId and !ComponentBitSet.isComponent(tid_or_component)) {
-                @compileError("invalid type " ++ @typeName(@TypeOf(tid_or_component)) ++ ": must be a ComponentTypeId or a type in the component list");
-            }
-        }
-
-        inline fn checkSize(tid_or_component: anytype) void {
-            checkType(tid_or_component);
-            if (comptime @TypeOf(tid_or_component) == ComponentTypeId) {
-                std.debug.assert(ComponentBitSet.getSize(tid_or_component) != 0);
-            } else if (comptime ComponentBitSet.isComponent(tid_or_component)) {
-                if (comptime @sizeOf(tid_or_component) == 0) {
-                    @compileError("function called with zero-sized Component type '" ++ @typeName(tid_or_component) ++ "' as argument!");
-                }
-            }
-        }
-
         /// creates the array if it doesn't exist. Uses type.
         inline fn tryGetComponentArray(self: *@This(), tid_or_component: anytype) !*array.Array {
-            checkSize(tid_or_component);
+            ComponentBitSet.checkSize(tid_or_component);
             const component_size = ComponentBitSet.getSize(tid_or_component);
             const component_alignment = ComponentBitSet.getAlignment(tid_or_component);
             const new_array = array.Array.init(component_size, component_alignment);
@@ -64,7 +47,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
 
         /// returns null if the array doesn't exist. Uses type
         inline fn optGetComponentArray(self: *@This(), tid_or_component: anytype) ?*array.Array {
-            checkSize(tid_or_component);
+            ComponentBitSet.checkSize(tid_or_component);
             if (self.components.getEntry(hash(tid_or_component))) |entry| {
                 return entry.value_ptr;
             }
@@ -73,7 +56,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
 
         /// returns the array assuming that it exists. Uses type
         inline fn getComponentArray(self: *@This(), tid_or_component: anytype) *array.Array {
-            checkSize(tid_or_component);
+            ComponentBitSet.checkSize(tid_or_component);
             return self.components.getEntry(hash(tid_or_component)).?.value_ptr;
         }
 
@@ -114,7 +97,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
         }
 
         pub fn get(self: *@This(), comptime Component: type, entt: Entity) *Component {
-            checkSize(Component);
+            ComponentBitSet.checkSize(Component);
             std.debug.assert(self.has(Component));
             std.debug.assert(self.valid(entt));
 
@@ -124,7 +107,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
         }
 
         pub fn getConst(self: *@This(), comptime Component: type, entt: Entity) Component {
-            checkSize(Component);
+            ComponentBitSet.checkSize(Component);
             std.debug.assert(self.has(Component));
             std.debug.assert(self.valid(entt));
 
@@ -155,7 +138,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             std.debug.assert(!self.valid(entt));
 
             inline for (values) |value| {
-                checkSize(@TypeOf(value));
+                ComponentBitSet.checkSize(@TypeOf(value));
                 const component_arr = try self.tryGetComponentArray(@TypeOf(value));
                 try component_arr.append(self.allocator, value);
             }

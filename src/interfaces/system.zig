@@ -1,3 +1,8 @@
+const Query = @import("../query/query.zig").Query;
+
 pub const System = struct {
-    pub fn execute(_: anytype) !void {}
+    // exampleSystem(Query(.{}))
+    pub fn execute(comptime query: anytype) !void {
+        _ = query;
+    }
 };
