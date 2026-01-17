@@ -23,4 +23,6 @@ test Eczinho {
     _ = @import("registry.zig").Registry;
     _ = @import("query/query.zig");
     _ = @import("query/factory.zig");
+    _ = @import("app.zig");
+    _ = @import("builder.zig");
 }

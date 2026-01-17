@@ -1,32 +1,30 @@
 const std = @import("std");
 const entity = @import("entity.zig");
-const ComponentsFactory = @import("components.zig").Components;
 const archetype = @import("archetype.zig");
 const query = @import("query/query.zig");
 
 pub const RegistryOptions = struct {
-    ComponentTypes: []const type,
+    Components: type,
     Entity: type = entity.EntityTypeFactory(.medium),
 };
 
 pub fn Registry(comptime options: RegistryOptions) type {
     return struct {
-        pub const ComponentTypes = options.ComponentTypes;
         pub const Entity = options.Entity;
-        pub const ComponentBitSet = ComponentsFactory(ComponentTypes);
+        pub const Components = options.Components;
         pub const Archetype = archetype.Archetype(.{
-            .EntityType = Entity,
-            .ComponentBitSet = ComponentBitSet,
+            .Entity = Entity,
+            .Components = Components,
         });
 
         const EntityLocation = struct {
-            signature: ?ComponentBitSet = null,
+            signature: ?Components = null,
             // current (if alive) or next (if dead) generation of an entity index.
             version: options.Entity.Version = 0,
         };
 
         allocator: std.mem.Allocator,
-        archetypes: std.AutoHashMap(ComponentBitSet, Archetype),
+        archetypes: std.AutoHashMap(Components, Archetype),
         /// entity index to -> generations + archetype
         entities_to_locations: std.ArrayList(EntityLocation),
         free_entity_list: std.ArrayList(Entity.Index),
@@ -56,7 +54,7 @@ pub fn Registry(comptime options: RegistryOptions) type {
             return self.archetypes.getPtr(signature).?;
         }
 
-        fn getArchetypeFromSignature(self: *@This(), signature: ComponentBitSet) !*Archetype {
+        fn getArchetypeFromSignature(self: *@This(), signature: Components) !*Archetype {
             const entry = try self.archetypes.getOrPut(signature);
             if (entry.found_existing) {
                 return @ptrCast(entry.value_ptr);
@@ -88,7 +86,7 @@ pub fn Registry(comptime options: RegistryOptions) type {
                 };
             };
             // update entity_to_locations with new id
-            const empty_arch = self.getArchetypeFromSignature(ComponentBitSet.init(&.{})) catch unreachable;
+            const empty_arch = self.getArchetypeFromSignature(Components.init(&.{})) catch unreachable;
             self.entities_to_locations.append(self.allocator, .{
                 .signature = empty_arch.signature,
                 .version = entity_id.version,
@@ -155,6 +153,7 @@ test "all" {
 }
 
 test Registry {
+    const ComponentsFactory = @import("components.zig").Components;
     const typeA = u64;
     const typeB = u32;
     const typeC = struct {};
@@ -162,7 +161,7 @@ test Registry {
     const typeE = struct { a: u32, b: u54 };
 
     var registry = Registry(.{
-        .ComponentTypes = &.{ typeA, typeB, typeC, typeD, typeE },
+        .Components = ComponentsFactory(&.{ typeA, typeB, typeC, typeD, typeE }),
         .Entity = entity.EntityTypeFactory(.medium),
     }).init(std.testing.allocator);
     defer registry.deinit();
@@ -181,16 +180,18 @@ test Registry {
 }
 
 test "registry initialization test" {
+    const ComponentsFactory = @import("components.zig").Components;
     var registry = Registry(.{
-        .ComponentTypes = &.{ u64, bool, struct {} },
+        .Components = ComponentsFactory(&.{ u64, bool, struct {} }),
         .Entity = entity.EntityTypeFactory(.small),
     }).init(std.testing.allocator);
     defer registry.deinit();
 }
 
 test "registry remove test" {
+    const ComponentsFactory = @import("components.zig").Components;
     var registry = Registry(.{
-        .ComponentTypes = &.{ u64, bool, struct {} },
+        .Components = ComponentsFactory(&.{ u64, bool, struct {} }),
         .Entity = entity.EntityTypeFactory(.small),
     }).init(std.testing.allocator);
     const entt_id = registry.create();

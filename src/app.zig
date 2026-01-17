@@ -6,10 +6,9 @@ const RegistryFactory = @import("registry.zig").Registry;
 const query = @import("query/query.zig");
 
 pub const AppOptions = struct {
-    Components: []const type = &.{},
-    Systems: []System = &.{},
-    SchedulerLabels: []SchedulerLabel = &.{},
-    Entity: type = .medium,
+    Context: type,
+    Systems: []const System = &.{},
+    SchedulerLabels: []const SchedulerLabel = &.{},
 };
 
 /// comptime struct used to encapsulate part of an application in modularized
@@ -19,11 +18,10 @@ pub const AppOptions = struct {
 /// - Systems
 pub fn App(comptime options: AppOptions) type {
     return struct {
-        pub const ComponentTypes = options.Components;
-        pub const Entity = options.Entity;
-        pub const Components = ComponentsFactory(ComponentTypes);
+        pub const Components = options.Context.Components;
+        pub const Entity = options.Context.Entity;
         pub const Registry = RegistryFactory(.{
-            .ComponentTypes = ComponentTypes,
+            .Components = Components,
             .Entity = Entity,
         });
 
