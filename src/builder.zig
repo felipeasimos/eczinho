@@ -7,30 +7,6 @@ const ComponentsFactory = @import("components.zig").Components;
 const query = @import("query/query.zig");
 const app = @import("app.zig");
 
-pub const AppContextOptions = struct {
-    Components: type,
-    Entity: type = EntityTypeFactory(.medium),
-};
-
-pub fn AppContext(comptime options: AppContextOptions) type {
-    return struct {
-        pub const Entity = options.Entity;
-        pub const Components = options.Components;
-        /// use in systems to obtain a query. System signature should be like:
-        /// fn systemExample(q: Query(.{.q = &.{typeA, *typeB}, .with = &.{typeC}}) !void {
-        ///     ...
-        /// }
-        /// checkout QueryRequest for more information
-        pub fn Query(comptime req: query.Request) type {
-            return query.Factory(.{
-                .request = req,
-                .Entity = Entity,
-                .Components = Components,
-            });
-        }
-    };
-}
-
 pub const AppContextBuilder = struct {
     components: []const type = &.{},
     entity: type = EntityTypeFactory(.medium),
@@ -54,8 +30,11 @@ pub const AppContextBuilder = struct {
         new.entity = EntityTypeFactory(options);
         return new;
     }
+    pub fn getQuery(self: @This()) app.AppContext(self).Query {
+        return app.AppContext(self).Query;
+    }
     pub fn build(self: @This()) type {
-        return AppContext(.{
+        return app.AppContext(.{
             .Components = ComponentsFactory(self.components),
             .Entity = self.entity,
         });
@@ -69,12 +48,10 @@ pub const AppBuilder = struct {
             .options = .{ .Context = ctx },
         };
     }
-    pub fn addSystem(comptime self: @This(), label: SchedulerLabel, comptime function: anytype) @This() {
+    pub fn addSystem(comptime self: @This(), comptime label: SchedulerLabel, comptime function: anytype) @This() {
         var new = self;
-        const system_slice: []const System = &.{System.init(function)};
+        const system_slice: []const System = &.{System.init(label, function)};
         new.options.Systems = new.options.Systems ++ system_slice;
-        const label_slice: []const SchedulerLabel = &.{label};
-        new.options.SchedulerLabels = new.options.SchedulerLabels ++ label_slice;
         return new;
     }
     pub fn addSystems(self: @This(), label: SchedulerLabel, functions: anytype) @This() {
@@ -83,9 +60,6 @@ pub const AppBuilder = struct {
             new = new.addSystem(label, function);
         }
         return new;
-    }
-    pub fn getQuery(self: @This()) app.App(self).Query {
-        return app.App(self).Query;
     }
     pub fn build(comptime self: @This(), allocator: std.mem.Allocator) app.App(self.options) {
         return app.App(self.options).init(allocator);

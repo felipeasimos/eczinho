@@ -145,6 +145,72 @@ pub fn Components(comptime ComponentTypes: []const type) type {
             @compileError("'has' can only be called using a TypeId or Component type");
         }
 
+        const ComponentAccessType = enum {
+            Const,
+            PointerConst,
+            PointerMut,
+            OptionalConst,
+            OptionalPointerMut,
+            OptionalPointerConst,
+        };
+        pub fn getComponentAccessType(comptime T: type) ComponentAccessType {
+            if (isComponent(T)) return .Const;
+            return switch (@typeInfo(T)) {
+                .pointer => |p| {
+                    if (!isComponent(p.child)) {
+                        @compileError("Pointer doesn't point to a component type");
+                    }
+                    return if (p.is_const) .PointerConst else .PointerMut;
+                },
+                .optional => |o| switch (@typeInfo(o.child)) {
+                    .pointer => |p| {
+                        if (!isComponent(p.child)) {
+                            @compileError("Child of optional pointer (" ++ @typeName(T) ++ ") is not a component type");
+                        }
+                        return if (p.is_const) .OptionalPointerConst else .OptionalPointerMut;
+                    },
+                    else => {
+                        if (!isComponent(o.child)) {
+                            @compileError("Child of optional (" ++ @typeName(T) ++ ") is not a component type");
+                        }
+                        return .OptionalConst;
+                    },
+                },
+                else => {
+                    @compileError("type is not a component");
+                },
+            };
+        }
+
+        pub fn getCanonicalType(comptime T: type) type {
+            if (isComponent(T)) return T;
+            return switch (@typeInfo(T)) {
+                .pointer => |p| {
+                    if (!isComponent(p.child)) {
+                        @compileError("Pointer doesn't point to a component type");
+                    }
+                    return p.child;
+                },
+                .optional => |o| switch (@typeInfo(o.child)) {
+                    .pointer => |p| {
+                        if (!isComponent(p.child)) {
+                            @compileError("Child of optional pointer (" ++ @typeName(T) ++ ") is not a component type");
+                        }
+                        return p.child;
+                    },
+                    else => {
+                        if (!isComponent(o.child)) {
+                            @compileError("Child of optional (" ++ @typeName(T) ++ ") is not a component type");
+                        }
+                        return o.child;
+                    },
+                },
+                else => {
+                    @compileError("type is not a component");
+                },
+            };
+        }
+
         pub inline fn checkType(tid_or_component: anytype) void {
             if (comptime @TypeOf(tid_or_component) != ComponentTypeId and !@This().isComponent(tid_or_component)) {
                 const T = T: {

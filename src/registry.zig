@@ -54,7 +54,11 @@ pub fn Registry(comptime options: RegistryOptions) type {
             return self.archetypes.getPtr(signature).?;
         }
 
-        fn getArchetypeFromSignature(self: *@This(), signature: Components) !*Archetype {
+        pub fn getArchetypeFromSignature(self: *@This(), signature: Components) *Archetype {
+            return self.archetypes.getEntry(signature).?.value_ptr;
+        }
+
+        pub fn tryGetArchetypeFromSignature(self: *@This(), signature: Components) !*Archetype {
             const entry = try self.archetypes.getOrPut(signature);
             if (entry.found_existing) {
                 return @ptrCast(entry.value_ptr);
@@ -86,7 +90,7 @@ pub fn Registry(comptime options: RegistryOptions) type {
                 };
             };
             // update entity_to_locations with new id
-            const empty_arch = self.getArchetypeFromSignature(Components.init(&.{})) catch unreachable;
+            const empty_arch = self.tryGetArchetypeFromSignature(Components.init(&.{})) catch unreachable;
             self.entities_to_locations.append(self.allocator, .{
                 .signature = empty_arch.signature,
                 .version = entity_id.version,
@@ -105,7 +109,7 @@ pub fn Registry(comptime options: RegistryOptions) type {
             const old_arch = self.getEntityArchetype(entt);
             var new_signature = old_arch.signature;
             new_signature.remove(Component);
-            const new_arch = self.getArchetypeFromSignature(new_signature) catch unreachable;
+            const new_arch = self.getArchetypeFromSignature(new_signature);
             old_arch.moveTo(
                 entt,
                 new_arch,
@@ -122,7 +126,7 @@ pub fn Registry(comptime options: RegistryOptions) type {
             var new_signature = old_arch.signature;
             new_signature.add(Component);
 
-            const new_arch = self.getArchetypeFromSignature(new_signature) catch unreachable;
+            const new_arch = self.tryGetArchetypeFromSignature(new_signature) catch unreachable;
             old_arch.moveTo(
                 entt,
                 new_arch,

@@ -12,6 +12,7 @@ pub const ArchetypeOptions = struct {
 /// use ArchetypeOptions as options
 pub fn Archetype(comptime options: ArchetypeOptions) type {
     return struct {
+        const Self = @This();
         const ComponentTypeId = options.Components.ComponentTypeId;
         const Components = options.Components;
         const Entity = options.Entity;
@@ -51,7 +52,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
         }
 
         /// returns the array assuming that it exists. Uses type
-        inline fn getComponentArray(self: *@This(), tid_or_component: anytype) *array.Array {
+        pub inline fn getComponentArray(self: *@This(), tid_or_component: anytype) *array.Array {
             Components.checkSize(tid_or_component);
             return self.components.getEntry(hash(tid_or_component)).?.value_ptr;
         }
@@ -172,6 +173,53 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             }
             self.remove(entt);
         }
+
+        pub fn iterator(self: *@This(), comptime ReturnTypes: []const type) Iterator(ReturnTypes) {
+            return .{
+                .archetype = self,
+            };
+        }
+
+        pub fn Iterator(comptime ReturnTypes: []const type) type {
+            for (ReturnTypes) |Type| {
+                if (@sizeOf(Type) == 0) {
+                    @compileError("Can't iterate over zero sized component array");
+                }
+            }
+            const Tuple = std.meta.Tuple(ReturnTypes);
+            return struct {
+                archetype: *Self,
+                index: usize = 0,
+                pub fn init(archtype: *Self) @This() {
+                    return .{
+                        .archetype = archtype,
+                    };
+                }
+                pub fn next(self: *@This()) ?Tuple {
+                    if (self.index >= self.archetype.len()) {
+                        return null;
+                    }
+                    var tuple: std.meta.Tuple(ReturnTypes) = undefined;
+                    inline for (ReturnTypes, 0..) |Type, i| {
+                        const CanonicalType = comptime Components.getCanonicalType(Type);
+                        const access_type = comptime Components.getComponentAccessType(Type);
+                        const comp_arr = self.archetype.getComponentArray(CanonicalType);
+                        tuple[i] = value: {
+                            break :value switch (comptime access_type) {
+                                .Const => comp_arr.getConst(CanonicalType, self.index),
+                                .PointerConst => @ptrCast(comp_arr.getAs(CanonicalType, self.index)),
+                                .PointerMut => comp_arr.getAs(CanonicalType, self.index),
+                                .OptionalConst => comp_arr.getConst(CanonicalType, self.index),
+                                .OptionalPointerMut => comp_arr.getAs(CanonicalType, self.index),
+                                .OptionalPointerConst => @ptrCast(comp_arr.getAs(CanonicalType, self.index)),
+                            };
+                        };
+                    }
+                    self.index += 1;
+                    return tuple;
+                }
+            };
+        }
     };
 }
 
@@ -202,6 +250,8 @@ test Archetype {
     try std.testing.expect(archetype.valid(entt_id));
     try std.testing.expectEqual(@as(typeA, 4), archetype.getConst(typeA, entt_id));
     try std.testing.expectEqual(@as(typeE, .{ .a = 23, .b = 342 }), archetype.getConst(typeE, entt_id));
+    var iter = archetype.iterator(&.{ typeE, typeA });
+    try std.testing.expectEqual(.{ typeE{ .a = 23, .b = 342 }, @as(typeA, 4) }, iter.next());
     archetype.remove(entt_id);
     try std.testing.expect(!archetype.valid(entt_id));
 }

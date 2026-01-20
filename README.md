@@ -16,3 +16,4 @@
          - [ ] added -> component added tick and system run tick
          - [ ] removed -> component removed tick and system run tick
       - [ ] Scheduler
+         - [ ] call init query with requirements from system

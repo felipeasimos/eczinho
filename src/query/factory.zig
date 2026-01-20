@@ -2,7 +2,8 @@ const std = @import("std");
 const Request = @import("request.zig").QueryRequest;
 const ComponentsFactory = @import("../components.zig").Components;
 const EntityFactory = @import("../entity.zig").EntityTypeFactory;
-const utils = @import("utils.zig");
+const archetype = @import("../archetype.zig");
+const registry = @import("../registry.zig");
 
 pub const QueryFactoryOptions = struct {
     request: Request,
@@ -16,13 +17,14 @@ pub const QueryFactoryOptions = struct {
 /// }
 /// checkout QueryRequest for more information
 pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
-    const Components = options.Components;
-
     const req = options.request;
     var fields: [req.q.len]std.builtin.Type.StructField = undefined;
     for (req.q, 0..) |AccessibleType, i| {
-        const CanonicalType = utils.getCanonicalQueryType(AccessibleType);
-        Components.checkSize(CanonicalType);
+        const CanonicalType = options.Components.getCanonicalType(AccessibleType);
+        if (@sizeOf(CanonicalType) == 0) {
+            @compileError("Can't return a zero-sized type ++ (" ++ @typeName(CanonicalType) ++ ") in query");
+        }
+        options.Components.checkSize(CanonicalType);
         fields[i] = std.builtin.Type.StructField{
             .name = std.fmt.comptimePrint("{}", .{i}),
             .type = AccessibleType,
@@ -42,13 +44,109 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
     return struct {
         /// used to acknowledge that this type came from QueryFactory()
         pub const Marker = QueryFactory;
-        pub const Single = req.q[0];
+        pub const Entity = options.Entity;
+        pub const Components = options.Components;
         pub const Tuple = ResultTuple;
+        pub const request = options.request;
+        pub const CanonicalTypes = CanonicalTypes: {
+            var data: []const type = &.{};
+            for (req.q) |AccessibleType| {
+                const CanonicalType = options.Components.getCanonicalType(AccessibleType);
+                if (@sizeOf(CanonicalType) == 0) {
+                    @compileError("Can't return a zero-sized type ++ (" ++ @typeName(CanonicalType) ++ ") in query");
+                }
+                options.Components.checkSize(CanonicalType);
+                data = data ++ .{CanonicalType};
+            }
+            break :CanonicalTypes data;
+        };
+        pub const Registry = registry.Registry(.{
+            .Entity = Entity,
+            .Components = Components,
+        });
+        pub const Archetype = archetype.Archetype(.{
+            .Entity = Entity,
+            .Components = Components,
+        });
 
-        pub fn init() @This() {}
-        pub fn empty(_: *@This()) bool {}
-        pub fn single(_: *@This()) Single {}
-        pub fn iter(_: *@This()) ?Tuple {}
+        archetypes: std.ArrayList(Components) = .empty,
+        registry: *Registry,
+
+        fn updateArchetypeSignatureList(self: *@This()) !void {
+            var key_iter = self.registry.archetypes.keyIterator();
+            var arr: std.ArrayList(Components) = .empty;
+            while (key_iter.next()) |key| {
+                try arr.append(self.registry.allocator, key);
+            }
+        }
+        pub fn init(reg: *Registry) @This() {
+            var new: @This() = .{
+                .registry = reg,
+            };
+            new.updateArchetypeSignatureList(reg);
+            return new;
+        }
+        pub fn iter(self: @This()) Iterator {
+            return Iterator.init(self.registry, self.archetypes);
+        }
+        pub fn len(self: @This()) usize {
+            var count = 0;
+            for (self.archetypes) |arch| {
+                count += arch.len();
+            }
+            return count;
+        }
+        pub fn empty(self: @This()) bool {
+            for (self.archetypes) |arch| {
+                if (arch.len() != 0) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        pub fn single(self: @This()) Tuple {
+            std.debug.assert(self.len() == 0);
+            for (self.archetypes) |arch| {
+                if (arch.len() != 0) {
+                    var iterator = arch.iterator();
+                    return iterator.next().?;
+                }
+            }
+        }
+
+        pub const Iterator = struct {
+            registry: *Registry,
+            archetypes: std.ArrayList(Components),
+            index: usize = 0,
+            pub fn init(reg: *Registry, archs: std.ArrayList(Components)) @This() {
+                return .{
+                    .registry = reg,
+                    .archetypes = archs,
+                };
+            }
+            fn nextArchetype(self: *@This()) ?*Archetype {
+                while (self.archetypes.getLastOrNull()) |sig| {
+                    var arch = self.registry.getArchetypeFromSignature(sig);
+                    if (self.index >= arch.len()) {
+                        _ = self.archetypes.pop().?;
+                        self.index = 0;
+                        continue;
+                    }
+                    return arch;
+                }
+                return null;
+            }
+            pub fn next(self: *@This()) ?Tuple {
+                if (self.nextArchetype()) |arch| {
+                    var iterator = arch.iterator(req.q);
+                    iterator.index = self.index;
+                    const tuple = iterator.next().?;
+                    self.index += 1;
+                    return tuple;
+                }
+                return null;
+            }
+        };
     };
 }
 
