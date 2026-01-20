@@ -56,7 +56,7 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
                     inline for (system.args_tuple_type, 0..) |t, i| {
                         args[i] = t.init(self.registry);
                     }
-                    system.call(args);
+                    system.call(args) catch unreachable;
                 }
             }
         }
