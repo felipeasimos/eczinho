@@ -97,22 +97,35 @@ const TestAppContext = AppContext(.{
 });
 const Query = TestAppContext.Query;
 const Commands = TestAppContext.Commands;
+const EntityId = TestAppContext.Entity;
 
-fn testSystemA(comms: Commands, q: Query(.{ .q = &.{ *u8, ?u64 } })) void {
+fn testSystemA(comms: Commands) !void {
     _ = comms.spawn()
-        .add(@as(u8, 8));
+        .add(@as(u8, 8))
+        .add(@as(u64, 64));
+}
+
+fn testSystemB(comms: Commands, q: Query(.{ .q = &.{ *u8, ?u64, EntityId } })) !void {
+    _ = comms;
     var iter = q.iter();
     while (iter.next()) |tuple| {
-        _ = tuple;
+        const _u8, const _u64, const id = tuple;
+        try std.testing.expectEqual(*u8, @TypeOf(_u8));
+        try std.testing.expectEqual(?u64, @TypeOf(_u64));
+        try std.testing.expectEqual(EntityId, @TypeOf(id));
+
+        try std.testing.expectEqual(8, _u8.*);
+        try std.testing.expectEqual(64, _u64.?);
     }
 }
 
 test App {
     var app = App(.{
         .Context = TestAppContext,
-        .Systems = &.{System.init(.Startup, testSystemA)},
+        .Systems = &.{ System.init(.Startup, testSystemA), System.init(.Startup, testSystemB) },
     }).init(std.testing.allocator);
     defer app.deinit();
+    try std.testing.expectEqual(0, app.registry.len());
     try app.startup();
     try std.testing.expectEqual(1, app.registry.len());
 }

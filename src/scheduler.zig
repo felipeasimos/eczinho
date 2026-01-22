@@ -45,24 +45,17 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
             var new: @This() = .{
                 .registry = reg,
             };
-            new.runStage(.Startup);
+            new.runStage(.Startup) catch unreachable;
             return new;
         }
 
-        pub fn runStage(self: *@This(), comptime label: SchedulerLabel) void {
+        fn runStage(self: *@This(), comptime label: SchedulerLabel) !void {
             inline for (SchedulerStages.get(label)) |system| {
                 var args: system.args_tuple_type = undefined;
                 inline for (system.param_types, 0..) |t, i| {
-                    switch (@typeInfo(t)) {
-                        .pointer => |p| {
-                            args[i] = p.child.init(self.registry);
-                        },
-                        else => {
-                            args[i] = t.init(self.registry);
-                        },
-                    }
+                    args[i] = t.init(self.registry);
                 }
-                system.call(args);
+                try system.call(args);
                 inline for (system.param_types, 0..) |_, i| {
                     args[i].deinit();
                 }

@@ -195,25 +195,31 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                         .archetype = archtype,
                     };
                 }
+                fn getComponent(self: *@This(), comptime Type: type) Type {
+                    const CanonicalType = comptime Components.getCanonicalType(Type);
+                    const access_type = comptime Components.getComponentAccessType(Type);
+                    const comp_arr = self.archetype.getComponentArray(CanonicalType);
+                    return switch (comptime access_type) {
+                        .Const => comp_arr.getConst(CanonicalType, self.index),
+                        .PointerConst => @ptrCast(comp_arr.getAs(CanonicalType, self.index)),
+                        .PointerMut => comp_arr.getAs(CanonicalType, self.index),
+                        .OptionalConst => comp_arr.getConst(CanonicalType, self.index),
+                        .OptionalPointerMut => comp_arr.getAs(CanonicalType, self.index),
+                        .OptionalPointerConst => @ptrCast(comp_arr.getAs(CanonicalType, self.index)),
+                    };
+                }
                 pub fn next(self: *@This()) ?Tuple {
                     if (self.index >= self.archetype.len()) {
                         return null;
                     }
                     var tuple: std.meta.Tuple(ReturnTypes) = undefined;
                     inline for (ReturnTypes, 0..) |Type, i| {
-                        const CanonicalType = comptime Components.getCanonicalType(Type);
-                        const access_type = comptime Components.getComponentAccessType(Type);
-                        const comp_arr = self.archetype.getComponentArray(CanonicalType);
-                        tuple[i] = value: {
-                            break :value switch (comptime access_type) {
-                                .Const => comp_arr.getConst(CanonicalType, self.index),
-                                .PointerConst => @ptrCast(comp_arr.getAs(CanonicalType, self.index)),
-                                .PointerMut => comp_arr.getAs(CanonicalType, self.index),
-                                .OptionalConst => comp_arr.getConst(CanonicalType, self.index),
-                                .OptionalPointerMut => comp_arr.getAs(CanonicalType, self.index),
-                                .OptionalPointerConst => @ptrCast(comp_arr.getAs(CanonicalType, self.index)),
-                            };
-                        };
+                        if (comptime Type == Entity) {
+                            const entt_int = self.archetype.entities_to_component_index.items()[self.index];
+                            tuple[i] = Entity.fromInt(entt_int);
+                        } else {
+                            tuple[i] = self.getComponent(Type);
+                        }
                     }
                     self.index += 1;
                     return tuple;

@@ -20,11 +20,10 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
     const req = options.request;
     var fields: [req.q.len]std.builtin.Type.StructField = undefined;
     for (req.q, 0..) |AccessibleType, i| {
-        const CanonicalType = options.Components.getCanonicalType(AccessibleType);
-        if (@sizeOf(CanonicalType) == 0) {
-            @compileError("Can't return a zero-sized type ++ (" ++ @typeName(CanonicalType) ++ ") in query");
+        if (comptime AccessibleType != options.Entity) {
+            const T = options.Components.getCanonicalType(AccessibleType);
+            options.Components.checkSize(T);
         }
-        options.Components.checkSize(CanonicalType);
         fields[i] = std.builtin.Type.StructField{
             .name = std.fmt.comptimePrint("{}", .{i}),
             .type = AccessibleType,
