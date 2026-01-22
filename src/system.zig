@@ -2,29 +2,25 @@ const std = @import("std");
 const SchedulerLabel = @import("scheduler.zig").SchedulerLabel;
 const QueryRequest = @import("query/request.zig").QueryRequest;
 const QueryFactory = @import("query/factory.zig").QueryFactory;
+const CommandsFactory = @import("commands/factory.zig").CommandsFactory;
 
 pub const System = struct {
-    const ParamType = union {
-        query: QueryRequest,
-    };
-
     system: *const anyopaque,
     system_type: type,
     scheduler_label: SchedulerLabel,
     args_tuple_type: type,
-    param_types: []const ParamType,
+    param_types: []const type,
 
-    fn getParamTypes(comptime FuncType: type) []const ParamType {
+    fn getParamTypes(comptime FuncType: type) []const type {
         const type_info = @typeInfo(FuncType);
         if (type_info != .@"fn") {
             @compileError("Systems should be a function type");
         }
         const fn_info = @typeInfo(FuncType).@"fn";
-        var params: []const ParamType = &.{};
+        var params: []const type = &.{};
         for (fn_info.params) |param| {
             const ParameterType = param.type.?;
-            const request = @field(ParameterType, "request");
-            params = params ++ .{ParamType{ .query = request }};
+            params = params ++ .{ParameterType};
         }
         return params;
     }

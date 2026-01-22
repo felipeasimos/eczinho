@@ -76,15 +76,18 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
             var key_iter = self.registry.archetypes.keyIterator();
             var arr: std.ArrayList(Components) = .empty;
             while (key_iter.next()) |key| {
-                try arr.append(self.registry.allocator, key);
+                try arr.append(self.registry.allocator, key.*);
             }
         }
         pub fn init(reg: *Registry) @This() {
             var new: @This() = .{
                 .registry = reg,
             };
-            new.updateArchetypeSignatureList(reg);
+            new.updateArchetypeSignatureList() catch unreachable;
             return new;
+        }
+        pub fn deinit(self: *@This()) void {
+            self.archetypes.deinit(self.registry.allocator);
         }
         pub fn iter(self: @This()) Iterator {
             return Iterator.init(self.registry, self.archetypes);

@@ -35,6 +35,26 @@ pub fn Components(comptime ComponentTypes: []const type) type {
         /// enum that will be used to make typeIds (tid) typed
         /// EVERY tid should be ComponentTypeId
         pub const ComponentTypeId = initComponentTypeId(ComponentTypes);
+        pub const Len = ComponentTypes.len;
+
+        pub const Union = Union: {
+            var fields: [Len]std.builtin.Type.UnionField = undefined;
+            for (ComponentTypes, 0..) |Component, i| {
+                fields[i] = std.builtin.Type.UnionField{
+                    .alignment = @alignOf(Component),
+                    .name = @typeName(Component),
+                    .type = Component,
+                };
+            }
+            break :Union @Type(.{
+                .@"union" = .{
+                    .decls = &.{},
+                    .fields = &fields,
+                    .tag_type = null,
+                    .layout = .auto,
+                },
+            });
+        };
 
         /// for functions receiving a tid, use a static enum map to return info in O(1)
         const TypeIdSizeMap = TypeIdSizeMap: {
@@ -94,6 +114,12 @@ pub fn Components(comptime ComponentTypes: []const type) type {
 
         pub fn isComponent(comptime T: type) bool {
             return comptime std.mem.indexOfScalar(type, ComponentTypes, T) != null;
+        }
+
+        pub fn getAsUnion(value: anytype) Union {
+            const Component = @TypeOf(value);
+            checkType(Component);
+            return @unionInit(Union, @typeName(Component), value);
         }
 
         pub fn init(comptime Types: []const type) @This() {

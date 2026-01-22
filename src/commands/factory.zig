@@ -1,6 +1,6 @@
 const std = @import("std");
-const Request = @import("request.zig").QueryRequest;
 const ComponentsFactory = @import("../components.zig").Components;
+const CommandsQueueFactory = @import("queue.zig").CommandsQueue;
 const EntityFactory = @import("../entity.zig").EntityTypeFactory;
 const archetype = @import("../archetype.zig");
 const registry = @import("../registry.zig");
@@ -26,22 +26,67 @@ pub fn CommandsFactory(comptime options: CommandsFactoryOptions) type {
             .Entity = Entity,
             .Components = Components,
         });
+        pub const CommandsQueue = CommandsQueueFactory(.{
+            .Components = Components,
+            .Entity = Entity,
+        });
 
-        pub fn add(self: *@This(), entt: Entity, value: anytype) void {}
-        pub fn remove(self: *@This(), entt: Entity, comptime Component: type) void {}
-        pub fn spawnWith(self: *@This(), values: anytype) void {}
-        pub fn despawn(self: *@This(), entt: Entity) void {}
-        pub fn entity(self: *@This(), entt: Entity) EntityCommands {}
-        pub fn spawn(self: *@This()) EntityCommands {}
-        pub fn flush(self: *@This(), reg: *Registry) void {}
+        queue_index: usize,
+        reg: *Registry,
+
+        pub fn init(reg: *Registry) @This() {
+            return .{
+                .queue_index = reg.createQueue() catch unreachable,
+                .reg = reg,
+            };
+        }
+        pub fn deinit(self: @This()) void {
+            _ = self;
+        }
+        fn getQueue(self: @This()) *CommandsQueue {
+            return self.reg.getQueue(self.queue_index);
+        }
+        pub fn add(self: @This(), entt: Entity, value: anytype) void {
+            return self.getQueue().addCommand(.{ .entity = entt }, .{
+                .add = .{
+                    .type_id = Components.hash(@TypeOf(value)),
+                    .value = value,
+                },
+            });
+        }
+        pub fn remove(self: @This(), comptime Component: type, entt: Entity) void {
+            return self.getQueue().addCommand(.{ .entity = entt }, .{
+                .remove = .{
+                    .type_id = Components.hash(Component),
+                },
+            });
+        }
+        pub fn despawn(self: @This(), entt: Entity) void {
+            return self.getQueue().despawn(.{ .entity = entt });
+        }
+        pub fn spawn(self: @This()) EntityCommands {
+            const new_entt = self.getQueue().addNewEntity() catch unreachable;
+            return EntityCommands.init(self, .{ .placeholder = new_entt });
+        }
+        pub fn entity(self: @This(), entt: Entity) EntityCommands {
+            return EntityCommands.init(self, .{ .entity = entt });
+        }
 
         pub const EntityCommands = struct {
-            commands: *Commands,
-            entt: Entity,
-            pub fn init(comm: *Commands, entity: Entity) @This() {
-                return .{ .commands = comm, .entity = Entity };
+            commands: Commands,
+            entt: CommandsQueue.ContextId,
+            pub fn init(comm: Commands, entt: CommandsQueue.ContextId) @This() {
+                return .{ .commands = comm, .entt = entt };
             }
-            pub fn add(
+            pub fn add(self: @This(), value: anytype) @This() {
+                self.commands.getQueue().addCommand(self.entt, .{
+                    .add = .{
+                        .type_id = Components.hash(@TypeOf(value)),
+                        .value = Components.getAsUnion(value),
+                    },
+                }) catch unreachable;
+                return self;
+            }
         };
     };
 }

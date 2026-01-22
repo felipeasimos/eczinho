@@ -2,6 +2,7 @@ const std = @import("std");
 const entity = @import("entity.zig");
 const archetype = @import("archetype.zig");
 const query = @import("query/query.zig");
+const commands = @import("commands/commands.zig");
 
 pub const RegistryOptions = struct {
     Components: type,
@@ -16,6 +17,10 @@ pub fn Registry(comptime options: RegistryOptions) type {
             .Entity = Entity,
             .Components = Components,
         });
+        pub const CommandsQueue = commands.CommandsQueueFactory(.{
+            .Entity = Entity,
+            .Components = Components,
+        });
 
         const EntityLocation = struct {
             signature: ?Components = null,
@@ -26,15 +31,14 @@ pub fn Registry(comptime options: RegistryOptions) type {
         allocator: std.mem.Allocator,
         archetypes: std.AutoHashMap(Components, Archetype),
         /// entity index to -> generations + archetype
-        entities_to_locations: std.ArrayList(EntityLocation),
-        free_entity_list: std.ArrayList(Entity.Index),
+        entities_to_locations: std.ArrayList(EntityLocation) = .empty,
+        free_entity_list: std.ArrayList(Entity.Index) = .empty,
+        queues: std.ArrayList(CommandsQueue) = .empty,
 
         pub fn init(allocator: std.mem.Allocator) @This() {
             return .{
                 .allocator = allocator,
                 .archetypes = @FieldType(@This(), "archetypes").init(allocator),
-                .entities_to_locations = @FieldType(@This(), "entities_to_locations").empty,
-                .free_entity_list = @FieldType(@This(), "free_entity_list").empty,
             };
         }
 
@@ -46,6 +50,10 @@ pub fn Registry(comptime options: RegistryOptions) type {
             self.archetypes.deinit();
             self.entities_to_locations.deinit(self.allocator);
             self.free_entity_list.deinit(self.allocator);
+            for (self.queues.items) |*queue| {
+                queue.deinit();
+            }
+            self.queues.deinit(self.allocator);
         }
 
         fn getEntityArchetype(self: *@This(), entt: Entity) *Archetype {
@@ -144,6 +152,15 @@ pub fn Registry(comptime options: RegistryOptions) type {
         pub fn getConst(self: *@This(), comptime Component: type, entt: Entity) Component {
             std.debug.assert(self.valid(entt));
             return self.getEntityArchetype(entt).getConst(Component, entt);
+        }
+
+        pub fn createQueue(self: *@This()) !usize {
+            try self.queues.append(self.allocator, CommandsQueue.init(self.allocator));
+            return self.queues.items.len - 1;
+        }
+
+        pub fn getQueue(self: *@This(), index: usize) *CommandsQueue {
+            return &self.queues.items[index];
         }
     };
 }

@@ -6,6 +6,7 @@ const RegistryFactory = @import("registry.zig").Registry;
 const SchedulerFactory = @import("scheduler.zig").Scheduler;
 const EntityTypeFactory = @import("entity.zig").EntityTypeFactory;
 const query = @import("query/query.zig");
+const commands = @import("commands/commands.zig");
 
 pub const AppContextOptions = struct {
     Components: type,
@@ -17,7 +18,7 @@ pub fn AppContext(comptime options: AppContextOptions) type {
         pub const Entity = options.Entity;
         pub const Components = options.Components;
         /// use in systems to obtain a query. System signature should be like:
-        /// fn systemExample(q: Query(.{.q = &.{typeA, *typeB}, .with = &.{typeC}}) !void {
+        /// fn systemExample(q: Query(.{.q = &.{typeA, *typeB}, .with = &.{typeC}}), ...) !void {
         ///     ...
         /// }
         /// checkout QueryRequest for more information
@@ -28,6 +29,14 @@ pub fn AppContext(comptime options: AppContextOptions) type {
                 .Components = Components,
             });
         }
+        /// use in systems to obtain a Commands object. System signature should be like:
+        /// fn systemExample(comms: Commands, ...) !void {
+        ///     ...
+        /// }
+        pub const Commands = commands.Commands(.{
+            .Components = Components,
+            .Entity = Entity,
+        });
     };
 }
 
@@ -67,8 +76,14 @@ pub fn App(comptime options: AppOptions) type {
         }
 
         pub fn run(self: *@This()) !void {
-            self.scheduler = Scheduler.init(self.registry);
-            self.scheduler.run();
+            self.startup();
+            while (true) {
+                self.scheduler.next();
+            }
+        }
+
+        pub fn startup(self: *@This()) !void {
+            self.scheduler = Scheduler.init(&self.registry);
         }
 
         pub fn deinit(self: *@This()) void {
@@ -81,15 +96,11 @@ const TestAppContext = AppContext(.{
     .Components = ComponentsFactory(&.{ u8, u64, u32 }),
 });
 const Query = TestAppContext.Query;
+const Commands = TestAppContext.Commands;
 
-fn testSystemA(q: Query(.{ .q = &.{ *u8, ?u64 } })) void {
-    var iter = q.iter();
-    while (iter.next()) |tuple| {
-        _ = tuple;
-    }
-}
-
-fn testSystemB(q: Query(.{ .q = &.{ *u8, ?u64 } })) void {
+fn testSystemA(comms: Commands, q: Query(.{ .q = &.{ *u8, ?u64 } })) void {
+    _ = comms.spawn()
+        .add(@as(u8, 8));
     var iter = q.iter();
     while (iter.next()) |tuple| {
         _ = tuple;
@@ -99,7 +110,8 @@ fn testSystemB(q: Query(.{ .q = &.{ *u8, ?u64 } })) void {
 test App {
     var app = App(.{
         .Context = TestAppContext,
-        .Systems = &.{ System.init(.Update, testSystemA), System.init(.Startup, testSystemB) },
+        .Systems = &.{System.init(.Startup, testSystemA)},
     }).init(std.testing.allocator);
     defer app.deinit();
+    try app.startup();
 }
