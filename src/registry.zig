@@ -1,41 +1,44 @@
 const std = @import("std");
 const entity = @import("entity.zig");
-const ComponentsFactory = @import("components.zig").Components;
 const archetype = @import("archetype.zig");
+const query = @import("query/query.zig");
+const commands = @import("commands/commands.zig");
 
 pub const RegistryOptions = struct {
-    ComponentTypes: []const type,
+    Components: type,
     Entity: type = entity.EntityTypeFactory(.medium),
 };
 
 pub fn Registry(comptime options: RegistryOptions) type {
     return struct {
-        pub const ComponentTypes = options.ComponentTypes;
         pub const Entity = options.Entity;
-        pub const ComponentBitSet = ComponentsFactory(ComponentTypes);
+        pub const Components = options.Components;
         pub const Archetype = archetype.Archetype(.{
-            .EntityType = Entity,
-            .ComponentBitSet = ComponentBitSet,
+            .Entity = Entity,
+            .Components = Components,
+        });
+        pub const CommandsQueue = commands.CommandsQueueFactory(.{
+            .Entity = Entity,
+            .Components = Components,
         });
 
         const EntityLocation = struct {
-            signature: ?ComponentBitSet = null,
+            signature: ?Components = null,
             // current (if alive) or next (if dead) generation of an entity index.
             version: options.Entity.Version = 0,
         };
 
         allocator: std.mem.Allocator,
-        archetypes: std.AutoHashMap(ComponentBitSet, Archetype),
+        archetypes: std.AutoHashMap(Components, Archetype),
         /// entity index to -> generations + archetype
-        entities_to_locations: std.ArrayList(EntityLocation),
-        free_entity_list: std.ArrayList(Entity.Index),
+        entities_to_locations: std.ArrayList(EntityLocation) = .empty,
+        free_entity_list: std.ArrayList(Entity.Index) = .empty,
+        queues: std.ArrayList(CommandsQueue) = .empty,
 
         pub fn init(allocator: std.mem.Allocator) @This() {
             return .{
                 .allocator = allocator,
                 .archetypes = @FieldType(@This(), "archetypes").init(allocator),
-                .entities_to_locations = @FieldType(@This(), "entities_to_locations").empty,
-                .free_entity_list = @FieldType(@This(), "free_entity_list").empty,
             };
         }
 
@@ -47,6 +50,16 @@ pub fn Registry(comptime options: RegistryOptions) type {
             self.archetypes.deinit();
             self.entities_to_locations.deinit(self.allocator);
             self.free_entity_list.deinit(self.allocator);
+            self.deinitQueues();
+        }
+
+        pub fn len(self: *@This()) usize {
+            var count: usize = 0;
+            var iter = self.archetypes.valueIterator();
+            while (iter.next()) |arch| {
+                count += arch.len();
+            }
+            return count;
         }
 
         fn getEntityArchetype(self: *@This(), entt: Entity) *Archetype {
@@ -55,7 +68,11 @@ pub fn Registry(comptime options: RegistryOptions) type {
             return self.archetypes.getPtr(signature).?;
         }
 
-        fn getArchetypeFromSignature(self: *@This(), signature: ComponentBitSet) !*Archetype {
+        pub fn getArchetypeFromSignature(self: *@This(), signature: Components) *Archetype {
+            return self.archetypes.getEntry(signature).?.value_ptr;
+        }
+
+        pub fn tryGetArchetypeFromSignature(self: *@This(), signature: Components) !*Archetype {
             const entry = try self.archetypes.getOrPut(signature);
             if (entry.found_existing) {
                 return @ptrCast(entry.value_ptr);
@@ -87,7 +104,7 @@ pub fn Registry(comptime options: RegistryOptions) type {
                 };
             };
             // update entity_to_locations with new id
-            const empty_arch = self.getArchetypeFromSignature(ComponentBitSet.init(&.{})) catch unreachable;
+            const empty_arch = self.tryGetArchetypeFromSignature(Components.init(&.{})) catch unreachable;
             self.entities_to_locations.append(self.allocator, .{
                 .signature = empty_arch.signature,
                 .version = entity_id.version,
@@ -96,22 +113,36 @@ pub fn Registry(comptime options: RegistryOptions) type {
             return entity_id;
         }
 
+        pub fn destroy(self: *@This(), entt: Entity) void {
+            std.debug.assert(self.valid(entt));
+            const empty_arch = self.getArchetypeFromSignature(Components.init(&.{}));
+            const current_arch = self.getEntityArchetype(entt);
+
+            self.moveTo(entt, current_arch, empty_arch) catch unreachable;
+            self.free_entity_list.append(self.allocator, entt.index) catch unreachable;
+            const location = &self.entities_to_locations.items[entt.index];
+            location.version += 1;
+            location.signature = null;
+        }
+
+        fn moveTo(self: *@This(), entt: Entity, from: *Archetype, to: *Archetype) !void {
+            std.debug.assert(self.valid(entt));
+            try from.moveTo(entt, to);
+            self.entities_to_locations.items[entt.index].signature = to.signature;
+        }
+
         pub fn has(self: *@This(), comptime Component: type, entt: Entity) bool {
             std.debug.assert(self.valid(entt));
             return self.getEntityArchetype(entt).has(Component);
         }
 
-        pub fn remove(self: *@This(), comptime Component: type, entt: Entity) void {
+        pub fn remove(self: *@This(), tid_or_component: anytype, entt: Entity) void {
             std.debug.assert(self.valid(entt));
             const old_arch = self.getEntityArchetype(entt);
             var new_signature = old_arch.signature;
-            new_signature.remove(Component);
-            const new_arch = self.getArchetypeFromSignature(new_signature) catch unreachable;
-            old_arch.moveTo(
-                entt,
-                new_arch,
-            ) catch unreachable;
-            self.entities_to_locations.items[entt.index].signature = new_arch.signature;
+            new_signature.remove(tid_or_component);
+            const new_arch = self.getArchetypeFromSignature(new_signature);
+            self.moveTo(entt, old_arch, new_arch) catch unreachable;
         }
 
         pub fn add(self: *@This(), entt: Entity, value: anytype) void {
@@ -123,12 +154,8 @@ pub fn Registry(comptime options: RegistryOptions) type {
             var new_signature = old_arch.signature;
             new_signature.add(Component);
 
-            const new_arch = self.getArchetypeFromSignature(new_signature) catch unreachable;
-            old_arch.moveTo(
-                entt,
-                new_arch,
-            ) catch unreachable;
-            self.entities_to_locations.items[entt.index].signature = new_arch.signature;
+            const new_arch = self.tryGetArchetypeFromSignature(new_signature) catch unreachable;
+            self.moveTo(entt, old_arch, new_arch) catch unreachable;
             // add new component value
             new_arch.get(Component, entt).* = value;
         }
@@ -143,36 +170,61 @@ pub fn Registry(comptime options: RegistryOptions) type {
             return self.getEntityArchetype(entt).getConst(Component, entt);
         }
 
-        // Destroy an entity
-        // pub fn destroy(self: *@This(), id: Entity) void {
-        //     std.debug.assert(self.valid(id));
-        //
-        //     self.free_entity_list.append(id);
-        //     self.entities_to_locations.items[id.index].version += 1;
-        // }
+        pub fn createQueue(self: *@This()) !usize {
+            try self.queues.append(self.allocator, CommandsQueue.init(self.allocator));
+            return self.queues.items.len - 1;
+        }
 
-        // pub fn add(self: *@This(), id: Entity, component: anytype) void {
-        //     std.debug.assert(self.valid(id));
-        //
-        // }
-        //
-        // pub fn remove(self: *@This(), id: Entity, ComponentType: T) void {
-        //     std.debug.assert(self.valid(id));
-        //
-        // }
-        //
-        // pub fn get(self: *@This(), id: Entity, ComponentType: T) *T {
-        //     std.debug.assert(self.valid(id));
-        //
-        // }
-        //
-        // pub fn has(self: *@This(), id: Entity, ComponentType: T) void {
-        //     std.debug.assert(self.valid(id));
-        //
-        // }
-        //
-        // pub fn forEach(self: *@This(), comptime ComponentTypes: []type, func: anytype) void {
-        // }
+        pub fn getQueue(self: *@This(), index: usize) *CommandsQueue {
+            return &self.queues.items[index];
+        }
+
+        fn deinitQueues(self: *@This()) void {
+            for (self.queues.items) |*queue| {
+                queue.deinit();
+            }
+            self.queues.deinit(self.allocator);
+            self.queues = .empty;
+        }
+
+        pub fn sync(self: *@This()) void {
+            for (0..self.queues.items.len) |index| {
+                self.syncQueue(index);
+            }
+            self.deinitQueues();
+        }
+
+        fn syncQueue(self: *@This(), index: usize) void {
+            const queue = self.getQueue(index);
+            std.debug.assert(queue.commands.items.len == 0 or queue.commands.items[0] == .context);
+            var iter = queue.iterator();
+            while (iter.next()) |ctx| {
+                const entt = switch (ctx.context.id) {
+                    .entity => |e| e,
+                    .placeholder => |_| self.create(),
+                };
+                context_loop: while (iter.next()) |comm| {
+                    switch (comm) {
+                        .add => |a| switch (a) {
+                            inline else => |v| {
+                                self.add(entt, v);
+                            },
+                        },
+                        .remove => |type_id| {
+                            self.remove(type_id, entt);
+                        },
+                        .despawn => |d| {
+                            self.destroy(d.entt);
+                            break :context_loop;
+                        },
+                        .context => |_| {
+                            iter.rollback();
+                            break :context_loop;
+                        },
+                    }
+                }
+            }
+        }
     };
 }
 
@@ -185,6 +237,7 @@ test "all" {
 }
 
 test Registry {
+    const ComponentsFactory = @import("components.zig").Components;
     const typeA = u64;
     const typeB = u32;
     const typeC = struct {};
@@ -192,7 +245,7 @@ test Registry {
     const typeE = struct { a: u32, b: u54 };
 
     var registry = Registry(.{
-        .ComponentTypes = &.{ typeA, typeB, typeC, typeD, typeE },
+        .Components = ComponentsFactory(&.{ typeA, typeB, typeC, typeD, typeE }),
         .Entity = entity.EntityTypeFactory(.medium),
     }).init(std.testing.allocator);
     defer registry.deinit();
@@ -211,16 +264,18 @@ test Registry {
 }
 
 test "registry initialization test" {
+    const ComponentsFactory = @import("components.zig").Components;
     var registry = Registry(.{
-        .ComponentTypes = &.{ u64, bool, struct {} },
+        .Components = ComponentsFactory(&.{ u64, bool, struct {} }),
         .Entity = entity.EntityTypeFactory(.small),
     }).init(std.testing.allocator);
     defer registry.deinit();
 }
 
 test "registry remove test" {
+    const ComponentsFactory = @import("components.zig").Components;
     var registry = Registry(.{
-        .ComponentTypes = &.{ u64, bool, struct {} },
+        .Components = ComponentsFactory(&.{ u64, bool, struct {} }),
         .Entity = entity.EntityTypeFactory(.small),
     }).init(std.testing.allocator);
     const entt_id = registry.create();

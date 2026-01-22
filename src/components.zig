@@ -35,6 +35,26 @@ pub fn Components(comptime ComponentTypes: []const type) type {
         /// enum that will be used to make typeIds (tid) typed
         /// EVERY tid should be ComponentTypeId
         pub const ComponentTypeId = initComponentTypeId(ComponentTypes);
+        pub const Len = ComponentTypes.len;
+
+        pub const Union = Union: {
+            var fields: [Len]std.builtin.Type.UnionField = undefined;
+            for (ComponentTypes, 0..) |Component, i| {
+                fields[i] = std.builtin.Type.UnionField{
+                    .alignment = @alignOf(Component),
+                    .name = @typeName(Component),
+                    .type = Component,
+                };
+            }
+            break :Union @Type(.{
+                .@"union" = .{
+                    .decls = &.{},
+                    .fields = &fields,
+                    .tag_type = ComponentTypeId,
+                    .layout = .auto,
+                },
+            });
+        };
 
         /// for functions receiving a tid, use a static enum map to return info in O(1)
         const TypeIdSizeMap = TypeIdSizeMap: {
@@ -96,6 +116,12 @@ pub fn Components(comptime ComponentTypes: []const type) type {
             return comptime std.mem.indexOfScalar(type, ComponentTypes, T) != null;
         }
 
+        pub fn getAsUnion(value: anytype) Union {
+            const Component = @TypeOf(value);
+            checkType(Component);
+            return @unionInit(Union, @typeName(Component), value);
+        }
+
         pub fn init(comptime Types: []const type) @This() {
             const bitset = comptime bitset: {
                 var set = BitSet.initEmpty();
@@ -143,6 +169,95 @@ pub fn Components(comptime ComponentTypes: []const type) type {
                 return self.bitset.isSet(TypeIdIndexMap.get(tid_or_component));
             }
             @compileError("'has' can only be called using a TypeId or Component type");
+        }
+
+        const ComponentAccessType = enum {
+            Const,
+            PointerConst,
+            PointerMut,
+            OptionalConst,
+            OptionalPointerMut,
+            OptionalPointerConst,
+        };
+        pub fn getComponentAccessType(comptime T: type) ComponentAccessType {
+            if (isComponent(T)) return .Const;
+            return switch (@typeInfo(T)) {
+                .pointer => |p| {
+                    if (!isComponent(p.child)) {
+                        @compileError("Pointer doesn't point to a component type");
+                    }
+                    return if (p.is_const) .PointerConst else .PointerMut;
+                },
+                .optional => |o| switch (@typeInfo(o.child)) {
+                    .pointer => |p| {
+                        if (!isComponent(p.child)) {
+                            @compileError("Child of optional pointer (" ++ @typeName(T) ++ ") is not a component type");
+                        }
+                        return if (p.is_const) .OptionalPointerConst else .OptionalPointerMut;
+                    },
+                    else => {
+                        if (!isComponent(o.child)) {
+                            @compileError("Child of optional (" ++ @typeName(T) ++ ") is not a component type");
+                        }
+                        return .OptionalConst;
+                    },
+                },
+                else => {
+                    @compileError("type is not a component");
+                },
+            };
+        }
+
+        pub fn getCanonicalType(comptime T: type) type {
+            if (isComponent(T)) return T;
+            return switch (@typeInfo(T)) {
+                .pointer => |p| {
+                    if (!isComponent(p.child)) {
+                        @compileError("Pointer doesn't point to a component type");
+                    }
+                    return p.child;
+                },
+                .optional => |o| switch (@typeInfo(o.child)) {
+                    .pointer => |p| {
+                        if (!isComponent(p.child)) {
+                            @compileError("Child of optional pointer (" ++ @typeName(T) ++ ") is not a component type");
+                        }
+                        return p.child;
+                    },
+                    else => {
+                        if (!isComponent(o.child)) {
+                            @compileError("Child of optional (" ++ @typeName(T) ++ ") is not a component type");
+                        }
+                        return o.child;
+                    },
+                },
+                else => {
+                    @compileError("type is not a component");
+                },
+            };
+        }
+
+        pub inline fn checkType(tid_or_component: anytype) void {
+            if (comptime @TypeOf(tid_or_component) != ComponentTypeId and !@This().isComponent(tid_or_component)) {
+                const T = T: {
+                    if (comptime @TypeOf(tid_or_component) == type) {
+                        break :T tid_or_component;
+                    }
+                    break :T @TypeOf(tid_or_component);
+                };
+                @compileError("invalid type " ++ @typeName(T) ++ ": must be a ComponentTypeId or a type in the component list");
+            }
+        }
+
+        pub inline fn checkSize(tid_or_component: anytype) void {
+            checkType(tid_or_component);
+            if (comptime @TypeOf(tid_or_component) == ComponentTypeId) {
+                std.debug.assert(@This().getSize(tid_or_component) != 0);
+            } else if (comptime @This().isComponent(tid_or_component)) {
+                if (comptime @sizeOf(tid_or_component) == 0) {
+                    @compileError("function called with zero-sized Component type '" ++ @typeName(tid_or_component) ++ "' as argument!");
+                }
+            }
         }
 
         pub inline fn getSize(tid_or_component: anytype) usize {
