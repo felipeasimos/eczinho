@@ -48,17 +48,12 @@ pub fn CommandsFactory(comptime options: CommandsFactoryOptions) type {
         }
         pub fn add(self: @This(), entt: Entity, value: anytype) void {
             return self.getQueue().addCommand(.{ .entity = entt }, .{
-                .add = .{
-                    .type_id = Components.hash(@TypeOf(value)),
-                    .value = value,
-                },
+                .add = Components.getAsUnion(value),
             });
         }
         pub fn remove(self: @This(), comptime Component: type, entt: Entity) void {
             return self.getQueue().addCommand(.{ .entity = entt }, .{
-                .remove = .{
-                    .type_id = Components.hash(Component),
-                },
+                .remove = Components.hash(Component),
             });
         }
         pub fn despawn(self: @This(), entt: Entity) void {
@@ -80,10 +75,7 @@ pub fn CommandsFactory(comptime options: CommandsFactoryOptions) type {
             }
             pub fn add(self: @This(), value: anytype) @This() {
                 self.commands.getQueue().addCommand(self.entt, .{
-                    .add = .{
-                        .type_id = Components.hash(@TypeOf(value)),
-                        .value = Components.getAsUnion(value),
-                    },
+                    .add = Components.getAsUnion(value),
                 }) catch unreachable;
                 return self;
             }

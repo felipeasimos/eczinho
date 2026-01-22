@@ -50,10 +50,16 @@ pub fn Registry(comptime options: RegistryOptions) type {
             self.archetypes.deinit();
             self.entities_to_locations.deinit(self.allocator);
             self.free_entity_list.deinit(self.allocator);
-            for (self.queues.items) |*queue| {
-                queue.deinit();
+            self.deinitQueues();
+        }
+
+        pub fn len(self: *@This()) usize {
+            var count: usize = 0;
+            var iter = self.archetypes.valueIterator();
+            while (iter.next()) |arch| {
+                count += arch.len();
             }
-            self.queues.deinit(self.allocator);
+            return count;
         }
 
         fn getEntityArchetype(self: *@This(), entt: Entity) *Archetype {
@@ -107,22 +113,36 @@ pub fn Registry(comptime options: RegistryOptions) type {
             return entity_id;
         }
 
+        pub fn destroy(self: *@This(), entt: Entity) void {
+            std.debug.assert(self.valid(entt));
+            const empty_arch = self.getArchetypeFromSignature(Components.init(&.{}));
+            const current_arch = self.getEntityArchetype(entt);
+
+            self.moveTo(entt, current_arch, empty_arch) catch unreachable;
+            self.free_entity_list.append(self.allocator, entt.index) catch unreachable;
+            const location = &self.entities_to_locations.items[entt.index];
+            location.version += 1;
+            location.signature = null;
+        }
+
+        fn moveTo(self: *@This(), entt: Entity, from: *Archetype, to: *Archetype) !void {
+            std.debug.assert(self.valid(entt));
+            try from.moveTo(entt, to);
+            self.entities_to_locations.items[entt.index].signature = to.signature;
+        }
+
         pub fn has(self: *@This(), comptime Component: type, entt: Entity) bool {
             std.debug.assert(self.valid(entt));
             return self.getEntityArchetype(entt).has(Component);
         }
 
-        pub fn remove(self: *@This(), comptime Component: type, entt: Entity) void {
+        pub fn remove(self: *@This(), tid_or_component: anytype, entt: Entity) void {
             std.debug.assert(self.valid(entt));
             const old_arch = self.getEntityArchetype(entt);
             var new_signature = old_arch.signature;
-            new_signature.remove(Component);
+            new_signature.remove(tid_or_component);
             const new_arch = self.getArchetypeFromSignature(new_signature);
-            old_arch.moveTo(
-                entt,
-                new_arch,
-            ) catch unreachable;
-            self.entities_to_locations.items[entt.index].signature = new_arch.signature;
+            self.moveTo(entt, old_arch, new_arch) catch unreachable;
         }
 
         pub fn add(self: *@This(), entt: Entity, value: anytype) void {
@@ -135,11 +155,7 @@ pub fn Registry(comptime options: RegistryOptions) type {
             new_signature.add(Component);
 
             const new_arch = self.tryGetArchetypeFromSignature(new_signature) catch unreachable;
-            old_arch.moveTo(
-                entt,
-                new_arch,
-            ) catch unreachable;
-            self.entities_to_locations.items[entt.index].signature = new_arch.signature;
+            self.moveTo(entt, old_arch, new_arch) catch unreachable;
             // add new component value
             new_arch.get(Component, entt).* = value;
         }
@@ -161,6 +177,53 @@ pub fn Registry(comptime options: RegistryOptions) type {
 
         pub fn getQueue(self: *@This(), index: usize) *CommandsQueue {
             return &self.queues.items[index];
+        }
+
+        fn deinitQueues(self: *@This()) void {
+            for (self.queues.items) |*queue| {
+                queue.deinit();
+            }
+            self.queues.deinit(self.allocator);
+            self.queues = .empty;
+        }
+
+        pub fn sync(self: *@This()) void {
+            for (0..self.queues.items.len) |index| {
+                self.syncQueue(index);
+            }
+            self.deinitQueues();
+        }
+
+        fn syncQueue(self: *@This(), index: usize) void {
+            const queue = self.getQueue(index);
+            std.debug.assert(queue.commands.items.len == 0 or queue.commands.items[0] == .context);
+            var iter = queue.iterator();
+            while (iter.next()) |ctx| {
+                const entt = switch (ctx.context.id) {
+                    .entity => |e| e,
+                    .placeholder => |_| self.create(),
+                };
+                context_loop: while (iter.next()) |comm| {
+                    switch (comm) {
+                        .add => |a| switch (a) {
+                            inline else => |v| {
+                                self.add(entt, v);
+                            },
+                        },
+                        .remove => |type_id| {
+                            self.remove(type_id, entt);
+                        },
+                        .despawn => |d| {
+                            self.destroy(d.entt);
+                            break :context_loop;
+                        },
+                        .context => |_| {
+                            iter.rollback();
+                            break :context_loop;
+                        },
+                    }
+                }
+            }
         }
     };
 }

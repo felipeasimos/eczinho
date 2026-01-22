@@ -67,6 +67,7 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
                     args[i].deinit();
                 }
             }
+            self.registry.sync();
         }
 
         pub fn next(self: *@This()) void {

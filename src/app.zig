@@ -114,4 +114,5 @@ test App {
     }).init(std.testing.allocator);
     defer app.deinit();
     try app.startup();
+    try std.testing.expectEqual(1, app.registry.len());
 }

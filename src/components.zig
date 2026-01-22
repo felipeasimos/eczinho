@@ -50,7 +50,7 @@ pub fn Components(comptime ComponentTypes: []const type) type {
                 .@"union" = .{
                     .decls = &.{},
                     .fields = &fields,
-                    .tag_type = null,
+                    .tag_type = ComponentTypeId,
                     .layout = .auto,
                 },
             });

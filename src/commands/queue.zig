@@ -13,15 +13,10 @@ pub fn CommandsQueue(comptime options: CommandsQueueOptions) type {
         pub const EntityPlaceholder = Entity.Index;
 
         /// remove component to the entity or placeholder of the current context
-        pub const CommandRemove = struct {
-            type_id: Components.ComponentTypeId,
-        };
+        pub const CommandRemove = Components.ComponentTypeId;
 
         /// add component to the entity or placeholder of the current context
-        pub const CommandAdd = struct {
-            type_id: Components.ComponentTypeId,
-            value: Components.Union,
-        };
+        pub const CommandAdd = Components.Union;
 
         pub const ContextId = union(enum) {
             entity: Entity,
@@ -123,6 +118,28 @@ pub fn CommandsQueue(comptime options: CommandsQueueOptions) type {
             }
             try self.commands.append(self.allocator, .{ .despawn = .{ .entt = context_id.entity } });
         }
+
+        pub fn iterator(self: *@This()) Iterator {
+            return Iterator.init(self.commands.items);
+        }
+        pub const Iterator = struct {
+            comms: []const Command,
+            index: usize = 0,
+            pub fn init(comms: []const Command) @This() {
+                return .{
+                    .comms = comms,
+                };
+            }
+            pub fn next(self: *@This()) ?Command {
+                if (self.index >= self.comms.len) return null;
+                const i = self.index;
+                self.index += 1;
+                return self.comms[i];
+            }
+            pub fn rollback(self: *@This()) void {
+                self.index -= 1;
+            }
+        };
     };
 }
 
