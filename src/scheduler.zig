@@ -57,6 +57,7 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
 
         fn initArg(self: *@This(), comptime ArgType: type) !ArgType {
             const InitArgsTuple = std.meta.ArgsTuple(@TypeOf(ArgType.init));
+            // SAFETY: immediatly filled in the following lines
             var args: InitArgsTuple = undefined;
             const type_info = @typeInfo(@TypeOf(ArgType.init)).@"fn";
             const params = type_info.params;
