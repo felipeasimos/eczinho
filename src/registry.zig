@@ -1,7 +1,6 @@
 const std = @import("std");
 const entity = @import("entity.zig");
 const archetype = @import("archetype.zig");
-const query = @import("query/query.zig");
 const commands = @import("commands/commands.zig");
 
 pub const RegistryOptions = struct {
@@ -87,7 +86,7 @@ pub fn Registry(comptime options: RegistryOptions) type {
         }
 
         /// Create a new entity and return it
-        pub fn create(self: *@This()) Entity {
+        pub fn create(self: *@This()) !Entity {
             const entity_id = new_entity: {
                 // use previously deleted entity index (if there is any)
                 if (self.free_entity_list.pop()) |old_index| {
@@ -104,22 +103,22 @@ pub fn Registry(comptime options: RegistryOptions) type {
                 };
             };
             // update entity_to_locations with new id
-            const empty_arch = self.tryGetArchetypeFromSignature(Components.init(&.{})) catch unreachable;
-            self.entities_to_locations.append(self.allocator, .{
+            const empty_arch = try self.tryGetArchetypeFromSignature(Components.init(&.{}));
+            try self.entities_to_locations.append(self.allocator, .{
                 .signature = empty_arch.signature,
                 .version = entity_id.version,
-            }) catch unreachable;
-            empty_arch.reserve(entity_id) catch unreachable;
+            });
+            try empty_arch.reserve(entity_id);
             return entity_id;
         }
 
-        pub fn destroy(self: *@This(), entt: Entity) void {
+        pub fn destroy(self: *@This(), entt: Entity) !void {
             std.debug.assert(self.valid(entt));
             const empty_arch = self.getArchetypeFromSignature(Components.init(&.{}));
             const current_arch = self.getEntityArchetype(entt);
 
-            self.moveTo(entt, current_arch, empty_arch) catch unreachable;
-            self.free_entity_list.append(self.allocator, entt.index) catch unreachable;
+            try self.moveTo(entt, current_arch, empty_arch);
+            try self.free_entity_list.append(self.allocator, entt.index);
             const location = &self.entities_to_locations.items[entt.index];
             location.version += 1;
             location.signature = null;
@@ -136,16 +135,16 @@ pub fn Registry(comptime options: RegistryOptions) type {
             return self.getEntityArchetype(entt).has(Component);
         }
 
-        pub fn remove(self: *@This(), tid_or_component: anytype, entt: Entity) void {
+        pub fn remove(self: *@This(), tid_or_component: anytype, entt: Entity) !void {
             std.debug.assert(self.valid(entt));
             const old_arch = self.getEntityArchetype(entt);
             var new_signature = old_arch.signature;
             new_signature.remove(tid_or_component);
             const new_arch = self.getArchetypeFromSignature(new_signature);
-            self.moveTo(entt, old_arch, new_arch) catch unreachable;
+            try self.moveTo(entt, old_arch, new_arch);
         }
 
-        pub fn add(self: *@This(), entt: Entity, value: anytype) void {
+        pub fn add(self: *@This(), entt: Entity, value: anytype) !void {
             std.debug.assert(self.valid(entt));
             const Component = @TypeOf(value);
 
@@ -154,8 +153,8 @@ pub fn Registry(comptime options: RegistryOptions) type {
             var new_signature = old_arch.signature;
             new_signature.add(Component);
 
-            const new_arch = self.tryGetArchetypeFromSignature(new_signature) catch unreachable;
-            self.moveTo(entt, old_arch, new_arch) catch unreachable;
+            const new_arch = try self.tryGetArchetypeFromSignature(new_signature);
+            try self.moveTo(entt, old_arch, new_arch);
             // add new component value
             new_arch.get(Component, entt).* = value;
         }
@@ -187,34 +186,34 @@ pub fn Registry(comptime options: RegistryOptions) type {
             self.queues = .empty;
         }
 
-        pub fn sync(self: *@This()) void {
+        pub fn sync(self: *@This()) !void {
             for (0..self.queues.items.len) |index| {
-                self.syncQueue(index);
+                try self.syncQueue(index);
             }
             self.deinitQueues();
         }
 
-        fn syncQueue(self: *@This(), index: usize) void {
+        fn syncQueue(self: *@This(), index: usize) !void {
             const queue = self.getQueue(index);
             std.debug.assert(queue.commands.items.len == 0 or queue.commands.items[0] == .context);
             var iter = queue.iterator();
             while (iter.next()) |ctx| {
                 const entt = switch (ctx.context.id) {
                     .entity => |e| e,
-                    .placeholder => |_| self.create(),
+                    .placeholder => |_| try self.create(),
                 };
                 context_loop: while (iter.next()) |comm| {
                     switch (comm) {
                         .add => |a| switch (a) {
                             inline else => |v| {
-                                self.add(entt, v);
+                                try self.add(entt, v);
                             },
                         },
                         .remove => |type_id| {
-                            self.remove(type_id, entt);
+                            try self.remove(type_id, entt);
                         },
                         .despawn => |d| {
-                            self.destroy(d.entt);
+                            try self.destroy(d.entt);
                             break :context_loop;
                         },
                         .context => |_| {
@@ -250,8 +249,8 @@ test Registry {
     }).init(std.testing.allocator);
     defer registry.deinit();
 
-    const entt_id = registry.create();
-    registry.add(entt_id, typeE{ .a = 1, .b = 2 });
+    const entt_id = try registry.create();
+    try registry.add(entt_id, typeE{ .a = 1, .b = 2 });
 
     try std.testing.expect(registry.has(typeE, entt_id));
     try std.testing.expect(!registry.has(typeD, entt_id));
@@ -278,8 +277,8 @@ test "registry remove test" {
         .Components = ComponentsFactory(&.{ u64, bool, struct {} }),
         .Entity = entity.EntityTypeFactory(.small),
     }).init(std.testing.allocator);
-    const entt_id = registry.create();
-    registry.add(entt_id, @as(u64, 7));
-    registry.remove(u64, entt_id);
+    const entt_id = try registry.create();
+    try registry.add(entt_id, @as(u64, 7));
+    try registry.remove(u64, entt_id);
     defer registry.deinit();
 }

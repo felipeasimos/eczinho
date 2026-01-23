@@ -1,5 +1,4 @@
 const std = @import("std");
-const AppOptions = @import("app.zig").AppOptions;
 const System = @import("system.zig").System;
 const RegistryFactory = @import("registry.zig").Registry;
 
@@ -41,26 +40,27 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
 
         registry: *Registry,
 
-        pub fn init(reg: *Registry) @This() {
+        pub fn init(reg: *Registry) !@This() {
             var new: @This() = .{
                 .registry = reg,
             };
-            new.runStage(.Startup) catch unreachable;
+            try new.runStage(.Startup);
             return new;
         }
 
         fn runStage(self: *@This(), comptime label: SchedulerLabel) !void {
             inline for (SchedulerStages.get(label)) |system| {
+                // SAFETY: immediatly filled in the following lines
                 var args: system.args_tuple_type = undefined;
                 inline for (system.param_types, 0..) |t, i| {
-                    args[i] = t.init(self.registry);
+                    args[i] = try t.init(self.registry);
                 }
                 try system.call(args);
                 inline for (system.param_types, 0..) |_, i| {
                     args[i].deinit();
                 }
             }
-            self.registry.sync();
+            try self.registry.sync();
         }
 
         pub fn next(self: *@This()) void {

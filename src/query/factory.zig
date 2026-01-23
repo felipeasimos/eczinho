@@ -78,11 +78,11 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
                 try arr.append(self.registry.allocator, key.*);
             }
         }
-        pub fn init(reg: *Registry) @This() {
+        pub fn init(reg: *Registry) !@This() {
             var new: @This() = .{
                 .registry = reg,
             };
-            new.updateArchetypeSignatureList() catch unreachable;
+            try new.updateArchetypeSignatureList();
             return new;
         }
         pub fn deinit(self: *@This()) void {

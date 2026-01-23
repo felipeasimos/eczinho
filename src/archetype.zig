@@ -212,6 +212,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                     if (self.index >= self.archetype.len()) {
                         return null;
                     }
+                    // SAFETY: immediatly filled in the following lines
                     var tuple: std.meta.Tuple(ReturnTypes) = undefined;
                     inline for (ReturnTypes, 0..) |Type, i| {
                         if (comptime Type == Entity) {

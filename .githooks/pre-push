@@ -1,0 +1,13 @@
+#!/bin/sh
+
+read ref name remote_ref remote_name
+
+if test "$ref" = refs/heads/master; then
+    echo stubbornly refusing to push master >&2
+    exit 1
+fi
+
+if test "$ref" = refs/heads/main; then
+    echo stubbornly refusing to push main >&2
+    exit 1
+fi

@@ -1,0 +1,20 @@
+# .github/workflows/zlint.yml
+name: ZLint
+
+on: [pull_request]
+
+jobs:
+  zlint:
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: ZLint
+        uses: DonIsaac/zlint-action@v0.0.1
+        with:
+          # When true (the default value), only files changed in a PR get
+          # linted. Has no effect on pushes.
+          # Non-zig files are ignored regardless of this setting.
+          diff-only: false
+          version: latest
