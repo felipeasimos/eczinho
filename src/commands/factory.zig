@@ -1,8 +1,4 @@
-const std = @import("std");
-const ComponentsFactory = @import("../components.zig").Components;
 const CommandsQueueFactory = @import("queue.zig").CommandsQueue;
-const EntityFactory = @import("../entity.zig").EntityTypeFactory;
-const archetype = @import("../archetype.zig");
 const registry = @import("../registry.zig");
 
 pub const CommandsFactoryOptions = struct {
@@ -34,9 +30,9 @@ pub fn CommandsFactory(comptime options: CommandsFactoryOptions) type {
         queue_index: usize,
         reg: *Registry,
 
-        pub fn init(reg: *Registry) @This() {
+        pub fn init(reg: *Registry) !@This() {
             return .{
-                .queue_index = reg.createQueue() catch unreachable,
+                .queue_index = try reg.createQueue(),
                 .reg = reg,
             };
         }
@@ -60,7 +56,7 @@ pub fn CommandsFactory(comptime options: CommandsFactoryOptions) type {
             return self.getQueue().despawn(.{ .entity = entt });
         }
         pub fn spawn(self: @This()) EntityCommands {
-            const new_entt = self.getQueue().addNewEntity() catch unreachable;
+            const new_entt = self.getQueue().addNewEntity() catch @panic("Commands `spawn` shouldn't error out. This is a bug or a mishandling of the library");
             return EntityCommands.init(self, .{ .placeholder = new_entt });
         }
         pub fn entity(self: @This(), entt: Entity) EntityCommands {
@@ -76,7 +72,7 @@ pub fn CommandsFactory(comptime options: CommandsFactoryOptions) type {
             pub fn add(self: @This(), value: anytype) @This() {
                 self.commands.getQueue().addCommand(self.entt, .{
                     .add = Components.getAsUnion(value),
-                }) catch unreachable;
+                }) catch @panic("EntityCommands `add` shouldn't error out. This is a bug or a mishandling of the library");
                 return self;
             }
         };

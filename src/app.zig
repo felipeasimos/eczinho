@@ -1,6 +1,5 @@
 const std = @import("std");
 const System = @import("system.zig").System;
-const SchedulerLabel = @import("scheduler.zig").SchedulerLabel;
 const ComponentsFactory = @import("components.zig").Components;
 const RegistryFactory = @import("registry.zig").Registry;
 const SchedulerFactory = @import("scheduler.zig").Scheduler;
@@ -65,25 +64,24 @@ pub fn App(comptime options: AppOptions) type {
 
         allocator: std.mem.Allocator,
         registry: Registry,
-        scheduler: Scheduler,
+        scheduler: ?Scheduler = null,
 
         pub fn init(alloc: std.mem.Allocator) @This() {
             return .{
                 .allocator = alloc,
                 .registry = Registry.init(alloc),
-                .scheduler = undefined,
             };
         }
 
         pub fn run(self: *@This()) !void {
             self.startup();
             while (true) {
-                self.scheduler.next();
+                self.scheduler.?.next();
             }
         }
 
         pub fn startup(self: *@This()) !void {
-            self.scheduler = Scheduler.init(&self.registry);
+            self.scheduler = try Scheduler.init(&self.registry);
         }
 
         pub fn deinit(self: *@This()) void {

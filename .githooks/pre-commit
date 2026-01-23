@@ -1,0 +1,12 @@
+#!/bin/sh
+
+branch="$(git rev-parse --abbrev-ref HEAD)"
+
+if [ "$branch" = "master" ] || [ "$branch" = "main" ]; then
+    echo "You can't commit directly to $branch branch"
+    exit 1
+fi
+
+git add .
+zlint
+zig build test

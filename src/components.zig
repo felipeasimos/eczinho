@@ -1,5 +1,4 @@
 const std = @import("std");
-const sparseset = @import("sparse_set.zig");
 
 fn checkForNameCollision(comptime ComponentTypes: []const type) void {
     inline for (ComponentTypes, 0..) |T, i| {

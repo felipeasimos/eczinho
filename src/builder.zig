@@ -4,7 +4,6 @@ const SchedulerLabel = @import("scheduler.zig").SchedulerLabel;
 const EntityOptions = @import("entity.zig").EntityOptions;
 const EntityTypeFactory = @import("entity.zig").EntityTypeFactory;
 const ComponentsFactory = @import("components.zig").Components;
-const query = @import("query/query.zig");
 const app = @import("app.zig");
 
 pub const AppContextBuilder = struct {
