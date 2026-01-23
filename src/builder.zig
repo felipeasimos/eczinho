@@ -4,10 +4,12 @@ const SchedulerLabel = @import("scheduler.zig").SchedulerLabel;
 const EntityOptions = @import("entity.zig").EntityOptions;
 const EntityTypeFactory = @import("entity.zig").EntityTypeFactory;
 const ComponentsFactory = @import("components.zig").Components;
+const ResourcesFactory = @import("resource/resources.zig").Resources;
 const app = @import("app.zig");
 
 pub const AppContextBuilder = struct {
     components: []const type = &.{},
+    resources: []const type = &.{},
     entity: type = EntityTypeFactory(.medium),
     pub fn init() @This() {
         return .{};
@@ -24,6 +26,18 @@ pub const AppContextBuilder = struct {
         }
         return new;
     }
+    pub fn addResource(self: @This(), Resource: type) @This() {
+        var new = self;
+        new.resources = new.resources ++ .{Resource};
+        return new;
+    }
+    pub fn addResources(self: @This(), Resources: []const type) @This() {
+        var new = self;
+        for (Resources) |Resource| {
+            new = new.addResource(Resource);
+        }
+        return new;
+    }
     pub fn setEntityConfig(self: @This(), options: EntityOptions) @This() {
         var new = self;
         new.entity = EntityTypeFactory(options);
@@ -34,6 +48,7 @@ pub const AppContextBuilder = struct {
     }
     pub fn build(self: @This()) type {
         return app.AppContext(.{
+            .Resources = ResourcesFactory(self.resources),
             .Components = ComponentsFactory(self.components),
             .Entity = self.entity,
         });
