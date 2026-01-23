@@ -1,14 +1,18 @@
 const std = @import("std");
 const System = @import("system.zig").System;
 const ComponentsFactory = @import("components.zig").Components;
+const ResourcesFactory = @import("resource/resources.zig").Resources;
 const RegistryFactory = @import("registry.zig").Registry;
+const TypeStoreFactory = @import("resource/type_store.zig").TypeStore;
 const SchedulerFactory = @import("scheduler.zig").Scheduler;
 const EntityTypeFactory = @import("entity.zig").EntityTypeFactory;
 const query = @import("query/query.zig");
 const commands = @import("commands/commands.zig");
+const resource = @import("resource/resource.zig");
 
 pub const AppContextOptions = struct {
     Components: type,
+    Resources: type,
     Entity: type = EntityTypeFactory(.medium),
 };
 
@@ -16,6 +20,10 @@ pub fn AppContext(comptime options: AppContextOptions) type {
     return struct {
         pub const Entity = options.Entity;
         pub const Components = options.Components;
+        pub const Resources = options.Resources;
+        pub const TypeStore = resource.TypeStore(.{
+            .Resources = Resources,
+        });
         /// use in systems to obtain a query. System signature should be like:
         /// fn systemExample(q: Query(.{.q = &.{typeA, *typeB}, .with = &.{typeC}}), ...) !void {
         ///     ...
@@ -36,6 +44,18 @@ pub fn AppContext(comptime options: AppContextOptions) type {
             .Components = Components,
             .Entity = Entity,
         });
+
+        /// use in systems to obtain a resource. System signature should be like:
+        /// fn systemExample(q: Resource(typeA), ...) !void {
+        ///     ...
+        /// }
+        /// returned handle can access resource using get() *T or getConst() *const T
+        pub fn Resource(comptime T: type) type {
+            return resource.Resource(.{
+                .TypeStore = TypeStore,
+                .T = T,
+            });
+        }
     };
 }
 
@@ -53,9 +73,13 @@ pub fn App(comptime options: AppOptions) type {
     return struct {
         pub const Components = options.Context.Components;
         pub const Entity = options.Context.Entity;
+        pub const Resources = options.Context.Resources;
         pub const Registry = RegistryFactory(.{
             .Components = Components,
             .Entity = Entity,
+        });
+        pub const TypeStore = TypeStoreFactory(.{
+            .Resources = Resources,
         });
         pub const Scheduler = SchedulerFactory(.{
             .Context = options.Context,
@@ -64,13 +88,19 @@ pub fn App(comptime options: AppOptions) type {
 
         allocator: std.mem.Allocator,
         registry: Registry,
+        store: TypeStore,
         scheduler: ?Scheduler = null,
 
         pub fn init(alloc: std.mem.Allocator) @This() {
             return .{
                 .allocator = alloc,
                 .registry = Registry.init(alloc),
+                .store = TypeStore.init(alloc),
             };
+        }
+
+        pub fn addResource(self: *@This(), value: anytype) !void {
+            try self.store.insert(value);
         }
 
         pub fn run(self: *@This()) !void {
@@ -81,26 +111,33 @@ pub fn App(comptime options: AppOptions) type {
         }
 
         pub fn startup(self: *@This()) !void {
-            self.scheduler = try Scheduler.init(&self.registry);
+            self.scheduler = try Scheduler.init(&self.registry, &self.store);
         }
 
         pub fn deinit(self: *@This()) void {
             self.registry.deinit();
+            self.store.deinit();
         }
     };
 }
 
 const TestAppContext = AppContext(.{
+    .Resources = ResourcesFactory(&.{u7}),
     .Components = ComponentsFactory(&.{ u8, u64, u32 }),
 });
 const Query = TestAppContext.Query;
 const Commands = TestAppContext.Commands;
 const EntityId = TestAppContext.Entity;
+const Resource = TestAppContext.Resource;
 
-fn testSystemA(comms: Commands) !void {
+fn testSystemA(comms: Commands, res: Resource(u7)) !void {
     _ = comms.spawn()
         .add(@as(u8, 8))
         .add(@as(u64, 64));
+    const ptr = res.getConst();
+    try std.testing.expectEqual(@as(u7, 8), ptr.*);
+    res.get().* = 7;
+    try std.testing.expectEqual(@as(u7, 7), ptr.*);
 }
 
 fn testSystemB(comms: Commands, q: Query(.{ .q = &.{ *u8, ?u64, EntityId } })) !void {
@@ -123,6 +160,7 @@ test App {
         .Systems = &.{ System.init(.Startup, testSystemA), System.init(.Startup, testSystemB) },
     }).init(std.testing.allocator);
     defer app.deinit();
+    try app.addResource(@as(u7, 8));
     try std.testing.expectEqual(0, app.registry.len());
     try app.startup();
     try std.testing.expectEqual(1, app.registry.len());

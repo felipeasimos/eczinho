@@ -197,7 +197,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                 }
                 fn getComponent(self: *@This(), comptime Type: type) Type {
                     const CanonicalType = comptime Components.getCanonicalType(Type);
-                    const access_type = comptime Components.getComponentAccessType(Type);
+                    const access_type = comptime Components.getAccessType(Type);
                     const comp_arr = self.archetype.getComponentArray(CanonicalType);
                     return switch (comptime access_type) {
                         .Const => comp_arr.getConst(CanonicalType, self.index),
