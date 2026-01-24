@@ -12,4 +12,6 @@
    - [ ] deal with const event -> per-(system, event) read index must be saved somewhere else
       - [ ] better code for dealing with requirements and pre/post handles of requirements in scheduler
 - [ ] added, changed and removed queries
+- [ ] example game with raylib -> ping pong
+- [ ] more unit tests
 - [ ] 0.16 std.Io multithreading
