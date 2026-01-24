@@ -23,8 +23,8 @@ pub fn EventWriter(comptime options: EventOptions) type {
         pub fn deinit(self: *@This()) void {
             _ = self;
         }
-        pub fn write(self: *@This(), value: T) void {
-            self.store.write(value);
+        pub fn write(self: @This(), value: T) void {
+            self.store.write(value) catch @panic("panic when trying to write to event store");
         }
     };
 }

@@ -8,5 +8,5 @@ if [ "$branch" = "master" ] || [ "$branch" = "main" ]; then
 fi
 
 git add .
-zlint --no-summary
+zlint
 zig build test

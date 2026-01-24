@@ -1,5 +1,4 @@
 const std = @import("std");
-const System = @import("system.zig").System;
 const RegistryFactory = @import("registry.zig").Registry;
 const TypeStoreFactory = @import("resource/type_store.zig").TypeStore;
 const EventStoreFactory = @import("event/event_store.zig").EventStore;
@@ -12,15 +11,16 @@ pub const SchedulerLabel = enum {
 
 pub const SchedulerOptions = struct {
     Context: type,
-    Systems: []const System,
+    Systems: []const type,
+    Labels: []const SchedulerLabel,
 };
 
-fn initSchedulerStages(comptime systems: []const System) std.EnumArray(SchedulerLabel, []const System) {
-    var stages = std.EnumArray(SchedulerLabel, []const System).initFill(&.{});
+fn initSchedulerStages(comptime systems: []const type, comptime labels: []const SchedulerLabel) std.EnumArray(SchedulerLabel, []const type) {
+    var stages = std.EnumArray(SchedulerLabel, []const type).initFill(&.{});
     for (std.enums.values(SchedulerLabel)) |label| {
-        var stage_systems: []const System = &.{};
-        for (systems) |system| {
-            if (system.scheduler_label == label) {
+        var stage_systems: []const type = &.{};
+        for (systems, 0..) |system, i| {
+            if (labels[i] == label) {
                 stage_systems = stage_systems ++ .{system};
             }
         }
@@ -36,7 +36,8 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
         pub const Resources = options.Context.Resources;
         pub const Events = options.Context.Events;
         pub const Systems = options.Systems;
-        pub const SchedulerStages = initSchedulerStages(Systems);
+        pub const Labels = options.Labels;
+        pub const SchedulerStages = initSchedulerStages(Systems, Labels);
         pub const Registry = RegistryFactory(.{
             .Components = Components,
             .Entity = Entity,
@@ -85,15 +86,11 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
 
         fn runStage(self: *@This(), comptime label: SchedulerLabel) !void {
             inline for (SchedulerStages.get(label)) |system| {
-                // SAFETY: immediatly filled in the following lines
-                var args: system.args_tuple_type = undefined;
-                inline for (system.param_types, 0..) |T, i| {
-                    args[i] = try self.initArg(T);
-                }
-                try system.call(args);
-                inline for (system.param_types, 0..) |_, i| {
-                    args[i].deinit();
-                }
+                try system.call(.{
+                    .registry = self.registry,
+                    .type_store = self.resource_store,
+                    .event_store = self.event_store,
+                });
             }
             // sync deferred changes
             try self.registry.sync();

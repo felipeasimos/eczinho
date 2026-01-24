@@ -1,63 +1,86 @@
 const std = @import("std");
-const SchedulerLabel = @import("scheduler.zig").SchedulerLabel;
 
-pub const System = struct {
-    system: *const anyopaque,
-    system_type: type,
-    scheduler_label: SchedulerLabel,
-    args_tuple_type: type,
-    param_types: []const type,
+const RegistryFactory = @import("registry.zig").Registry;
+const TypeStoreFactory = @import("resource/type_store.zig").TypeStore;
+const EventStoreFactory = @import("event/event_store.zig").EventStore;
 
-    fn getParamTypes(comptime FuncType: type) []const type {
-        const type_info = @typeInfo(FuncType);
-        if (type_info != .@"fn") {
-            @compileError("Systems should be a function type");
-        }
-        const fn_info = @typeInfo(FuncType).@"fn";
-        var params: []const type = &.{};
-        for (fn_info.params) |param| {
-            const ParameterType = param.type.?;
-            params = params ++ .{ParameterType};
-        }
-        return params;
-    }
+pub fn System(comptime function: anytype, comptime Context: type) type {
+    return struct {
+        pub const Entity = Context.Entity;
+        pub const Components = Context.Components;
+        pub const Resources = Context.Resources;
+        pub const Events = Context.Events;
 
-    pub fn init(comptime label: SchedulerLabel, comptime function: anytype) @This() {
-        return .{
-            .system = &function,
-            .system_type = @TypeOf(function),
-            .scheduler_label = label,
-            .param_types = getParamTypes(@TypeOf(function)),
-            .args_tuple_type = std.meta.ArgsTuple(@TypeOf(function)),
+        pub const Registry = RegistryFactory(.{
+            .Components = Components,
+            .Entity = Entity,
+        });
+        pub const TypeStore = TypeStoreFactory(.{
+            .Resources = Resources,
+        });
+        pub const EventStore = EventStoreFactory(.{
+            .Events = Events,
+        });
+
+        pub const FuncType = @TypeOf(function);
+        pub const FuncInfo = @typeInfo(FuncType).@"fn";
+
+        pub const RawReturnType = FuncInfo.return_type.?;
+        pub const ReturnType = switch (@typeInfo(RawReturnType)) {
+            .error_set, .error_union => RawReturnType,
+            else => !RawReturnType,
         };
-    }
-    pub inline fn fnPtr(comptime self: @This()) *const self.system_type {
-        return @ptrCast(@alignCast(self.system));
-    }
-    pub inline fn call(comptime self: @This(), args: anytype) @TypeOf(@call(.auto, self.fnPtr(), args)) {
-        return @call(.auto, self.fnPtr(), args);
-    }
-};
+        pub const ParamsSlice = FuncInfo.params;
+        pub const ArgsTuple = std.meta.ArgsTuple(FuncType);
 
-const AppContext = @import("app.zig").AppContext;
-const EntityTypeFactory = @import("entity.zig").EntityTypeFactory;
-const Components = @import("components.zig").Components;
-const Resources = @import("resource/resources.zig").Resources;
-const Events = @import("event/events.zig").Events;
+        const Dependencies = struct {
+            registry: *Registry,
+            type_store: *TypeStore,
+            event_store: *EventStore,
+        };
+        inline fn initArg(comptime ArgType: type, deps: Dependencies) !ArgType {
+            const InitFunc = @TypeOf(ArgType.init);
+            const InitInfo = @typeInfo(InitFunc).@"fn";
+            const InitArgsTuple = std.meta.ArgsTuple(InitFunc);
+            const InitReturnType = InitInfo.return_type.?;
+            const InitParams = InitInfo.params;
 
-const Query = AppContext(.{
-    .Events = Events(&.{}),
-    .Resources = Resources(&.{u7}),
-    .Components = Components(&.{ u8, u16, u32, u64 }),
-    .Entity = EntityTypeFactory(.medium),
-}).Query;
+            var args: InitArgsTuple = undefined;
+            inline for (InitParams, 0..) |param, i| {
+                args[i] = switch (comptime param.type.?) {
+                    *TypeStore => deps.type_store,
+                    *Registry => deps.registry,
+                    *EventStore => deps.event_store,
+                    else => @compileError(std.fmt.comptimePrint("Invalid argument type {s} for method 'init' in system requirement {s}", .{ @typeName(param.type.?), @typeName(ArgType) })),
+                };
+            }
+            return switch (@typeInfo(InitReturnType)) {
+                .error_set, .error_union => try @call(.always_inline, ArgType.init, args),
+                else => @call(.always_inline, ArgType.init, args),
+            };
+        }
+        inline fn getArgs(deps: Dependencies) !ArgsTuple {
+            var args: ArgsTuple = undefined;
+            inline for (ParamsSlice, 0..) |param, i| {
+                const ArgType = param.type.?;
+                args[i] = try initArg(ArgType, deps);
+            }
+            return args;
+        }
+        inline fn deinitArgs(args: anytype) void {
+            inline for (ParamsSlice, 0..) |_, i| {
+                args[i].deinit();
+            }
+        }
 
-fn testSystem(x: Query(.{ .q = &.{ u8, *u16, ?*u32, *const u64 } })) void {
-    _ = x;
-}
-
-test System {
-    const handle = comptime System.init(.Update, testSystem);
-    try std.testing.expectEqual(@TypeOf(testSystem), handle.system_type);
-    try std.testing.expectEqual(testSystem, handle.fnPtr());
+        pub inline fn call(deps: Dependencies) ReturnType {
+            var args = getArgs(deps) catch @panic("Couldn't initialize system arguments");
+            const result = switch (@typeInfo(ReturnType)) {
+                .error_set, .error_union => try @call(.always_inline, function, args),
+                else => @call(.auto, function, args),
+            };
+            deinitArgs(&args);
+            return result;
+        }
+    };
 }

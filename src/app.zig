@@ -4,6 +4,7 @@ const ComponentsFactory = @import("components.zig").Components;
 const RegistryFactory = @import("registry.zig").Registry;
 const SchedulerFactory = @import("scheduler.zig").Scheduler;
 const EntityTypeFactory = @import("entity.zig").EntityTypeFactory;
+const SchedulerLabel = @import("scheduler.zig").SchedulerLabel;
 const query = @import("query/query.zig");
 const commands = @import("commands/commands.zig");
 const resource = @import("resource/resource.zig");
@@ -79,14 +80,17 @@ pub fn AppContext(comptime options: AppContextOptions) type {
 
 pub const AppOptions = struct {
     Context: type,
-    Systems: []const System = &.{},
+    Systems: []const type = &.{},
+    Labels: []const SchedulerLabel = &.{},
 };
 
 /// comptime struct used to encapsulate part of an application in modularized
 /// and reusable way
 /// includes:
-/// - Components
+/// - Components types
 /// - Systems
+/// - Event types
+/// - Resources
 pub fn App(comptime options: AppOptions) type {
     return struct {
         pub const Components = options.Context.Components;
@@ -106,6 +110,7 @@ pub fn App(comptime options: AppOptions) type {
         pub const Scheduler = SchedulerFactory(.{
             .Context = options.Context,
             .Systems = options.Systems,
+            .Labels = options.Labels,
         });
 
         allocator: std.mem.Allocator,
@@ -165,7 +170,7 @@ fn testSystemA(comms: Commands, res: Resource(u7), writer: EventWriter(u4)) !voi
     try std.testing.expectEqual(@as(u7, 8), ptr.*);
     res.get().* = 7;
     try std.testing.expectEqual(@as(u7, 7), ptr.*);
-    writer.write(@as(u4, 1));
+    writer.write(@as(u4, 3));
 }
 
 fn testSystemB(comms: Commands, q: Query(.{ .q = &.{ *u8, ?u64, EntityId } }), reader: EventReader(u4)) !void {
@@ -179,14 +184,16 @@ fn testSystemB(comms: Commands, q: Query(.{ .q = &.{ *u8, ?u64, EntityId } }), r
 
         try std.testing.expectEqual(8, _u8.*);
         try std.testing.expectEqual(64, _u64.?);
-        try std.testing.expectEqual(@as(u4, 1), reader.read());
+        try std.testing.expectEqual(1, reader.len());
+        try std.testing.expectEqual(@as(u4, 3), reader.read());
     }
 }
 
 test App {
     var app = App(.{
         .Context = TestAppContext,
-        .Systems = &.{ System.init(.Startup, testSystemA), System.init(.Startup, testSystemB) },
+        .Systems = &.{ System(testSystemA, TestAppContext), System(testSystemB, TestAppContext) },
+        .Labels = &.{ .Startup, .Startup },
     }).init(std.testing.allocator);
     defer app.deinit();
     try app.resource_store.insert(@as(u7, 8));
