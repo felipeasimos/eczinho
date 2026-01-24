@@ -43,8 +43,10 @@ const AppContext = @import("app.zig").AppContext;
 const EntityTypeFactory = @import("entity.zig").EntityTypeFactory;
 const Components = @import("components.zig").Components;
 const Resources = @import("resource/resources.zig").Resources;
+const Events = @import("event/events.zig").Events;
 
 const Query = AppContext(.{
+    .Events = Events(&.{}),
     .Resources = Resources(&.{u7}),
     .Components = Components(&.{ u8, u16, u32, u64 }),
     .Entity = EntityTypeFactory(.medium),

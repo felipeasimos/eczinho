@@ -2,6 +2,7 @@ const std = @import("std");
 const System = @import("system.zig").System;
 const RegistryFactory = @import("registry.zig").Registry;
 const TypeStoreFactory = @import("resource/type_store.zig").TypeStore;
+const EventStoreFactory = @import("event/event_store.zig").EventStore;
 
 pub const SchedulerLabel = enum {
     Startup,
@@ -33,6 +34,7 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
         pub const Components = options.Context.Components;
         pub const Entity = options.Context.Entity;
         pub const Resources = options.Context.Resources;
+        pub const Events = options.Context.Events;
         pub const Systems = options.Systems;
         pub const SchedulerStages = initSchedulerStages(Systems);
         pub const Registry = RegistryFactory(.{
@@ -42,14 +44,19 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
         pub const TypeStore = TypeStoreFactory(.{
             .Resources = Resources,
         });
+        pub const EventStore = EventStoreFactory(.{
+            .Events = Events,
+        });
 
         registry: *Registry,
-        store: *TypeStore,
+        resource_store: *TypeStore,
+        event_store: *EventStore,
 
-        pub fn init(reg: *Registry, store: *TypeStore) !@This() {
+        pub fn init(reg: *Registry, resource_store: *TypeStore, event_store: *EventStore) !@This() {
             var new: @This() = .{
-                .store = store,
+                .resource_store = resource_store,
                 .registry = reg,
+                .event_store = event_store,
             };
             try new.runStage(.Startup);
             return new;
@@ -63,8 +70,9 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
             const params = type_info.params;
             inline for (params, 0..) |Param, i| {
                 args[i] = switch (comptime Param.type.?) {
-                    *TypeStore => self.store,
+                    *TypeStore => self.resource_store,
                     *Registry => self.registry,
+                    *EventStore => self.event_store,
                     else => @compileError("Invalid argument for 'init' method in system requirement"),
                 };
             }
@@ -87,7 +95,10 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
                     args[i].deinit();
                 }
             }
+            // sync deferred changes
             try self.registry.sync();
+            // swap event buffers
+            self.event_store.swap();
         }
 
         pub fn next(self: *@This()) void {

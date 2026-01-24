@@ -7,9 +7,9 @@
 - [x] components: integer increment id for each component
 - [x] systems
 - [x] more tests
-- [ ] resources
-   - [ ] turn components.zig into type_id.zig
-   - [ ] use array.zig to store resources
+- [x] resources
 - [ ] event
+   - [ ] deal with const event -> per-(system, event) read index must be saved somewhere else
+      - [ ] better code for dealing with requirements and pre/post handles of requirements in scheduler
 - [ ] added, changed and removed queries
 - [ ] 0.16 std.Io multithreading
