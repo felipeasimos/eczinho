@@ -79,8 +79,10 @@ pub const AppBuilder = struct {
     }
     pub fn addSystem(comptime self: @This(), comptime label: SchedulerLabel, comptime function: anytype) @This() {
         var new = self;
-        const system_slice: []const System = &.{System.init(label, function)};
+        const system_slice: []const type = &.{System(function, self.options.Context)};
+        const label_slice: []const SchedulerLabel = &.{label};
         new.options.Systems = new.options.Systems ++ system_slice;
+        new.options.Labels = new.options.Labels ++ label_slice;
         return new;
     }
     pub fn addSystems(self: @This(), label: SchedulerLabel, functions: anytype) @This() {
