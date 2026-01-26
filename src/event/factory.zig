@@ -1,4 +1,6 @@
 const EventStoreFactory = @import("event_store.zig").EventStore;
+const SystemData = @import("../system_data.zig").SystemData;
+const ParameterData = @import("../parameter_data.zig").ParameterData;
 
 pub const EventOptions = struct {
     Events: type,
@@ -40,24 +42,26 @@ pub fn EventReader(comptime options: EventOptions) type {
         pub const Reader = @This();
 
         store: *EventStore,
-        index: usize,
-        pub fn init(store: *EventStore, index: usize) @This() {
+        data: *SystemData,
+        param: ParameterData,
+        pub fn init(store: *EventStore, data: *SystemData, param: ParameterData) @This() {
             return .{
                 .store = store,
-                .index = index,
+                .data = data,
+                .param = param,
             };
         }
         pub fn deinit(self: *@This()) void {
             _ = self;
         }
         pub fn read(self: @This()) T {
-            const value = self.store.read(T, self.index);
-            self.index += 1;
+            const index = self.data.getNextEventIndex(self.param.type_index);
+            const value = self.store.read(T, index);
             return value;
         }
         /// how many events are left to read
         pub fn len(self: @This()) usize {
-            return self.store.len(T, self.index);
+            return self.store.len(T, self.data.peekNextEventIndex(self.param.type_index));
         }
         pub fn empty(self: @This()) bool {
             return self.len() == 0;

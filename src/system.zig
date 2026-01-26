@@ -5,6 +5,7 @@ const TypeStoreFactory = @import("resource/type_store.zig").TypeStore;
 const EventStoreFactory = @import("event/event_store.zig").EventStore;
 const event = @import("event/event.zig");
 const SystemData = @import("system_data.zig").SystemData;
+const ParameterData = @import("parameter_data.zig").ParameterData;
 
 pub fn System(comptime function: anytype, comptime Context: type) type {
     return struct {
@@ -55,6 +56,19 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             return SystemData.init(alloc, NumEventReaders);
         }
 
+        fn numOfType(comptime ParamSlice: []const std.builtin.Type.Fn.Param, T: type) usize {
+            comptime var count: usize = 0;
+            inline for (ParamSlice) |param| {
+                if (param.type) |t| {
+                    if (t == T) {
+                        count += 1;
+                    } else if (@hasField(T, "Marker") and @hasField(t, "Marker") and t.Marker == T.Marker) {
+                        count += 1;
+                    }
+                }
+            }
+            return count;
+        }
         const Dependencies = struct {
             registry: *Registry,
             type_store: *TypeStore,
@@ -75,6 +89,10 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
                     *Registry => deps.registry,
                     *EventStore => deps.event_store,
                     *SystemData => deps.system_data,
+                    ParameterData => ParameterData{
+                        .global_index = i,
+                        .type_index = numOfType(InitParams[0..i], param.type.?),
+                    },
                     else => @compileError(std.fmt.comptimePrint("Invalid argument type {s} for method 'init' in system requirement {s}", .{ @typeName(param.type.?), @typeName(ArgType) })),
                 };
             }

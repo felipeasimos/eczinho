@@ -5,6 +5,7 @@ const std = @import("std");
 /// in user-facing types that don't have system type information
 pub const SystemData = struct {
     event_reader_next_indices: []usize,
+    last_run: usize = 0,
     pub fn init(alloc: std.mem.Allocator, num_event_readers: usize) !@This() {
         return .{
             .event_reader_next_indices = try alloc.alloc(usize, num_event_readers),
@@ -18,6 +19,9 @@ pub const SystemData = struct {
         const index = index_ptr.*;
         index_ptr.* += 1;
         return index;
+    }
+    pub fn peekNextEventIndex(self: *@This(), reader_index: usize) usize {
+        return self.event_reader_next_indices[reader_index];
     }
     pub fn updateIndexForBufferSwap(self: *@This(), reader_index: usize, previous_size: usize) void {
         const index_ptr = self.event_reader_next_indices[reader_index];

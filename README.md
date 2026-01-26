@@ -8,14 +8,7 @@
 - [x] systems
 - [x] more tests
 - [x] resources
-- [ ] event
-   - [ ] update reader indices after swap
-      - [ ] event store needs access to event reader runtime data
-      - [ ] system request event reader runtime data from event store
-      1. system requests new event reader from event store (an index is given)
-      2. event reader init() takes event reader persistent data as index
-      3. this index is given as an argument to read functions
-   - [ ] per-system event data
+- [x] event
 - [ ] added, changed and removed queries
 - [ ] cache queries
 - [ ] hierarchy

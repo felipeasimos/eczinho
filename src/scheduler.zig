@@ -70,10 +70,13 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
         }
 
         fn getSystemIndex(comptime System: type) usize {
-            if (std.mem.indexOfScalar(type, Systems, System)) |idx| {
-                return idx;
+            inline for (Systems, 0..) |sys, i| {
+                if (Systems[i] == sys) {
+                    return i;
+                }
             }
-            @compileError("System is not registered");
+
+            @compileError(std.fmt.comptimePrint("System {} is not registered", .{System}));
         }
 
         fn runStage(self: *@This(), comptime label: SchedulerLabel) !void {
