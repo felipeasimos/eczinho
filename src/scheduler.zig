@@ -69,9 +69,15 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
             return new;
         }
 
+        pub fn deinit(self: *const @This()) void {
+            for (self.system_data) |data| {
+                data.deinit(self.registry.allocator);
+            }
+        }
+
         fn getSystemIndex(comptime System: type) usize {
-            inline for (Systems, 0..) |sys, i| {
-                if (Systems[i] == sys) {
+            inline for (Systems, 0..) |_, i| {
+                if (Systems[i] == System) {
                     return i;
                 }
             }

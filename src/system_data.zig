@@ -5,14 +5,15 @@ const std = @import("std");
 /// in user-facing types that don't have system type information
 pub const SystemData = struct {
     event_reader_next_indices: []usize,
-    last_run: usize = 0,
     pub fn init(alloc: std.mem.Allocator, num_event_readers: usize) !@This() {
+        const next_indices_ptr = try alloc.alloc(usize, num_event_readers);
+        @memset(next_indices_ptr, 0);
         return .{
-            .event_reader_next_indices = try alloc.alloc(usize, num_event_readers),
+            .event_reader_next_indices = next_indices_ptr,
         };
     }
-    pub fn deinit(self: *@This(), alloc: std.mem.Allocator) void {
-        try alloc.free(self.event_reader_next_indices);
+    pub fn deinit(self: *const @This(), alloc: std.mem.Allocator) void {
+        alloc.free(self.event_reader_next_indices);
     }
     pub fn getNextEventIndex(self: *@This(), reader_index: usize) usize {
         const index_ptr = &self.event_reader_next_indices[reader_index];

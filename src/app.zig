@@ -147,6 +147,9 @@ pub fn App(comptime options: AppOptions) type {
             self.registry.deinit();
             self.resource_store.deinit();
             self.event_store.deinit();
+            if (self.scheduler) |sch| {
+                sch.deinit();
+            }
         }
     };
 }
@@ -184,9 +187,9 @@ fn testSystemB(comms: Commands, q: Query(.{ .q = &.{ *u8, ?u64, EntityId } }), r
 
         try std.testing.expectEqual(8, _u8.*);
         try std.testing.expectEqual(64, _u64.?);
-        try std.testing.expectEqual(1, reader.len());
-        try std.testing.expectEqual(@as(u4, 3), reader.read());
     }
+    try std.testing.expectEqual(1, reader.len());
+    try std.testing.expectEqual(@as(u4, 3), reader.read());
 }
 
 test App {

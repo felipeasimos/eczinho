@@ -36,33 +36,56 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
         pub const ParamsSlice = FuncInfo.params;
         pub const ArgsTuple = std.meta.ArgsTuple(FuncType);
 
-        pub const NumEventReaders = NumEventReaders: {
-            var i = 0;
-            for (ParamsSlice) |param| {
-                if (param.type) |t| {
-                    if (!@hasField(t, "Marker")) {
-                        continue;
-                    }
-                    if (t.Marker != event.EventReader) {
-                        continue;
-                    }
-                    i += 1;
-                }
-            }
-            break :NumEventReaders i;
-        };
+        pub const NumEventReaders = numOfMarker(ParamsSlice, event.EventReader);
 
         pub fn initData(alloc: std.mem.Allocator) !SystemData {
             return SystemData.init(alloc, NumEventReaders);
         }
 
-        fn numOfType(comptime ParamSlice: []const std.builtin.Type.Fn.Param, T: type) usize {
-            comptime var count: usize = 0;
+        fn getBaseType(comptime T: type) type {
+            return switch (@typeInfo(T)) {
+                .pointer => |p| p.child,
+                .error_set, .error_union => |e| e.child,
+                else => T,
+            };
+        }
+
+        fn sameType(comptime T1: type, comptime T2: type) bool {
+            const t1 = getBaseType(T1);
+            const t2 = getBaseType(T2);
+            if (@hasDecl(t1, "Marker") != @hasDecl(t2, "Marker")) return false;
+            if (!@hasDecl(t1, "Marker")) {
+                return t1 == t2;
+            }
+            if (@TypeOf(t1.Marker) != @TypeOf(t2.Marker)) return false;
+            if (t1.Marker != t2.Marker) return false;
+            return true;
+        }
+
+        fn matchMarker(comptime T: type, comptime Marker: anytype) bool {
+            const t = getBaseType(T);
+            if (!@hasDecl(t, "Marker")) return false;
+            if (@TypeOf(t.Marker) != @TypeOf(Marker)) return false;
+            if (t.Marker != Marker) return false;
+            return true;
+        }
+
+        fn numOfMarker(comptime ParamSlice: []const std.builtin.Type.Fn.Param, comptime Marker: anytype) usize {
+            comptime var count = 0;
             inline for (ParamSlice) |param| {
                 if (param.type) |t| {
-                    if (t == T) {
+                    if (comptime matchMarker(t, Marker)) {
                         count += 1;
-                    } else if (@hasField(T, "Marker") and @hasField(t, "Marker") and t.Marker == T.Marker) {
+                    }
+                }
+            }
+            return count;
+        }
+        fn numOfType(comptime ParamSlice: []const std.builtin.Type.Fn.Param, comptime T: type) usize {
+            comptime var count = 0;
+            inline for (ParamSlice) |param| {
+                if (param.type) |t| {
+                    if (comptime sameType(t, T)) {
                         count += 1;
                     }
                 }

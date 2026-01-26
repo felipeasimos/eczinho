@@ -9,4 +9,9 @@ fi
 
 git add .
 zlint
-zig build test
+if [[ $? != 0 ]]; then
+    exit 1
+fi
+if [[ $? != 0 ]]; then
+    zig build test
+fi

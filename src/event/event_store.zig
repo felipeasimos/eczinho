@@ -33,6 +33,7 @@ fn initBuffersTuple(comptime Events: type) type {
 
 pub fn EventStore(comptime options: EventStoreOptions) type {
     return struct {
+        pub const Marker = EventStore;
         pub const Events = options.Events;
         pub const EventReaderData = struct {
             next_index_to_read: usize = 0,
