@@ -44,9 +44,10 @@ pub fn EventStore(comptime options: EventStoreOptions) type {
         allocator: std.mem.Allocator,
 
         pub fn init(alloc: std.mem.Allocator) @This() {
-            var buffers: BuffersTuple = undefined;
             comptime var iter = Events.Iterator.init();
             comptime var i = 0;
+            // SAFETY: immediatly filled in the following lines
+            var buffers: BuffersTuple = undefined;
             inline while (iter.nextType()) |Type| {
                 buffers[i] = EventBuffer(Type).init(alloc);
                 i += 1;

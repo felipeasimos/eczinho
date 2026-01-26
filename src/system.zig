@@ -28,10 +28,10 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
         pub const FuncType = @TypeOf(function);
         pub const FuncInfo = @typeInfo(FuncType).@"fn";
 
-        pub const RawReturnType = FuncInfo.return_type.?;
-        pub const ReturnType = switch (@typeInfo(RawReturnType)) {
+        pub const RawReturnType: type = FuncInfo.return_type.?;
+        pub const ReturnType: type = switch (@typeInfo(RawReturnType)) {
             .error_set, .error_union => RawReturnType,
-            else => !RawReturnType,
+            else => anyerror!RawReturnType,
         };
         pub const ParamsSlice = FuncInfo.params;
         pub const ArgsTuple = std.meta.ArgsTuple(FuncType);
@@ -92,6 +92,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             }
             return count;
         }
+
         const Dependencies = struct {
             registry: *Registry,
             type_store: *TypeStore,
@@ -105,6 +106,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             const InitReturnType = InitInfo.return_type.?;
             const InitParams = InitInfo.params;
 
+            // SAFETY: immediatly filled in the following lines
             var args: InitArgsTuple = undefined;
             inline for (InitParams, 0..) |param, i| {
                 args[i] = switch (comptime param.type.?) {
@@ -125,6 +127,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             };
         }
         inline fn getArgs(deps: Dependencies) !ArgsTuple {
+            // SAFETY: undefined is necessary to fill tuple with custom type
             var args: ArgsTuple = undefined;
             inline for (ParamsSlice, 0..) |param, i| {
                 const ArgType = param.type.?;
@@ -140,10 +143,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
 
         pub inline fn call(deps: Dependencies) ReturnType {
             var args = getArgs(deps) catch @panic("Couldn't initialize system arguments");
-            const result = switch (@typeInfo(ReturnType)) {
-                .error_set, .error_union => try @call(.always_inline, function, args),
-                else => @call(.auto, function, args),
-            };
+            const result = @call(.always_inline, function, args);
             deinitArgs(&args);
             return result;
         }

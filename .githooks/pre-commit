@@ -8,10 +8,12 @@ if [ "$branch" = "master" ] || [ "$branch" = "main" ]; then
 fi
 
 git add .
-zlint
-if [[ $? != 0 ]]; then
+
+if ! zlint; then
     exit 1
 fi
-if [[ $? != 0 ]]; then
-    zig build test
+
+if ! zig build test; then
+    exit 1
 fi
+
