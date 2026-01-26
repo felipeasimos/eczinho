@@ -50,19 +50,19 @@ pub fn EventReader(comptime options: EventOptions) type {
         pub fn deinit(self: *@This()) void {
             _ = self;
         }
-        pub fn read(self: *@This()) T {
+        pub fn read(self: @This()) T {
             const value = self.store.read(T, self.index);
             self.index += 1;
             return value;
         }
         /// how many events are left to read
-        pub fn len(self: *@This()) usize {
+        pub fn len(self: @This()) usize {
             return self.store.len(T, self.index);
         }
-        pub fn empty(self: *@This()) bool {
+        pub fn empty(self: @This()) bool {
             return self.len() == 0;
         }
-        pub fn iterator(self: *@This()) Iterator {
+        pub fn iterator(self: @This()) Iterator {
             return Iterator.init(self);
         }
         pub const Iterator = struct {
