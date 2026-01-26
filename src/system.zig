@@ -1,3 +1,4 @@
+// zlint-disable homeless-try
 const std = @import("std");
 
 const RegistryFactory = @import("registry.zig").Registry;
@@ -105,6 +106,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             const InitReturnType = InitInfo.return_type.?;
             const InitParams = InitInfo.params;
 
+            // SAFETY: immediatly filled in the following lines
             var args: InitArgsTuple = undefined;
             inline for (InitParams, 0..) |param, i| {
                 args[i] = switch (comptime param.type.?) {
@@ -125,6 +127,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             };
         }
         inline fn getArgs(deps: Dependencies) !ArgsTuple {
+            // SAFETY: undefined is necessary to fill tuple with custom type
             var args: ArgsTuple = undefined;
             inline for (ParamsSlice, 0..) |param, i| {
                 const ArgType = param.type.?;

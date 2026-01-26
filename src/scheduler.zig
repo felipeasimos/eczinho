@@ -60,6 +60,7 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
                 .resource_store = resource_store,
                 .registry = reg,
                 .event_store = event_store,
+                // SAFETY: immediatly populated in the following lines
                 .system_data = undefined,
             };
             inline for (Systems, 0..) |System, i| {
