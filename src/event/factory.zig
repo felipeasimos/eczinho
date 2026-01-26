@@ -31,7 +31,7 @@ pub fn EventWriter(comptime options: EventOptions) type {
 
 pub fn EventReader(comptime options: EventOptions) type {
     return struct {
-        pub const Marker = EventWriter;
+        pub const Marker = EventReader;
         pub const T = options.T;
         pub const Events = options.Events;
         pub const EventStore = EventStoreFactory(.{

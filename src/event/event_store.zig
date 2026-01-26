@@ -34,17 +34,26 @@ fn initBuffersTuple(comptime Events: type) type {
 pub fn EventStore(comptime options: EventStoreOptions) type {
     return struct {
         pub const Events = options.Events;
+        pub const EventReaderData = struct {
+            next_index_to_read: usize = 0,
+        };
+        pub const BuffersTuple = initBuffersTuple(Events);
 
-        buffers: initBuffersTuple(Events),
+        buffers: BuffersTuple,
+        allocator: std.mem.Allocator,
+
         pub fn init(alloc: std.mem.Allocator) @This() {
-            var new: @This() = undefined;
+            var buffers: BuffersTuple = undefined;
             comptime var iter = Events.Iterator.init();
             comptime var i = 0;
             inline while (iter.nextType()) |Type| {
-                new.buffers[i] = EventBuffer(Type).init(alloc);
+                buffers[i] = EventBuffer(Type).init(alloc);
                 i += 1;
             }
-            return new;
+            return .{
+                .allocator = alloc,
+                .buffers = buffers,
+            };
         }
         pub fn deinit(self: *@This()) void {
             comptime var iter = Events.Iterator.init();
@@ -61,6 +70,9 @@ pub fn EventStore(comptime options: EventStoreOptions) type {
                 self.buffers[i].swap();
                 i += 1;
             }
+        }
+        pub fn reserveEventReaderData(self: *@This(), n: usize) !void {
+            try self.event_reader_indices.appendNTimes(self.allocator, .{}, n);
         }
         fn getBuffer(self: *@This(), comptime T: type) *EventBuffer(T) {
             return &self.buffers[Events.getIndex(T)];

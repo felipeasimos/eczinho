@@ -3,6 +3,8 @@ const std = @import("std");
 const RegistryFactory = @import("registry.zig").Registry;
 const TypeStoreFactory = @import("resource/type_store.zig").TypeStore;
 const EventStoreFactory = @import("event/event_store.zig").EventStore;
+const event = @import("event/event.zig");
+const SystemData = @import("system_data.zig").SystemData;
 
 pub fn System(comptime function: anytype, comptime Context: type) type {
     return struct {
@@ -33,10 +35,31 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
         pub const ParamsSlice = FuncInfo.params;
         pub const ArgsTuple = std.meta.ArgsTuple(FuncType);
 
+        pub const NumEventReaders = NumEventReaders: {
+            var i = 0;
+            for (ParamsSlice) |param| {
+                if (param.type) |t| {
+                    if (!@hasField(t, "Marker")) {
+                        continue;
+                    }
+                    if (t.Marker != event.EventReader) {
+                        continue;
+                    }
+                    i += 1;
+                }
+            }
+            break :NumEventReaders i;
+        };
+
+        pub fn initData(alloc: std.mem.Allocator) !SystemData {
+            return SystemData.init(alloc, NumEventReaders);
+        }
+
         const Dependencies = struct {
             registry: *Registry,
             type_store: *TypeStore,
             event_store: *EventStore,
+            system_data: *SystemData,
         };
         inline fn initArg(comptime ArgType: type, deps: Dependencies) !ArgType {
             const InitFunc = @TypeOf(ArgType.init);
@@ -51,6 +74,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
                     *TypeStore => deps.type_store,
                     *Registry => deps.registry,
                     *EventStore => deps.event_store,
+                    *SystemData => deps.system_data,
                     else => @compileError(std.fmt.comptimePrint("Invalid argument type {s} for method 'init' in system requirement {s}", .{ @typeName(param.type.?), @typeName(ArgType) })),
                 };
             }

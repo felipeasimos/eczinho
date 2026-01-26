@@ -2,6 +2,7 @@ const std = @import("std");
 const RegistryFactory = @import("registry.zig").Registry;
 const TypeStoreFactory = @import("resource/type_store.zig").TypeStore;
 const EventStoreFactory = @import("event/event_store.zig").EventStore;
+const SystemData = @import("system_data.zig").SystemData;
 
 pub const SchedulerLabel = enum {
     Startup,
@@ -52,44 +53,37 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
         registry: *Registry,
         resource_store: *TypeStore,
         event_store: *EventStore,
+        system_data: [Systems.len]SystemData,
 
         pub fn init(reg: *Registry, resource_store: *TypeStore, event_store: *EventStore) !@This() {
             var new: @This() = .{
                 .resource_store = resource_store,
                 .registry = reg,
                 .event_store = event_store,
+                .system_data = undefined,
             };
+            inline for (Systems, 0..) |System, i| {
+                new.system_data[i] = try System.initData(reg.allocator);
+            }
             try new.runStage(.Startup);
             return new;
         }
 
-        fn initArg(self: *@This(), comptime ArgType: type) !ArgType {
-            const InitArgsTuple = std.meta.ArgsTuple(@TypeOf(ArgType.init));
-            // SAFETY: immediatly filled in the following lines
-            var args: InitArgsTuple = undefined;
-            const type_info = @typeInfo(@TypeOf(ArgType.init)).@"fn";
-            const params = type_info.params;
-            inline for (params, 0..) |Param, i| {
-                args[i] = switch (comptime Param.type.?) {
-                    *TypeStore => self.resource_store,
-                    *Registry => self.registry,
-                    *EventStore => self.event_store,
-                    else => @compileError("Invalid argument for 'init' method in system requirement"),
-                };
+        fn getSystemIndex(comptime System: type) usize {
+            if (std.mem.indexOfScalar(type, Systems, System)) |idx| {
+                return idx;
             }
-            const ReturnType = type_info.return_type.?;
-            return switch (@typeInfo(ReturnType)) {
-                .error_set, .error_union => try @call(.auto, ArgType.init, args),
-                else => @call(.auto, ArgType.init, args),
-            };
+            @compileError("System is not registered");
         }
 
         fn runStage(self: *@This(), comptime label: SchedulerLabel) !void {
             inline for (SchedulerStages.get(label)) |system| {
+                const system_data_ptr = &self.system_data[getSystemIndex(system)];
                 try system.call(.{
                     .registry = self.registry,
                     .type_store = self.resource_store,
                     .event_store = self.event_store,
+                    .system_data = system_data_ptr,
                 });
             }
             // sync deferred changes
