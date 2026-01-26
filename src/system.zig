@@ -1,4 +1,3 @@
-// zlint-disable homeless-try
 const std = @import("std");
 
 const RegistryFactory = @import("registry.zig").Registry;
@@ -143,10 +142,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
 
         pub inline fn call(deps: Dependencies) ReturnType {
             var args = getArgs(deps) catch @panic("Couldn't initialize system arguments");
-            const result = switch (@typeInfo(ReturnType)) {
-                .error_set, .error_union => try @call(.always_inline, function, args),
-                else => @call(.auto, function, args),
-            };
+            const result = @call(.always_inline, function, args);
             deinitArgs(&args);
             return result;
         }
