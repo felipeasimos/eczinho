@@ -8,14 +8,22 @@
 - [x] systems
 - [x] more tests
 - [x] resources
-- [ ] event
-   - [ ] deal with const event -> per-(system, event) read index must be saved somewhere else
-      - [ ] better code for dealing with requirements and pre/post handles of requirements in scheduler
-         1. system type that calls function using proper arguments
-         2. also properly initialize arguments
-         3. also properly deinits arguments
-         4. keep system type in enum array in scheduler
+- [x] event
 - [ ] added, changed and removed queries
+- [ ] cache queries
+- [ ] hierarchy
+- [ ] bundles
+   - [ ] reflection bundle
+   - [ ] spatial bundle
+      - [ ] transform -> translation, rotation, scale
+      - [ ] 
+   - [ ] debug gui bundle
+   - [ ] camera 2d bundle
+   - [ ] camera 3d bundle
 - [ ] example game with raylib -> ping pong
 - [ ] more unit tests
+- [ ] move more code to comptime
+   - [ ] scheduler
+   - [ ] event store
+   - [ ] app builder
 - [ ] 0.16 std.Io multithreading

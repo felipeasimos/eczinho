@@ -33,6 +33,7 @@ pub fn Registry(comptime options: RegistryOptions) type {
         entities_to_locations: std.ArrayList(EntityLocation) = .empty,
         free_entity_list: std.ArrayList(Entity.Index) = .empty,
         queues: std.ArrayList(CommandsQueue) = .empty,
+        global_tick: usize = 0,
 
         pub fn init(allocator: std.mem.Allocator) @This() {
             return .{
@@ -50,6 +51,10 @@ pub fn Registry(comptime options: RegistryOptions) type {
             self.entities_to_locations.deinit(self.allocator);
             self.free_entity_list.deinit(self.allocator);
             self.deinitQueues();
+        }
+
+        pub fn tick(self: *@This()) void {
+            self.global_tick +%= 1;
         }
 
         pub fn len(self: *@This()) usize {
