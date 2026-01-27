@@ -9,6 +9,7 @@
 - [x] more tests
 - [x] resources
 - [x] event
+- [ ] pong game example
 - [ ] added, changed and removed queries
 - [ ] cache queries
 - [ ] hierarchy
@@ -16,11 +17,9 @@
    - [ ] reflection bundle
    - [ ] spatial bundle
       - [ ] transform -> translation, rotation, scale
-      - [ ] 
    - [ ] debug gui bundle
    - [ ] camera 2d bundle
    - [ ] camera 3d bundle
-- [ ] example game with raylib -> ping pong
 - [ ] more unit tests
 - [ ] move more code to comptime
    - [ ] scheduler
