@@ -172,7 +172,7 @@ pub fn TypeHasher(comptime Types: []const type) type {
                     },
                 },
                 else => {
-                    @compileError("type is not a registered type");
+                    @compileError("type '" ++ @typeName(T) ++ "' is not a registered type");
                 },
             };
         }

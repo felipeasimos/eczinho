@@ -5,6 +5,10 @@ const ecs = @import("eczinho");
 
 const SCREEN_WIDTH = 1200;
 const SCREEN_HEIGHT = 800;
+const PADDLE_WIDTH = 50;
+const PADDLE_HEIGHT = 200;
+const BALL_SIDE = 10;
+const PADDLE_SPEED = 1;
 
 const Position = struct {
     x: f32,
@@ -36,20 +40,31 @@ const Commands = Context.Commands;
 const Query = Context.Query;
 // const Resource = Context.Resource;
 
+fn handleControls(q: Query(.{ .q = &.{ *Position, Rect }, .with = &.{Player} })) void {
+    const pos_ptr, const rect = q.single();
+    if (rl.isKeyDown(rl.KeyboardKey.s)) {
+        if (pos_ptr.*.y + rect.height < @as(f32, @floatFromInt(rl.getScreenHeight()))) {
+            pos_ptr.*.y += PADDLE_SPEED;
+        }
+    } else if (rl.isKeyDown(rl.KeyboardKey.w)) {
+        if (pos_ptr.*.y > 0) {
+            pos_ptr.*.y -= PADDLE_SPEED;
+        }
+    }
+}
+
 fn createPlayerPaddle(commands: Commands) void {
     _ = commands.spawn()
-        .add(Position{ .x = 10, .y = 10 })
-        .add(Velocity{ .x = 10, .y = 10 })
-        .add(Rect{ .width = 10, .height = 50 })
+        .add(Position{ .x = 0, .y = 0 })
+        .add(Rect{ .width = PADDLE_WIDTH, .height = PADDLE_HEIGHT })
         .add(Player{});
 }
 
 fn createEnemyPaddle(commands: Commands) void {
     _ = commands.spawn()
         .add(Enemy{})
-        .add(Position{ .x = 100, .y = 10 })
-        .add(Velocity{ .x = 0, .y = 0 })
-        .add(Rect{ .width = 10, .height = 50 });
+        .add(Position{ .x = @as(f32, @floatFromInt(rl.getScreenWidth())) - PADDLE_WIDTH, .y = 0 })
+        .add(Rect{ .width = PADDLE_WIDTH, .height = PADDLE_HEIGHT });
 }
 
 fn renderRectangles(q: Query(.{ .q = &.{ Position, Rect } })) void {
@@ -83,6 +98,7 @@ pub fn main() !void {
     var app = ecs.AppBuilder.init(Context)
         .addSystem(.Startup, createPlayerPaddle)
         .addSystem(.Startup, createEnemyPaddle)
+        .addSystem(.Update, handleControls)
         .addSystem(.Render, renderRectangles)
         .build(allocator);
     defer app.deinit();

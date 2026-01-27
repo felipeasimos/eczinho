@@ -50,7 +50,8 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
         pub const CanonicalTypes = CanonicalTypes: {
             var data: []const type = &.{};
             for (req.q) |AccessibleType| {
-                const CanonicalType = options.Components.getCanonicalType(AccessibleType);
+                if (Entity == AccessibleType) continue;
+                const CanonicalType = Components.getCanonicalType(AccessibleType);
                 if (@sizeOf(CanonicalType) == 0) {
                     @compileError("Can't return a zero-sized type ++ (" ++ @typeName(CanonicalType) ++ ") in query");
                 }
@@ -58,6 +59,33 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
                 data = data ++ .{CanonicalType};
             }
             break :CanonicalTypes data;
+        };
+        pub const MustHave = MustHave: {
+            var data: []const type = &.{};
+            for (req.q) |AccessibleType| {
+                if (Entity == AccessibleType) continue;
+                if (@typeInfo(AccessibleType) != .optional) {
+                    const CanonicalType = Components.getCanonicalType(AccessibleType);
+                    data = data ++ .{CanonicalType};
+                }
+            }
+            for (req.with) |AccessibleType| {
+                if (@typeInfo(AccessibleType) != .optional) {
+                    const CanonicalType = Components.getCanonicalType(AccessibleType);
+                    data = data ++ .{CanonicalType};
+                }
+            }
+            break :MustHave data;
+        };
+        pub const CannotHave = CannotHave: {
+            var data: []const type = &.{};
+            for (req.without) |AccessibleType| {
+                if (@typeInfo(AccessibleType) != .optional) {
+                    const CanonicalType = Components.getCanonicalType(AccessibleType);
+                    data = data ++ .{CanonicalType};
+                }
+            }
+            break :CannotHave data;
         };
         pub const Registry = registry.Registry(.{
             .Entity = Entity,
@@ -72,10 +100,16 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
         registry: *Registry,
 
         fn updateArchetypeSignatureList(self: *@This()) !std.ArrayList(Components) {
+            const must_have = comptime Components.init(MustHave);
+            const cannot_have = comptime Components.init(CannotHave);
+
             var key_iter = self.registry.archetypes.keyIterator();
             var arr: std.ArrayList(Components) = .empty;
             while (key_iter.next()) |key| {
-                try arr.append(self.registry.allocator, key.*);
+                const sig = key.*;
+                if (must_have.isSubsetOf(sig) and !cannot_have.hasIntersection(sig)) {
+                    try arr.append(self.registry.allocator, key.*);
+                }
             }
             return arr;
         }
@@ -100,7 +134,8 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
             return count;
         }
         pub fn empty(self: @This()) bool {
-            for (self.archetypes) |arch| {
+            for (self.archetypes.items) |sig| {
+                var arch = self.registry.getArchetypeFromSignature(sig);
                 if (arch.len() != 0) {
                     return false;
                 }
@@ -108,13 +143,15 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
             return true;
         }
         pub fn single(self: @This()) Tuple {
-            std.debug.assert(self.len() == 0);
-            for (self.archetypes) |arch| {
+            std.debug.assert(self.len() == 1);
+            for (self.archetypes.items) |sig| {
+                var arch = self.registry.getArchetypeFromSignature(sig);
                 if (arch.len() != 0) {
-                    var iterator = arch.iterator();
-                    return iterator.next().?;
+                    var inner_arch_iter = arch.iterator(req.q);
+                    return inner_arch_iter.next().?;
                 }
             }
+            @panic("no tuple found");
         }
 
         pub const Iterator = struct {

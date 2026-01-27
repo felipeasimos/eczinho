@@ -125,8 +125,8 @@ pub fn Registry(comptime options: RegistryOptions) type {
 
         pub fn destroy(self: *@This(), entt: Entity) !void {
             std.debug.assert(self.valid(entt));
-            const empty_arch = self.getArchetypeFromSignature(Components.init(&.{}));
             const current_arch = self.getEntityArchetype(entt);
+            const empty_arch = self.getArchetypeFromSignature(Components.init(&.{}));
 
             try self.moveTo(entt, current_arch, empty_arch);
             try self.free_entity_list.append(self.allocator, entt.index);
@@ -148,10 +148,11 @@ pub fn Registry(comptime options: RegistryOptions) type {
 
         pub fn remove(self: *@This(), tid_or_component: anytype, entt: Entity) !void {
             std.debug.assert(self.valid(entt));
-            const old_arch = self.getEntityArchetype(entt);
-            var new_signature = old_arch.signature;
+            const old_arch_sig = self.getEntitySignature(entt);
+            var new_signature = old_arch_sig;
             new_signature.remove(tid_or_component);
             const new_arch = self.getArchetypeFromSignature(new_signature);
+            const old_arch = self.getArchetypeFromSignature(old_arch_sig);
             try self.moveTo(entt, old_arch, new_arch);
         }
 
