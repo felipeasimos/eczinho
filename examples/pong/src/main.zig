@@ -1,3 +1,4 @@
+const std = @import("std");
 const rl = @import("raylib");
 const options = @import("options");
 const ecs = @import("eczinho");

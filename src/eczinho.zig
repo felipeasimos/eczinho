@@ -1,5 +1,3 @@
-const std = @import("std");
-
 pub const AppBuilder = @import("builder.zig").AppBuilder;
 pub const AppContextBuilder = @import("builder.zig").AppContextBuilder;
 pub const Commands = @import("commands/factory.zig").CommandsFactory;
