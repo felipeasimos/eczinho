@@ -262,3 +262,27 @@ test Archetype {
     archetype.remove(entt_id);
     try std.testing.expect(!archetype.valid(entt_id));
 }
+
+test "moveTo" {
+    const typeA = u64;
+    const typeC = struct {};
+    const typeD = struct { a: u43 };
+    const typeE = struct { a: u32, b: u54 };
+    const Components = components.Components(&.{ typeA, typeC, typeD, typeE });
+    const ArchetypeType = Archetype(.{
+        .Entity = entity.EntityTypeFactory(.medium),
+        .Components = Components,
+    });
+    var empty_arch = ArchetypeType.init(std.testing.allocator, Components.init(&.{ typeA, typeC, typeE, typeD }));
+    defer empty_arch.deinit();
+    var archetype = ArchetypeType.init(std.testing.allocator, Components.init(&.{ typeA, typeC, typeE, typeD }));
+    defer archetype.deinit();
+
+    const entt_id = entity.EntityTypeFactory(.medium){ .index = 1, .version = 0 };
+    try empty_arch.reserve(entt_id);
+    try std.testing.expectEqual(1, empty_arch.len());
+    try std.testing.expectEqual(0, archetype.len());
+    try empty_arch.moveTo(entt_id, &archetype);
+    try std.testing.expectEqual(0, empty_arch.len());
+    try std.testing.expectEqual(1, archetype.len());
+}
