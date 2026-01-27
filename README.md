@@ -10,6 +10,7 @@
 - [x] resources
 - [x] event
 - [ ] pong game example
+- [ ] better compile error for double add in commands
 - [ ] added, changed and removed queries
 - [ ] cache queries
 - [ ] hierarchy
