@@ -102,10 +102,10 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
             self.event_store.swap();
         }
 
-        pub fn next(self: *@This()) void {
+        pub fn next(self: *@This()) !void {
             // run every stage in order, except for startup
             inline for (comptime std.enums.values(SchedulerLabel)[1..]) |label| {
-                self.runStage(label);
+                try self.runStage(label);
             }
         }
     };

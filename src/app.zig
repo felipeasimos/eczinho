@@ -129,9 +129,9 @@ pub fn App(comptime options: AppOptions) type {
         }
 
         pub fn run(self: *@This()) !void {
-            self.startup();
+            try self.startup();
             while (true) {
-                self.scheduler.?.next();
+                try self.scheduler.?.next();
             }
         }
 

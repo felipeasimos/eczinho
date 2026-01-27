@@ -71,18 +71,19 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
         archetypes: std.ArrayList(Components) = .empty,
         registry: *Registry,
 
-        fn updateArchetypeSignatureList(self: *@This()) !void {
+        fn updateArchetypeSignatureList(self: *@This()) !std.ArrayList(Components) {
             var key_iter = self.registry.archetypes.keyIterator();
             var arr: std.ArrayList(Components) = .empty;
             while (key_iter.next()) |key| {
                 try arr.append(self.registry.allocator, key.*);
             }
+            return arr;
         }
         pub fn init(reg: *Registry) !@This() {
             var new: @This() = .{
                 .registry = reg,
             };
-            try new.updateArchetypeSignatureList();
+            new.archetypes = try new.updateArchetypeSignatureList();
             return new;
         }
         pub fn deinit(self: *@This()) void {
@@ -92,9 +93,9 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
             return Iterator.init(self.registry, self.archetypes);
         }
         pub fn len(self: @This()) usize {
-            var count = 0;
-            for (self.archetypes) |arch| {
-                count += arch.len();
+            var count: usize = 0;
+            for (self.archetypes.items) |sig| {
+                count += self.registry.getArchetypeFromSignature(sig).len();
             }
             return count;
         }

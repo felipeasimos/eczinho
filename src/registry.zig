@@ -160,8 +160,9 @@ pub fn Registry(comptime options: RegistryOptions) type {
 
             const new_arch = try self.tryGetArchetypeFromSignature(new_signature);
             try self.moveTo(entt, old_arch, new_arch);
-            // add new component value
-            new_arch.get(Component, entt).* = value;
+            if (@sizeOf(Component) != 0) {
+                new_arch.get(Component, entt).* = value;
+            }
         }
 
         pub fn get(self: *@This(), comptime Component: type, entt: Entity) *Component {

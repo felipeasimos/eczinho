@@ -28,10 +28,10 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
         pub const FuncType = @TypeOf(function);
         pub const FuncInfo = @typeInfo(FuncType).@"fn";
 
-        pub const RawReturnType = FuncInfo.return_type.?;
-        pub const ReturnType = switch (@typeInfo(RawReturnType)) {
+        pub const RawReturnType: type = FuncInfo.return_type.?;
+        pub const ReturnType: type = switch (@typeInfo(RawReturnType)) {
             .error_set, .error_union => RawReturnType,
-            else => !RawReturnType,
+            else => anyerror!RawReturnType,
         };
         pub const ParamsSlice = FuncInfo.params;
         pub const ArgsTuple = std.meta.ArgsTuple(FuncType);
@@ -92,6 +92,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             }
             return count;
         }
+
         const Dependencies = struct {
             registry: *Registry,
             type_store: *TypeStore,
