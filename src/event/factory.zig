@@ -1,3 +1,4 @@
+const std = @import("std");
 const EventStoreFactory = @import("event_store.zig").EventStore;
 const SystemData = @import("../system_data.zig").SystemData;
 const ParameterData = @import("../parameter_data.zig").ParameterData;
@@ -54,17 +55,24 @@ pub fn EventReader(comptime options: EventOptions) type {
         pub fn deinit(self: *@This()) void {
             _ = self;
         }
+        pub fn optRead(self: @This()) ?T {
+            const index = self.data.peekNextEventIndex(self.param.type_index);
+            if (self.store.optRead(T, index)) |value| {
+                _ = self.data.getNextEventIndex(self.param.type_index);
+                return value;
+            }
+            return null;
+        }
         pub fn read(self: @This()) T {
             const index = self.data.getNextEventIndex(self.param.type_index);
-            const value = self.store.read(T, index);
-            return value;
+            return self.store.read(T, index);
         }
         /// how many events are left to read
-        pub fn len(self: @This()) usize {
-            return self.store.len(T, self.data.peekNextEventIndex(self.param.type_index));
+        pub fn remaining(self: @This()) usize {
+            return self.store.remaining(T, self.data.peekNextEventIndex(self.param.type_index));
         }
         pub fn empty(self: @This()) bool {
-            return self.len() == 0;
+            return self.remaining() == 0;
         }
         pub fn iterator(self: @This()) Iterator {
             return Iterator.init(self);
@@ -76,7 +84,7 @@ pub fn EventReader(comptime options: EventOptions) type {
                     .reader = reader,
                 };
             }
-            pub fn next(self: *@This()) T {
+            pub fn next(self: *@This()) ?T {
                 return self.reader.read();
             }
         };

@@ -24,10 +24,4 @@ pub const SystemData = struct {
     pub fn peekNextEventIndex(self: *@This(), reader_index: usize) usize {
         return self.event_reader_next_indices[reader_index];
     }
-    pub fn updateIndexForBufferSwap(self: *@This(), reader_index: usize, previous_size: usize) void {
-        const index_ptr = self.event_reader_next_indices[reader_index];
-        // saturing subtraction: the result will be zero if
-        // previous_size is greater than index_ptr.*
-        index_ptr.* = index_ptr.* -| previous_size;
-    }
 };
