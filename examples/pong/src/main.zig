@@ -8,7 +8,8 @@ const SCREEN_HEIGHT = 800;
 const PADDLE_WIDTH = 50;
 const PADDLE_HEIGHT = 200;
 const BALL_SIDE = 10;
-const BALL_MAX_SPEED = 10;
+const BALL_MAX_SPEED = 15;
+const BALL_MIN_SPEED = 10;
 const PADDLE_SPEED = 7;
 
 // components
@@ -27,7 +28,7 @@ const Rect = struct {
 const Player = struct {};
 const Enemy = struct {};
 const Ball = struct {};
-const Score = struct { points: u32 = 0 };
+const Score = struct { player: u32 = 0, enemy: u32 = 0 };
 
 // events
 const BallPaddleCollision = struct {
@@ -39,7 +40,7 @@ const TopBottomCollision = enum {
     Top,
     Bottom,
 };
-const GoalCollision = struct {};
+const GoalCollision = enum { Left, Right };
 
 const Context = ecs.AppContextBuilder.init()
     .addEvents(&.{
@@ -48,26 +49,42 @@ const Context = ecs.AppContextBuilder.init()
     })
     .addEvent(GoalCollision)
     .addResource(std.Random)
+    .addResource(Score)
     .addComponents(&.{
         Velocity,
         Position,
         Rect,
         Player,
         Enemy,
-        Ball,
     })
-    .addComponent(Score)
+    .addComponent(Ball)
     .build();
 const Commands = Context.Commands;
 const EventReader = Context.EventReader;
 const EventWriter = Context.EventWriter;
 const Query = Context.Query;
 const Resource = Context.Resource;
+const Entity = Context.Entity;
 
-fn updateBallPosition(q: Query(.{ .q = &.{ *Position, Velocity }, .with = &.{Ball} })) void {
-    const pos_ptr, const vel = q.single();
-    pos_ptr.x += vel.x;
-    pos_ptr.y += vel.y;
+fn updatePositions(q: Query(.{ .q = &.{ *Position, Velocity } })) void {
+    var iter = q.iter();
+    while (iter.next()) |tuple| {
+        const pos_ptr, const vel = tuple;
+        pos_ptr.x += vel.x;
+        pos_ptr.y += vel.y;
+    }
+}
+
+fn reactGoalCollision(commands: Commands, res: Resource(Score), q: Query(.{ .q = &.{Entity}, .with = &.{Ball} }), reader: EventReader(GoalCollision)) !void {
+    const single = q.optSingle() orelse return;
+    if (reader.optRead()) |goal| {
+        const entt = single[0];
+        commands.despawn(entt);
+        switch (goal) {
+            .Right => res.get().enemy += 1,
+            .Left => res.get().player += 1,
+        }
+    }
 }
 
 fn reactBallPaddleCollision(q: Query(.{ .q = &.{ *Velocity, *Position }, .with = &.{Ball} }), reader: EventReader(BallPaddleCollision)) void {
@@ -117,10 +134,21 @@ fn checkCollision(
 }
 
 const ball = Query(.{ .q = &.{ Rect, Position }, .with = &.{Ball} });
+fn checkGoalCollision(b: ball, writer: EventWriter(GoalCollision)) void {
+    if (b.peek()) |single| {
+        const rect, const pos = single;
+        if (pos.x + rect.width > @as(f32, @floatFromInt(rl.getScreenWidth()))) {
+            writer.write(GoalCollision.Right);
+        } else if (pos.x < 0) {
+            writer.write(GoalCollision.Left);
+        }
+    }
+}
+
 const enemy = Query(.{ .q = &.{ Rect, Position }, .with = &.{Enemy} });
 const player = Query(.{ .q = &.{ Rect, Position }, .with = &.{Player} });
-fn checkPaddleBallCollision(b: ball, e: enemy, p: player, writer: EventWriter(BallPaddleCollision)) void {
-    const ball_info = b.single();
+fn checkPaddleBallCollision(b: ball, e: enemy, p: player, writer: EventWriter(BallPaddleCollision)) !void {
+    const ball_info = b.optSingle() orelse return;
     const enemy_info = e.single();
     const player_info = p.single();
     if (checkCollision(ball_info, enemy_info)) {
@@ -143,7 +171,7 @@ fn checkPaddleBallCollision(b: ball, e: enemy, p: player, writer: EventWriter(Ba
 }
 
 fn checkTopBottomCollision(q: Query(.{ .q = &.{ Rect, Position }, .with = &.{Ball} }), writer: EventWriter(TopBottomCollision)) void {
-    const rect, const pos = q.single();
+    const rect, const pos = q.optSingle() orelse return;
     if (pos.y + rect.height > @as(f32, @floatFromInt(rl.getScreenHeight()))) {
         writer.write(TopBottomCollision.Bottom);
     } else if (pos.y < 0) {
@@ -164,10 +192,25 @@ fn handleControls(q: Query(.{ .q = &.{ *Position, Rect }, .with = &.{Player} }))
     }
 }
 
-fn createBall(commands: Commands, random: Resource(std.Random)) void {
+fn moveEnemy(q: Query(.{ .q = &.{ *Velocity, *Position, Rect }, .with = &.{Enemy} })) void {
+    const vel_ptr, const pos_ptr, const rect = q.single();
+    const screen_height: f32 = @floatFromInt(rl.getScreenHeight());
+    if (pos_ptr.y + rect.height > screen_height) {
+        vel_ptr.y *= -1;
+        pos_ptr.y = screen_height - rect.height;
+    } else if (pos_ptr.y < 0) {
+        vel_ptr.y *= -1;
+        pos_ptr.y = 0;
+    }
+}
+
+fn createBall(commands: Commands, random: Resource(std.Random), q: Query(.{ .with = &.{Ball} })) void {
+    if (q.len() != 0) {
+        return;
+    }
     const rnd: std.Random = random.clone();
     const angle = rnd.float(f32) * 2 * std.math.pi;
-    const speed = rnd.float(f32) * BALL_MAX_SPEED;
+    const speed = BALL_MIN_SPEED + (rnd.float(f32) * (BALL_MAX_SPEED - BALL_MIN_SPEED));
 
     const width: f32 = @floatFromInt(rl.getScreenWidth());
     const height: f32 = @floatFromInt(rl.getScreenHeight());
@@ -183,8 +226,7 @@ fn createPlayerPaddle(commands: Commands) void {
     _ = commands.spawn()
         .add(Position{ .x = 0, .y = 0 })
         .add(Rect{ .width = PADDLE_WIDTH, .height = PADDLE_HEIGHT })
-        .add(Player{})
-        .add(Score{});
+        .add(Player{});
 }
 
 fn createEnemyPaddle(commands: Commands) void {
@@ -192,7 +234,7 @@ fn createEnemyPaddle(commands: Commands) void {
         .add(Enemy{})
         .add(Position{ .x = @as(f32, @floatFromInt(rl.getScreenWidth())) - PADDLE_WIDTH, .y = 0 })
         .add(Rect{ .width = PADDLE_WIDTH, .height = PADDLE_HEIGHT })
-        .add(Score{});
+        .add(Velocity{ .y = PADDLE_SPEED, .x = 0 });
 }
 
 fn renderRectangles(q: Query(.{ .q = &.{ Position, Rect } })) void {
@@ -227,12 +269,16 @@ pub fn main() !void {
         .addSystem(.Startup, createPlayerPaddle)
         .addSystem(.Startup, createEnemyPaddle)
         .addSystem(.Startup, createBall)
+        .addSystem(.Update, createBall)
         .addSystem(.Update, handleControls)
+        .addSystem(.Update, reactGoalCollision)
+        .addSystem(.Update, checkGoalCollision)
         .addSystem(.Update, reactBallPaddleCollision)
         .addSystem(.Update, checkPaddleBallCollision)
         .addSystem(.Update, reactTopBottomCollision)
         .addSystem(.Update, checkTopBottomCollision)
-        .addSystem(.Update, updateBallPosition)
+        .addSystem(.Update, updatePositions)
+        .addSystem(.Update, moveEnemy)
         .addSystem(.Render, renderRectangles)
         .build(allocator);
     defer app.deinit();
@@ -243,6 +289,7 @@ pub fn main() !void {
         break :blk seed;
     });
     try app.insert(prng.random());
+    try app.insert(Score{});
 
     try app.run();
     // while (!rl.windowShouldClose()) {

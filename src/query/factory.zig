@@ -142,6 +142,23 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
             }
             return true;
         }
+        pub fn peek(self: @This()) ?Tuple {
+            for (self.archetypes.items) |sig| {
+                var arch = self.registry.getArchetypeFromSignature(sig);
+                if (arch.len() != 0) {
+                    var inner_arch_iter = arch.iterator(req.q);
+                    return inner_arch_iter.next().?;
+                }
+            }
+            return null;
+        }
+        pub fn optSingle(self: @This()) ?Tuple {
+            std.debug.assert(self.len() == 0 or self.len() == 1);
+            if (self.len() == 1) {
+                return self.single();
+            }
+            return null;
+        }
         pub fn single(self: @This()) Tuple {
             std.debug.assert(self.len() == 1);
             for (self.archetypes.items) |sig| {

@@ -73,6 +73,9 @@ pub fn EventReader(comptime options: EventOptions) type {
         pub fn empty(self: @This()) bool {
             return self.remaining() == 0;
         }
+        pub fn clear(self: @This()) void {
+            return self.store.clear(T, self.data.getReaderIndex(self.param.type_index));
+        }
         pub fn iterator(self: @This()) Iterator {
             return Iterator.init(self);
         }

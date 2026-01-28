@@ -35,6 +35,9 @@ fn EventIndexBuffer(comptime T: type) type {
             std.debug.assert(index < self.read_count);
             return T{};
         }
+        pub fn clear(self: *@This(), index_ptr: usize) void {
+            index_ptr.* = self.read_count;
+        }
     };
 }
 
@@ -89,6 +92,9 @@ fn EventArrayBuffer(comptime T: type) type {
         pub fn read(self: *@This(), index: usize) T {
             const raw_index = self.toRawIndex(index);
             return self.source_buffer.items[raw_index];
+        }
+        pub fn clear(self: *@This(), index_ptr: *usize) void {
+            index_ptr.* = self.count - self.sink_buffer.items.len;
         }
     };
 }

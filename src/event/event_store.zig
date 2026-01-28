@@ -89,5 +89,8 @@ pub fn EventStore(comptime options: EventStoreOptions) type {
         pub fn remaining(self: *@This(), comptime T: type, index: usize) usize {
             return self.getBuffer(T).remaining(index);
         }
+        pub fn clear(self: *@This(), comptime T: type, index_ptr: *usize) void {
+            self.getBuffer(T).clear(index_ptr);
+        }
     };
 }

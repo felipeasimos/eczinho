@@ -15,8 +15,11 @@ pub const SystemData = struct {
     pub fn deinit(self: *const @This(), alloc: std.mem.Allocator) void {
         alloc.free(self.event_reader_next_indices);
     }
+    pub fn getReaderIndex(self: *@This(), reader_index: usize) *usize {
+        return &self.event_reader_next_indices[reader_index];
+    }
     pub fn getNextEventIndex(self: *@This(), reader_index: usize) usize {
-        const index_ptr = &self.event_reader_next_indices[reader_index];
+        const index_ptr = self.getReaderIndex(reader_index);
         const index = index_ptr.*;
         index_ptr.* += 1;
         return index;
