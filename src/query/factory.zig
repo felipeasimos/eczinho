@@ -142,6 +142,7 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
             }
             return true;
         }
+        /// get next tuple, returning null if query is empty
         pub fn peek(self: @This()) ?Tuple {
             for (self.archetypes.items) |sig| {
                 var arch = self.registry.getArchetypeFromSignature(sig);
@@ -152,6 +153,7 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
             }
             return null;
         }
+        /// get next tuple, asserting that there is at most one tuple in the query. Returns null if query is empty
         pub fn optSingle(self: @This()) ?Tuple {
             std.debug.assert(self.len() == 0 or self.len() == 1);
             if (self.len() == 1) {
@@ -159,6 +161,7 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
             }
             return null;
         }
+        /// get next tuple, asserting that there is exactly one tuple in the query. Panics if query is empty.
         pub fn single(self: @This()) Tuple {
             std.debug.assert(self.len() == 1);
             for (self.archetypes.items) |sig| {

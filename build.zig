@@ -1,5 +1,20 @@
 const std = @import("std");
 
+fn generateDocs(b: *std.Build, lib: *std.Build.Module) void {
+    const docs_step = b.step("docs", "Generate documentation");
+    const lib_docs = b.addObject(.{
+        .name = "eczinho",
+        .root_module = lib,
+    });
+    const install_lib_docs = b.addInstallDirectory(.{
+        .source_dir = lib_docs.getEmittedDocs(),
+        .install_dir = .{ .custom = "docs" },
+        .install_subdir = "apidocs",
+    });
+
+    docs_step.dependOn(&install_lib_docs.step);
+}
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -26,6 +41,9 @@ pub fn build(b: *std.Build) void {
     const run_lib_tests = b.addRunArtifact(lib_tests);
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_lib_tests.step);
+
+    // generate docs
+    generateDocs(b, lib);
 
     // add check step for fast ZLS diagnostics on tests and library
     const check_lib_tests_mod = b.createModule(.{
