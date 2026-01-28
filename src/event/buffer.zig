@@ -21,19 +21,18 @@ fn EventIndexBuffer(comptime T: type) type {
         pub fn swap(self: *@This()) void {
             self.read_count = self.count;
         }
-        pub fn remaining(self: *@This(), index: usize) usize {
-            return self.read_count - index;
-        }
         pub fn write(self: *@This(), _: T) !void {
             self.count += 1;
         }
-        pub fn optRead(self: *@This(), index: usize) ?T {
-            if (index < self.read_count) return self.read(index);
-            return null;
+        pub fn remaining(self: *@This(), index_ptr: *usize) usize {
+            return self.read_count - index_ptr.*;
         }
-        pub fn read(self: *@This(), index: usize) T {
-            std.debug.assert(index < self.read_count);
+        pub fn readOne(self: *@This(), index_ptr: *usize) T {
+            std.debug.assert(index_ptr.* < self.read_count);
             return T{};
+        }
+        pub fn clear(self: *@This(), index_ptr: *usize) void {
+            index_ptr.* = self.read_count;
         }
     };
 }
@@ -64,31 +63,47 @@ fn EventArrayBuffer(comptime T: type) type {
             self.source_buffer = self.sink_buffer;
             self.sink_buffer = .empty;
         }
-        pub fn remaining(self: *@This(), index: usize) usize {
-            return self.count - self.sink_buffer.items.len - index;
-        }
-        fn isIndexAvailable(self: *@This(), index: usize) bool {
-            const end_idx = self.count - self.sink_buffer.items.len;
-            const start_idx = end_idx - self.source_buffer.items.len;
-            return start_idx <= index and index < end_idx;
-        }
         pub fn write(self: *@This(), event: T) !void {
             try self.sink_buffer.append(self.allocator, event);
             self.count += 1;
         }
-        pub fn optRead(self: *@This(), index: usize) ?T {
-            if (self.isIndexAvailable(index)) return self.read(index);
-            return null;
+        inline fn firstReadableId(self: *@This()) usize {
+            return self.count - self.sink_buffer.items.len - self.source_buffer.items.len;
         }
-        inline fn toRawIndex(self: *@This(), index: usize) usize {
-            std.debug.assert(self.isIndexAvailable(index));
-            const start_idx = self.count - self.sink_buffer.items.len - self.source_buffer.items.len;
-            const raw_index = index - start_idx;
-            return raw_index;
+        inline fn readIndexCap(self: *@This()) usize {
+            return self.count - self.sink_buffer.items.len;
         }
-        pub fn read(self: *@This(), index: usize) T {
-            const raw_index = self.toRawIndex(index);
+        /// update index to fall in a valid range,
+        /// bumping it up to the first readable index if it falls behind
+        fn normalize(self: *@This(), index_ptr: *usize) usize {
+            const first_readable_index = self.firstReadableId();
+            if (index_ptr.* < first_readable_index) {
+                index_ptr.* = first_readable_index;
+            }
+            return index_ptr.*;
+        }
+        pub fn remaining(self: *@This(), index_ptr: *usize) usize {
+            const index = self.normalize(index_ptr);
+            return self.readIndexCap() - index;
+        }
+        pub fn readOne(self: *@This(), index_ptr: *usize) ?T {
+            const index = self.normalize(index_ptr);
+            if (index >= self.readIndexCap()) return null;
+            const raw_index = index - self.firstReadableId();
             return self.source_buffer.items[raw_index];
         }
+        pub fn clear(self: *@This(), index_ptr: *usize) void {
+            index_ptr.* = self.count - self.sink_buffer.items.len;
+        }
     };
+}
+
+test EventArrayBuffer {
+    var buf = EventArrayBuffer(u64).init(std.testing.allocator);
+    defer buf.deinit();
+}
+
+test EventIndexBuffer {
+    var buf = EventIndexBuffer(u64).init(std.testing.allocator);
+    defer buf.deinit();
 }

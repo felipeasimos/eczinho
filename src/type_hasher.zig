@@ -103,6 +103,12 @@ pub fn TypeHasher(comptime Types: []const type) type {
             break :Sizes sizes;
         };
 
+        pub fn extend(comptime T: type) type {
+            var types: []const type = &.{T};
+            types = types ++ Types;
+            return TypeHasher(types);
+        }
+
         pub fn isRegisteredType(comptime T: type) bool {
             return comptime std.mem.indexOfScalar(type, Types, T) != null;
         }

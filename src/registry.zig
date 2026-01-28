@@ -22,6 +22,7 @@ pub fn Registry(comptime options: RegistryOptions) type {
         });
 
         const EntityLocation = struct {
+            // null if entity is dead
             signature: ?Components = null,
             // current (if alive) or next (if dead) generation of an entity index.
             version: options.Entity.Version = 0,
@@ -77,6 +78,13 @@ pub fn Registry(comptime options: RegistryOptions) type {
             const signature = self.entities_to_locations.items[entt.index].signature.?;
             return signature;
         }
+        fn optGetEntitySignature(self: *@This(), entt: Entity) ?Components {
+            std.debug.assert(self.valid(entt));
+            if (self.entities_to_locations.items[entt.index].signature) |sig| {
+                return sig;
+            }
+            return null;
+        }
 
         pub fn getArchetypeFromSignature(self: *@This(), signature: Components) *Archetype {
             return self.archetypes.getEntry(signature).?.value_ptr;
@@ -108,27 +116,29 @@ pub fn Registry(comptime options: RegistryOptions) type {
                     };
                 }
                 // create brand new entity index
+                const new_index: Entity.Index = @intCast(self.entities_to_locations.items.len);
+                // SAFETY: will be set afterwards using the entity index
+                try self.entities_to_locations.append(self.allocator, undefined);
                 break :new_entity Entity{
-                    .index = @intCast(self.entities_to_locations.items.len),
+                    .index = new_index,
                     .version = 0,
                 };
             };
             // update entity_to_locations with new id
             const empty_arch = try self.tryGetArchetypeFromSignature(Components.init(&.{}));
-            try self.entities_to_locations.append(self.allocator, .{
+            self.entities_to_locations.items[@intCast(entity_id.index)] = .{
                 .signature = empty_arch.signature,
                 .version = entity_id.version,
-            });
+            };
             try empty_arch.reserve(entity_id);
+
             return entity_id;
         }
 
         pub fn destroy(self: *@This(), entt: Entity) !void {
             std.debug.assert(self.valid(entt));
             const current_arch = self.getEntityArchetype(entt);
-            const empty_arch = self.getArchetypeFromSignature(Components.init(&.{}));
-
-            try self.moveTo(entt, current_arch, empty_arch);
+            current_arch.remove(entt);
             try self.free_entity_list.append(self.allocator, entt.index);
             const location = &self.entities_to_locations.items[entt.index];
             location.version += 1;
@@ -211,7 +221,14 @@ pub fn Registry(comptime options: RegistryOptions) type {
 
         fn syncQueue(self: *@This(), index: usize) !void {
             const queue = self.getQueue(index);
-            std.debug.assert(queue.commands.items.len == 0 or queue.commands.items[0] == .context);
+            std.debug.assert(queue.commands.items.len == 0 or queue.commands.items[0] == .context or queue.commands.items[0] == .despawn);
+
+            // deal with despawn case
+            if (queue.commands.items.len == 1 and queue.commands.items[0] == .despawn) {
+                const despawn = queue.commands.items[0].despawn;
+                try self.destroy(despawn.entt);
+                return;
+            }
             var iter = queue.iterator();
             while (iter.next()) |ctx| {
                 const entt = switch (ctx.context.id) {
@@ -295,8 +312,11 @@ test "registry remove test" {
         .Components = ComponentsFactory(&.{ u64, bool, struct {} }),
         .Entity = entity.EntityTypeFactory(.small),
     }).init(std.testing.allocator);
+    defer registry.deinit();
+
     const entt_id = try registry.create();
     try registry.add(entt_id, @as(u64, 7));
     try registry.remove(u64, entt_id);
-    defer registry.deinit();
+    const another_id = try registry.create();
+    try registry.add(another_id, true);
 }

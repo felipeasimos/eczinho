@@ -7,6 +7,7 @@ const ComponentsFactory = @import("components.zig").Components;
 const ResourcesFactory = @import("resource/resources.zig").Resources;
 const EventsFactory = @import("event/events.zig").Events;
 const app = @import("app.zig");
+const app_events = @import("app_events.zig");
 
 pub const AppContextBuilder = struct {
     components: []const type = &.{},
@@ -62,7 +63,7 @@ pub const AppContextBuilder = struct {
     }
     pub fn build(self: @This()) type {
         return app.AppContext(.{
-            .Events = EventsFactory(self.events),
+            .Events = EventsFactory(self.events, &.{app_events.AppExit}),
             .Resources = ResourcesFactory(self.resources),
             .Components = ComponentsFactory(self.components),
             .Entity = self.entity,
