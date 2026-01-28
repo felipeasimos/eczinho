@@ -33,6 +33,7 @@ pub fn Registry(comptime options: RegistryOptions) type {
         entities_to_locations: std.ArrayList(EntityLocation) = .empty,
         free_entity_list: std.ArrayList(Entity.Index) = .empty,
         queues: std.ArrayList(CommandsQueue) = .empty,
+        global_tick: usize = 0,
 
         pub fn init(allocator: std.mem.Allocator) @This() {
             return .{
@@ -52,6 +53,10 @@ pub fn Registry(comptime options: RegistryOptions) type {
             self.deinitQueues();
         }
 
+        pub fn tick(self: *@This()) void {
+            self.global_tick +%= 1;
+        }
+
         pub fn len(self: *@This()) usize {
             var count: usize = 0;
             var iter = self.archetypes.valueIterator();
@@ -63,8 +68,14 @@ pub fn Registry(comptime options: RegistryOptions) type {
 
         fn getEntityArchetype(self: *@This(), entt: Entity) *Archetype {
             std.debug.assert(self.valid(entt));
-            const signature = self.entities_to_locations.items[entt.index].signature.?;
+            const signature = self.getEntitySignature(entt);
             return self.archetypes.getPtr(signature).?;
+        }
+
+        fn getEntitySignature(self: *@This(), entt: Entity) Components {
+            std.debug.assert(self.valid(entt));
+            const signature = self.entities_to_locations.items[entt.index].signature.?;
+            return signature;
         }
 
         pub fn getArchetypeFromSignature(self: *@This(), signature: Components) *Archetype {
@@ -74,7 +85,7 @@ pub fn Registry(comptime options: RegistryOptions) type {
         pub fn tryGetArchetypeFromSignature(self: *@This(), signature: Components) !*Archetype {
             const entry = try self.archetypes.getOrPut(signature);
             if (entry.found_existing) {
-                return @ptrCast(entry.value_ptr);
+                return @ptrCast(@alignCast(entry.value_ptr));
             }
             entry.value_ptr.* = Archetype.init(self.allocator, signature);
             return entry.value_ptr;
@@ -114,8 +125,8 @@ pub fn Registry(comptime options: RegistryOptions) type {
 
         pub fn destroy(self: *@This(), entt: Entity) !void {
             std.debug.assert(self.valid(entt));
-            const empty_arch = self.getArchetypeFromSignature(Components.init(&.{}));
             const current_arch = self.getEntityArchetype(entt);
+            const empty_arch = self.getArchetypeFromSignature(Components.init(&.{}));
 
             try self.moveTo(entt, current_arch, empty_arch);
             try self.free_entity_list.append(self.allocator, entt.index);
@@ -137,10 +148,11 @@ pub fn Registry(comptime options: RegistryOptions) type {
 
         pub fn remove(self: *@This(), tid_or_component: anytype, entt: Entity) !void {
             std.debug.assert(self.valid(entt));
-            const old_arch = self.getEntityArchetype(entt);
-            var new_signature = old_arch.signature;
+            const old_arch_sig = self.getEntitySignature(entt);
+            var new_signature = old_arch_sig;
             new_signature.remove(tid_or_component);
             const new_arch = self.getArchetypeFromSignature(new_signature);
+            const old_arch = self.getArchetypeFromSignature(old_arch_sig);
             try self.moveTo(entt, old_arch, new_arch);
         }
 
@@ -148,15 +160,19 @@ pub fn Registry(comptime options: RegistryOptions) type {
             std.debug.assert(self.valid(entt));
             const Component = @TypeOf(value);
 
-            const old_arch = self.getEntityArchetype(entt);
+            const old_arch_sig = self.getEntitySignature(entt);
 
-            var new_signature = old_arch.signature;
+            var new_signature = old_arch_sig;
             new_signature.add(Component);
 
             const new_arch = try self.tryGetArchetypeFromSignature(new_signature);
+            // note: we need to grab old_arch after new_arch, because new_arch may
+            // do a realloc and invalidate archetype pointers
+            const old_arch = self.getArchetypeFromSignature(old_arch_sig);
             try self.moveTo(entt, old_arch, new_arch);
-            // add new component value
-            new_arch.get(Component, entt).* = value;
+            if (@sizeOf(Component) != 0) {
+                new_arch.get(Component, entt).* = value;
+            }
         }
 
         pub fn get(self: *@This(), comptime Component: type, entt: Entity) *Component {
@@ -217,6 +233,8 @@ pub fn Registry(comptime options: RegistryOptions) type {
                             break :context_loop;
                         },
                         .context => |_| {
+                            // rollback so the outer loop iteration catches
+                            // and use this context
                             iter.rollback();
                             break :context_loop;
                         },

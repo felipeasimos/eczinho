@@ -37,6 +37,7 @@ pub fn TypeHasher(comptime Types: []const type) type {
         pub const Len = Types.len;
 
         pub const Union = Union: {
+            @setEvalBranchQuota(10000);
             var fields: [Len]std.builtin.Type.UnionField = undefined;
             for (Types, 0..) |Type, i| {
                 fields[i] = std.builtin.Type.UnionField{
@@ -57,6 +58,7 @@ pub fn TypeHasher(comptime Types: []const type) type {
 
         /// for functions receiving a tid, use a static enum map to return info in O(1)
         const TypeIdSizeMap = TypeIdSizeMap: {
+            @setEvalBranchQuota(10000);
             var map = std.EnumArray(TypeId, usize).initUndefined();
             for (Types) |Type| {
                 const type_id = std.meta.stringToEnum(TypeId, @typeName(Type)).?;
@@ -65,6 +67,7 @@ pub fn TypeHasher(comptime Types: []const type) type {
             break :TypeIdSizeMap map;
         };
         const TypeIdAlignmentMap = TypeIdAlignmentMap: {
+            @setEvalBranchQuota(10000);
             var map = std.EnumArray(TypeId, usize).initUndefined();
             for (Types) |Type| {
                 const type_id = std.meta.stringToEnum(TypeId, @typeName(Type)).?;
@@ -74,6 +77,7 @@ pub fn TypeHasher(comptime Types: []const type) type {
         };
         /// for functions receiving a tid, use a static enum map to return info in O(1)
         const TypeIdIndexMap = TypeIdIndexMap: {
+            @setEvalBranchQuota(10000);
             var map = std.EnumArray(TypeId, usize).initUndefined();
             for (Types, 0..) |Type, i| {
                 const type_id = std.meta.stringToEnum(TypeId, @typeName(Type)).?;
@@ -83,6 +87,7 @@ pub fn TypeHasher(comptime Types: []const type) type {
         };
 
         pub const TypeIds = TypeIds: {
+            @setEvalBranchQuota(10000);
             var type_ids: [Types.len]TypeId = undefined;
             for (Types, 0..) |Type, i| {
                 type_ids[i] = hash(Type);
@@ -90,6 +95,7 @@ pub fn TypeHasher(comptime Types: []const type) type {
             break :TypeIds type_ids;
         };
         pub const Sizes = Sizes: {
+            @setEvalBranchQuota(10000);
             var sizes: [Types.len]usize = undefined;
             for (Types, 0..) |Type, i| {
                 sizes[i] = @sizeOf(Type);
@@ -108,7 +114,10 @@ pub fn TypeHasher(comptime Types: []const type) type {
         }
 
         pub fn hash(comptime Type: type) TypeId {
-            return std.meta.stringToEnum(TypeId, @typeName(Type)).?;
+            if (comptime std.meta.stringToEnum(TypeId, @typeName(Type))) |id| {
+                return id;
+            }
+            @compileError("type '" ++ @typeName(Type) ++ "' is not registered");
         }
 
         const AccessType = enum {
@@ -172,7 +181,7 @@ pub fn TypeHasher(comptime Types: []const type) type {
                     },
                 },
                 else => {
-                    @compileError("type is not a registered type");
+                    @compileError("type '" ++ @typeName(T) ++ "' is not a registered type");
                 },
             };
         }

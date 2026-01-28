@@ -1,25 +1,13 @@
-const std = @import("std");
+pub const AppBuilder = @import("builder.zig").AppBuilder;
+pub const AppContextBuilder = @import("builder.zig").AppContextBuilder;
+pub const Commands = @import("commands/factory.zig").CommandsFactory;
+pub const EventReader = @import("event/factory.zig").EventReader;
+pub const EventWriter = @import("event/factory.zig").EventWriter;
+pub const Query = @import("query/factory.zig").QueryFactory;
+pub const Resource = @import("resource/factory.zig").ResourceFactory;
+pub const SchedulerLabel = @import("scheduler.zig").SchedulerLabel;
 
-pub const registry = @import("registry.zig");
-pub const entity = @import("entity.zig");
-pub const App = @import("app.zig").App;
-
-pub fn Eczinho(comptime registry_options: registry.RegistryOptions) type {
-    return struct {
-        allocator: std.mem.Allocator,
-        registry: registry.Registry(registry_options),
-        pub const Registry = @FieldType(@This(), "registry");
-
-        pub fn init(alloc: std.mem.Allocator) @This() {
-            return .{
-                .allocator = alloc,
-                .registry = Registry.init(alloc),
-            };
-        }
-    };
-}
-
-test Eczinho {
+test "all" {
     _ = @import("registry.zig").Registry;
     _ = @import("query/query.zig");
     _ = @import("query/factory.zig");
