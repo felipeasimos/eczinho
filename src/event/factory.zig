@@ -1,4 +1,3 @@
-const std = @import("std");
 const EventStoreFactory = @import("event_store.zig").EventStore;
 const SystemData = @import("../system_data.zig").SystemData;
 const ParameterData = @import("../parameter_data.zig").ParameterData;
