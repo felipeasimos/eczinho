@@ -6,6 +6,7 @@ pub const EventWriter = @import("event/factory.zig").EventWriter;
 pub const Query = @import("query/factory.zig").QueryFactory;
 pub const Resource = @import("resource/factory.zig").ResourceFactory;
 pub const SchedulerLabel = @import("scheduler.zig").SchedulerLabel;
+pub const AppEvents = @import("app_events.zig");
 
 test "all" {
     _ = @import("registry.zig").Registry;

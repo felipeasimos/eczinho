@@ -77,7 +77,6 @@ fn updatePositions(q: Query(.{ .q = &.{ *Position, Velocity } })) void {
 
 fn reactGoalCollision(commands: Commands, res: Resource(Score), q: Query(.{ .q = &.{Entity}, .with = &.{Ball} }), reader: EventReader(GoalCollision)) !void {
     const single = q.optSingle() orelse return;
-    std.debug.print("reader remaining: {}\n", .{reader.remaining()});
     if (reader.readOne()) |goal| {
         reader.clear();
         const entt = single[0];
@@ -183,7 +182,7 @@ fn checkTopBottomCollision(q: Query(.{ .q = &.{ Rect, Position }, .with = &.{Bal
     }
 }
 
-fn handleControls(q: Query(.{ .q = &.{ *Position, Rect }, .with = &.{Player} })) void {
+fn handleControls(q: Query(.{ .q = &.{ *Position, Rect }, .with = &.{Player} }), writer: EventWriter(ecs.AppEvents.AppExit)) void {
     const pos_ptr, const rect = q.single();
     if (rl.isKeyDown(rl.KeyboardKey.s)) {
         if (pos_ptr.y + rect.height < @as(f32, @floatFromInt(rl.getScreenHeight()))) {
@@ -193,6 +192,9 @@ fn handleControls(q: Query(.{ .q = &.{ *Position, Rect }, .with = &.{Player} }))
         if (pos_ptr.y > 0) {
             pos_ptr.y -= PADDLE_SPEED;
         }
+    }
+    if (rl.windowShouldClose()) {
+        writer.write(ecs.AppEvents.AppExit{});
     }
 }
 
@@ -265,7 +267,7 @@ fn renderScore(score: Resource(Score)) !void {
     const enemy_score = score.clone().enemy;
     const player_score = score.clone().player;
     var buf: [1024]u8 = undefined;
-    const str = try std.fmt.bufPrintZ(&buf, "{} | {}", .{ player_score, enemy_score });
+    const str = try std.fmt.bufPrintZ(&buf, "{} | {}", .{ enemy_score, player_score });
     const screen_width: i32 = rl.getScreenWidth();
     const screen_height: i32 = rl.getScreenHeight();
     const text_width = rl.measureText(str, 100);
