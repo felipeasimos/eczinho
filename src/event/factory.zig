@@ -54,27 +54,21 @@ pub fn EventReader(comptime options: EventOptions) type {
         pub fn deinit(self: *@This()) void {
             _ = self;
         }
-        pub fn optRead(self: @This()) ?T {
-            const index = self.data.peekNextEventIndex(self.param.type_index);
-            if (self.store.optRead(T, index)) |value| {
-                _ = self.data.getNextEventIndex(self.param.type_index);
-                return value;
-            }
-            return null;
+        fn getReaderIndexPtr(self: @This()) *usize {
+            return self.data.getReaderIndexPtr(self.param.type_index);
         }
-        pub fn read(self: @This()) T {
-            const index = self.data.getNextEventIndex(self.param.type_index);
-            return self.store.read(T, index);
+        pub fn readOne(self: @This()) ?T {
+            return self.store.readOne(T, self.getReaderIndexPtr());
         }
         /// how many events are left to read
         pub fn remaining(self: @This()) usize {
-            return self.store.remaining(T, self.data.peekNextEventIndex(self.param.type_index));
+            return self.store.remaining(T, self.getReaderIndexPtr());
         }
         pub fn empty(self: @This()) bool {
             return self.remaining() == 0;
         }
         pub fn clear(self: @This()) void {
-            return self.store.clear(T, self.data.getReaderIndex(self.param.type_index));
+            return self.store.clear(T, self.getReaderIndexPtr());
         }
         pub fn iterator(self: @This()) Iterator {
             return Iterator.init(self);
@@ -87,7 +81,7 @@ pub fn EventReader(comptime options: EventOptions) type {
                 };
             }
             pub fn next(self: *@This()) ?T {
-                return self.reader.read();
+                return self.reader.readOne();
             }
         };
     };
