@@ -67,6 +67,7 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
                 new.system_data[i] = try System.initData(reg.allocator);
             }
             try new.runStage(.Startup);
+            try new.syncBarrier();
             return new;
         }
 
@@ -86,9 +87,19 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
             @compileError(std.fmt.comptimePrint("System {} is not registered", .{System}));
         }
 
+        fn getSystemData(self: *@This(), comptime System: type) *SystemData {
+            return &self.system_data[getSystemIndex(System)];
+        }
+
+        fn syncBarrier(self: *@This()) !void {
+            // swap event buffers
+            self.event_store.swap();
+            // sync deferred changes
+            try self.registry.sync();
+        }
         fn runStage(self: *@This(), comptime label: SchedulerLabel) !void {
             inline for (SchedulerStages.get(label)) |system| {
-                const system_data_ptr = &self.system_data[getSystemIndex(system)];
+                const system_data_ptr = self.getSystemData(system);
                 try system.call(.{
                     .registry = self.registry,
                     .type_store = self.resource_store,
@@ -96,17 +107,14 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
                     .system_data = system_data_ptr,
                 });
             }
-            // sync deferred changes
-            try self.registry.sync();
-            // swap event buffers
-            self.event_store.swap();
         }
 
-        pub fn next(self: *@This()) !void {
+        pub fn run(self: *@This()) !void {
             // run every stage in order, except for startup
             inline for (comptime std.enums.values(SchedulerLabel)[1..]) |label| {
                 try self.runStage(label);
             }
+            try self.syncBarrier();
         }
     };
 }

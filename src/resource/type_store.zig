@@ -17,6 +17,9 @@ pub fn TypeStore(comptime options: TypeStoreOptions) type {
                 .store = .init(alloc),
             };
         }
+        pub inline fn clone(self: *@This(), comptime T: type) T {
+            return self.optGetConst(T).?.*;
+        }
         pub inline fn get(self: *@This(), comptime T: type) *T {
             return self.optGet(T).?;
         }

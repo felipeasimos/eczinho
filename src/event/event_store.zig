@@ -67,10 +67,8 @@ pub fn EventStore(comptime options: EventStoreOptions) type {
         }
         pub fn swap(self: *@This()) void {
             comptime var iter = Events.Iterator.init();
-            comptime var i = 0;
-            inline while (iter.nextType()) |_| {
-                self.buffers[i].swap();
-                i += 1;
+            inline while (iter.nextType()) |Type| {
+                self.buffers[Events.getIndex(Type)].swap();
             }
         }
         pub fn reserveEventReaderData(self: *@This(), n: usize) !void {
@@ -80,14 +78,16 @@ pub fn EventStore(comptime options: EventStoreOptions) type {
             return &self.buffers[Events.getIndex(T)];
         }
         pub fn write(self: *@This(), value: anytype) !void {
-            const buffer = self.getBuffer(@TypeOf(value));
-            try buffer.write(value);
+            return self.getBuffer(@TypeOf(value)).write(value);
+        }
+        pub fn optRead(self: *@This(), comptime T: type, index: usize) ?T {
+            return self.getBuffer(T).optRead(index);
         }
         pub fn read(self: *@This(), comptime T: type, index: usize) T {
             return self.getBuffer(T).read(index);
         }
-        pub fn len(self: *@This(), comptime T: type, index: usize) usize {
-            return self.getBuffer(T).len() - index;
+        pub fn remaining(self: *@This(), comptime T: type, index: usize) usize {
+            return self.getBuffer(T).remaining(index);
         }
     };
 }
