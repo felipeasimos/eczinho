@@ -1,15 +1,17 @@
-## Roadmap
+## Eczinho
 
-- [x] paged sparse set
-- [x] archetype with comptime types
-- [x] optimize for zero-width types
-- [x] bitset component type id iterator
-- [x] components: integer increment id for each component
-- [x] systems
-- [x] more tests
-- [x] resources
-- [x] event
-- [ ] pong game example
+Eczinho is a little archetype-style ECS built in pure Zig with a bevy-flavored API.
+
+## Running examples
+
+```
+# pong example using raylib, W and S to move paddle. ESC to exit
+zig build --build-file examples/pong/build.zig
+```
+
+
+# TODO
+
 - [ ] better compile error for double add in commands
 - [ ] added, changed and removed queries
 - [ ] cache queries

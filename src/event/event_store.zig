@@ -86,5 +86,8 @@ pub fn EventStore(comptime options: EventStoreOptions) type {
         pub fn clear(self: *@This(), comptime T: type, index_ptr: *usize) void {
             self.getBuffer(T).clear(index_ptr);
         }
+        pub fn total(self: *@This(), comptime T: type) usize {
+            return self.getBuffer(T).count;
+        }
     };
 }
