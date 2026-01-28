@@ -117,6 +117,7 @@ pub fn Registry(comptime options: RegistryOptions) type {
                 }
                 // create brand new entity index
                 const new_index: Entity.Index = @intCast(self.entities_to_locations.items.len);
+                // SAFETY: will be set afterwards using the entity index
                 try self.entities_to_locations.append(self.allocator, undefined);
                 break :new_entity Entity{
                     .index = new_index,

@@ -77,7 +77,9 @@ fn updatePositions(q: Query(.{ .q = &.{ *Position, Velocity } })) void {
 
 fn reactGoalCollision(commands: Commands, res: Resource(Score), q: Query(.{ .q = &.{Entity}, .with = &.{Ball} }), reader: EventReader(GoalCollision)) !void {
     const single = q.optSingle() orelse return;
-    if (reader.optRead()) |goal| {
+    std.debug.print("reader remaining: {}\n", .{reader.remaining()});
+    if (reader.readOne()) |goal| {
+        reader.clear();
         const entt = single[0];
         commands.despawn(entt);
         switch (goal) {
@@ -88,18 +90,20 @@ fn reactGoalCollision(commands: Commands, res: Resource(Score), q: Query(.{ .q =
 }
 
 fn reactBallPaddleCollision(q: Query(.{ .q = &.{ *Velocity, *Position }, .with = &.{Ball} }), reader: EventReader(BallPaddleCollision)) void {
-    if (reader.optRead()) |col| {
+    if (reader.readOne()) |col| {
+        reader.clear();
         const vel_ptr, const pos_ptr = q.single();
-        vel_ptr.x *= -1;
+        vel_ptr.x *= -1.2;
 
         pos_ptr.x = col.safe_x;
 
-        vel_ptr.y *= col.center_diff;
+        vel_ptr.y = col.center_diff * BALL_MAX_SPEED;
     }
 }
 
 fn reactTopBottomCollision(q: Query(.{ .q = &.{ *Velocity, *Position, Rect }, .with = &.{Ball} }), reader: EventReader(TopBottomCollision)) void {
-    if (reader.optRead()) |col| {
+    if (reader.readOne()) |col| {
+        reader.clear();
         const vel_ptr, const pos_ptr, const rect = q.single();
         vel_ptr.y *= -1;
 
@@ -204,20 +208,24 @@ fn moveEnemy(q: Query(.{ .q = &.{ *Velocity, *Position, Rect }, .with = &.{Enemy
     }
 }
 
+fn randomInRange(rnd: std.Random, min: f32, max: f32) f32 {
+    return min + rnd.float(f32) * (max - min);
+}
+
 fn createBall(commands: Commands, random: Resource(std.Random), q: Query(.{ .with = &.{Ball} })) void {
     if (q.len() != 0) {
         return;
     }
     const rnd: std.Random = random.clone();
-    const angle = rnd.float(f32) * 2 * std.math.pi;
+    const angle = randomInRange(rnd, std.math.pi * 3.0 / 4.0, std.math.pi * 5.0 / 4.0);
     const speed = BALL_MIN_SPEED + (rnd.float(f32) * (BALL_MAX_SPEED - BALL_MIN_SPEED));
 
     const width: f32 = @floatFromInt(rl.getScreenWidth());
     const height: f32 = @floatFromInt(rl.getScreenHeight());
     _ = commands.spawn()
         .add(Position{ .x = width / 2, .y = height / 2 })
-        .add(Velocity{ .x = @cos(angle) * speed, .y = speed })
-        // .add(Velocity{ .x = @cos(angle) * speed, .y = @sin(angle) * speed })
+        // .add(Velocity{ .x = @cos(angle) * speed, .y = speed })
+        .add(Velocity{ .x = @cos(angle) * speed, .y = @sin(angle) * speed })
         .add(Rect{ .width = BALL_SIDE, .height = BALL_SIDE })
         .add(Ball{});
 }
@@ -253,6 +261,17 @@ fn renderRectangles(q: Query(.{ .q = &.{ Position, Rect } })) void {
     }
 }
 
+fn renderScore(score: Resource(Score)) !void {
+    const enemy_score = score.clone().enemy;
+    const player_score = score.clone().player;
+    var buf: [1024]u8 = undefined;
+    const str = try std.fmt.bufPrintZ(&buf, "{} | {}", .{ player_score, enemy_score });
+    const screen_width: i32 = rl.getScreenWidth();
+    const screen_height: i32 = rl.getScreenHeight();
+    const text_width = rl.measureText(str, 100);
+    rl.drawText(str, @divFloor(screen_width, 2) - @divFloor(text_width, 2), @divFloor(screen_height, 2), 100, rl.Color.white);
+}
+
 pub fn main() !void {
     rl.setConfigFlags(.{
         .fullscreen_mode = false,
@@ -280,6 +299,7 @@ pub fn main() !void {
         .addSystem(.Update, updatePositions)
         .addSystem(.Update, moveEnemy)
         .addSystem(.Render, renderRectangles)
+        .addSystem(.Render, renderScore)
         .build(allocator);
     defer app.deinit();
     var prng = std.Random.DefaultPrng.init(blk: {

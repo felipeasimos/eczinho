@@ -110,11 +110,11 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
         }
 
         pub fn run(self: *@This()) !void {
+            try self.syncBarrier();
             // run every stage in order, except for startup
             inline for (comptime std.enums.values(SchedulerLabel)[1..]) |label| {
                 try self.runStage(label);
             }
-            try self.syncBarrier();
         }
     };
 }

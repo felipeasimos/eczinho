@@ -71,23 +71,17 @@ pub fn EventStore(comptime options: EventStoreOptions) type {
                 self.buffers[Events.getIndex(Type)].swap();
             }
         }
-        pub fn reserveEventReaderData(self: *@This(), n: usize) !void {
-            try self.event_reader_indices.appendNTimes(self.allocator, .{}, n);
-        }
         fn getBuffer(self: *@This(), comptime T: type) *EventBuffer(T) {
             return &self.buffers[Events.getIndex(T)];
         }
         pub fn write(self: *@This(), value: anytype) !void {
             return self.getBuffer(@TypeOf(value)).write(value);
         }
-        pub fn optRead(self: *@This(), comptime T: type, index: usize) ?T {
-            return self.getBuffer(T).optRead(index);
+        pub fn readOne(self: *@This(), comptime T: type, index_ptr: *usize) ?T {
+            return self.getBuffer(T).readOne(index_ptr);
         }
-        pub fn read(self: *@This(), comptime T: type, index: usize) T {
-            return self.getBuffer(T).read(index);
-        }
-        pub fn remaining(self: *@This(), comptime T: type, index: usize) usize {
-            return self.getBuffer(T).remaining(index);
+        pub fn remaining(self: *@This(), comptime T: type, index_ptr: *usize) usize {
+            return self.getBuffer(T).remaining(index_ptr);
         }
         pub fn clear(self: *@This(), comptime T: type, index_ptr: *usize) void {
             self.getBuffer(T).clear(index_ptr);
