@@ -45,6 +45,35 @@ pub fn Components(comptime ComponentTypes: []const type) type {
             self.bitset.unset(Hasher.getIndex(tid_or_component));
         }
 
+        /// add the set bits of two bitsets (|)
+        pub fn merge(self: @This(), other: @This()) @This() {
+            return @This(){ .bitset = self.bitset.unionWith(other.bitset) };
+        }
+        /// return a bitset with the intersection of two bitsets (&)
+        pub fn intersection(self: @This(), other: @This()) @This() {
+            return @This(){ .bitset = self.bitset.intersectWith(other.bitset) };
+        }
+        /// check if a bitset as an intersection with another
+        pub fn hasIntersection(self: @This(), other: @This()) bool {
+            return !self.intersection(other).eql(comptime @This().init(&.{}));
+        }
+        /// check if two bitsets are equal
+        pub fn eql(self: @This(), other: @This()) bool {
+            return self.bitset.eql(other.bitset);
+        }
+        /// check if bitset is empty
+        pub fn empty(self: @This()) bool {
+            return self.bitset.eql(BitSet.initEmpty());
+        }
+        /// check if bitset is superset of another
+        pub fn isSupersetOf(self: @This(), other: @This()) bool {
+            return self.bitset.supersetOf(other.bitset);
+        }
+        /// check if bitset is subset of another
+        pub fn isSubsetOf(self: @This(), other: @This()) bool {
+            return self.bitset.subsetOf(other.bitset);
+        }
+
         pub fn has(self: *@This(), tid_or_component: anytype) bool {
             Hasher.checkType(tid_or_component);
             return self.bitset.isSet(Hasher.getIndex(tid_or_component));

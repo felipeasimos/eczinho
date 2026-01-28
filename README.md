@@ -7,9 +7,23 @@
 - [x] components: integer increment id for each component
 - [x] systems
 - [x] more tests
-- [ ] resources
-   - [ ] turn components.zig into type_id.zig
-   - [ ] use array.zig to store resources
-- [ ] event
+- [x] resources
+- [x] event
+- [ ] pong game example
+- [ ] better compile error for double add in commands
 - [ ] added, changed and removed queries
+- [ ] cache queries
+- [ ] hierarchy
+- [ ] bundles
+   - [ ] reflection bundle
+   - [ ] spatial bundle
+      - [ ] transform -> translation, rotation, scale
+   - [ ] debug gui bundle
+   - [ ] camera 2d bundle
+   - [ ] camera 3d bundle
+- [ ] more unit tests
+- [ ] move more code to comptime
+   - [ ] scheduler
+   - [ ] event store
+   - [ ] app builder
 - [ ] 0.16 std.Io multithreading

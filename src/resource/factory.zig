@@ -15,6 +15,9 @@ pub fn ResourceFactory(comptime options: ResourceFactoryOptions) type {
                 .store = store,
             };
         }
+        pub fn clone(self: @This()) T {
+            return self.store.clone(T);
+        }
         pub fn get(self: @This()) *T {
             return self.store.get(T);
         }

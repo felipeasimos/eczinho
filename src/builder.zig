@@ -5,11 +5,13 @@ const EntityOptions = @import("entity.zig").EntityOptions;
 const EntityTypeFactory = @import("entity.zig").EntityTypeFactory;
 const ComponentsFactory = @import("components.zig").Components;
 const ResourcesFactory = @import("resource/resources.zig").Resources;
+const EventsFactory = @import("event/events.zig").Events;
 const app = @import("app.zig");
 
 pub const AppContextBuilder = struct {
     components: []const type = &.{},
     resources: []const type = &.{},
+    events: []const type = &.{},
     entity: type = EntityTypeFactory(.medium),
     pub fn init() @This() {
         return .{};
@@ -38,6 +40,18 @@ pub const AppContextBuilder = struct {
         }
         return new;
     }
+    pub fn addEvent(self: @This(), Event: type) @This() {
+        var new = self;
+        new.events = new.events ++ .{Event};
+        return new;
+    }
+    pub fn addEvents(self: @This(), Events: []const type) @This() {
+        var new = self;
+        for (Events) |Event| {
+            new = new.addEvent(Event);
+        }
+        return new;
+    }
     pub fn setEntityConfig(self: @This(), options: EntityOptions) @This() {
         var new = self;
         new.entity = EntityTypeFactory(options);
@@ -48,6 +62,7 @@ pub const AppContextBuilder = struct {
     }
     pub fn build(self: @This()) type {
         return app.AppContext(.{
+            .Events = EventsFactory(self.events),
             .Resources = ResourcesFactory(self.resources),
             .Components = ComponentsFactory(self.components),
             .Entity = self.entity,
@@ -64,8 +79,10 @@ pub const AppBuilder = struct {
     }
     pub fn addSystem(comptime self: @This(), comptime label: SchedulerLabel, comptime function: anytype) @This() {
         var new = self;
-        const system_slice: []const System = &.{System.init(label, function)};
+        const system_slice: []const type = &.{System(function, self.options.Context)};
+        const label_slice: []const SchedulerLabel = &.{label};
         new.options.Systems = new.options.Systems ++ system_slice;
+        new.options.Labels = new.options.Labels ++ label_slice;
         return new;
     }
     pub fn addSystems(self: @This(), label: SchedulerLabel, functions: anytype) @This() {
