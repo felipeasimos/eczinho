@@ -53,7 +53,7 @@ pub fn CommandsFactory(comptime options: CommandsFactoryOptions) type {
             });
         }
         pub fn despawn(self: @This(), entt: Entity) void {
-            return self.getQueue().despawn(.{ .entity = entt });
+            self.getQueue().despawn(.{ .entity = entt }) catch @panic("Commands `despawn` error because of ArrayList.append");
         }
         pub fn spawn(self: @This()) EntityCommands {
             const new_entt = self.getQueue().addNewEntity() catch @panic("Commands `spawn` shouldn't error out. This is a bug or a mishandling of the library");

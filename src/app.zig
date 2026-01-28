@@ -9,6 +9,7 @@ const query = @import("query/query.zig");
 const commands = @import("commands/commands.zig");
 const resource = @import("resource/resource.zig");
 const event = @import("event/event.zig");
+const app_events = @import("app_events.zig");
 
 pub const AppContextOptions = struct {
     Components: type,
@@ -128,9 +129,12 @@ pub fn App(comptime options: AppOptions) type {
             };
         }
 
+        fn shouldExit(self: *@This()) bool {
+            return self.event_store.total(app_events.AppExit) != 0;
+        }
         pub fn run(self: *@This()) !void {
             try self.startup();
-            while (true) {
+            while (!self.shouldExit()) {
                 try self.scheduler.?.run();
             }
         }
@@ -160,7 +164,7 @@ pub fn App(comptime options: AppOptions) type {
 const TestAppContext = AppContext(.{
     .Resources = resource.Resources(&.{u7}),
     .Components = ComponentsFactory(&.{ u8, u64, u32 }),
-    .Events = event.Events(&.{u4}),
+    .Events = event.Events(&.{u4}, &.{}),
 });
 const Query = TestAppContext.Query;
 const Commands = TestAppContext.Commands;

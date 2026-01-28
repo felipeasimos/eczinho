@@ -111,7 +111,7 @@ pub fn CommandsQueue(comptime options: CommandsQueueOptions) type {
 
         pub fn despawn(self: *@This(), context_id: ContextId) !void {
             if (self.getCurrentContext()) |current_context| {
-                if (current_context.id == context_id) {
+                if (std.meta.eql(current_context.id, context_id)) {
                     // despawning the current context? Ignore the changes and the context start
                     self.commands.shrinkRetainingCapacity(self.current_context_index.?);
                 }
