@@ -4,6 +4,8 @@ const ComponentsFactory = @import("../components.zig").Components;
 const EntityFactory = @import("../entity.zig").EntityTypeFactory;
 const archetype = @import("../archetype.zig");
 const registry = @import("../registry.zig");
+const SystemData = @import("../system_data.zig").SystemData;
+const Tick = @import("../types.zig").Tick;
 
 pub const QueryFactoryOptions = struct {
     request: Request,
@@ -62,30 +64,18 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
         };
         pub const MustHave = MustHave: {
             var data: []const type = &.{};
-            for (req.q) |AccessibleType| {
-                if (Entity == AccessibleType) continue;
-                if (@typeInfo(AccessibleType) != .optional) {
-                    const CanonicalType = Components.getCanonicalType(AccessibleType);
+            for (req.q) |Type| {
+                if (Entity == Type) continue;
+                if (@typeInfo(Type) != .optional) {
+                    const CanonicalType = Components.getCanonicalType(Type);
                     data = data ++ .{CanonicalType};
                 }
             }
-            for (req.with) |AccessibleType| {
-                if (@typeInfo(AccessibleType) != .optional) {
-                    const CanonicalType = Components.getCanonicalType(AccessibleType);
-                    data = data ++ .{CanonicalType};
-                }
-            }
+            data = data ++ req.with ++ req.added ++ req.changed;
             break :MustHave data;
         };
         pub const CannotHave = CannotHave: {
-            var data: []const type = &.{};
-            for (req.without) |AccessibleType| {
-                if (@typeInfo(AccessibleType) != .optional) {
-                    const CanonicalType = Components.getCanonicalType(AccessibleType);
-                    data = data ++ .{CanonicalType};
-                }
-            }
-            break :CannotHave data;
+            break :CannotHave req.without;
         };
         pub const Registry = registry.Registry(.{
             .Entity = Entity,
@@ -98,24 +88,29 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
 
         archetypes: std.ArrayList(Components) = .empty,
         registry: *Registry,
+        system_data: *SystemData,
 
-        fn updateArchetypeSignatureList(self: *@This()) !std.ArrayList(Components) {
+        inline fn checkSignature(sig: Components) bool {
             const must_have = comptime Components.init(MustHave);
             const cannot_have = comptime Components.init(CannotHave);
+            return must_have.isSubsetOf(sig) and !cannot_have.hasIntersection(sig);
+        }
 
+        fn updateArchetypeSignatureList(self: *@This()) !std.ArrayList(Components) {
             var key_iter = self.registry.archetypes.keyIterator();
             var arr: std.ArrayList(Components) = .empty;
             while (key_iter.next()) |key| {
                 const sig = key.*;
-                if (must_have.isSubsetOf(sig) and !cannot_have.hasIntersection(sig)) {
+                if (checkSignature(sig)) {
                     try arr.append(self.registry.allocator, key.*);
                 }
             }
             return arr;
         }
-        pub fn init(reg: *Registry) !@This() {
+        pub fn init(reg: *Registry, system_data: *SystemData) !@This() {
             var new: @This() = .{
                 .registry = reg,
+                .system_data = system_data,
             };
             new.archetypes = try new.updateArchetypeSignatureList();
             return new;
@@ -124,20 +119,32 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
             self.archetypes.deinit(self.registry.allocator);
         }
         pub fn iter(self: @This()) Iterator {
-            return Iterator.init(self.registry, self.archetypes);
+            return Iterator.init(self.registry, self.archetypes, self.system_data.last_run);
         }
         pub fn len(self: @This()) usize {
             var count: usize = 0;
             for (self.archetypes.items) |sig| {
-                count += self.registry.getArchetypeFromSignature(sig).len();
+                const arch = self.registry.getArchetypeFromSignature(sig);
+                if (comptime req.added.len == 0 and req.changed.len == 0) {
+                    count += arch.len();
+                } else {
+                    var arch_iter = arch.iterator(req.q, req.added, req.changed, self.system_data.last_run, self.registry.getTick());
+                    while (arch_iter.nextWithoutMarkingChange()) |_| {
+                        count += 1;
+                    }
+                }
             }
             return count;
         }
         pub fn empty(self: @This()) bool {
             for (self.archetypes.items) |sig| {
                 var arch = self.registry.getArchetypeFromSignature(sig);
-                if (arch.len() != 0) {
-                    return false;
+                if (comptime req.added.len == 0 and req.changed.len == 0) {
+                    if (arch.len() != 0) return false;
+                } else if (arch.len() != 0) {
+                    var arch_iter = arch.iterator(req.q, req.added, req.changed, self.system_data.last_run, self.registry.getTick());
+                    const arch_is_empty = arch_iter.nextWithoutMarkingChange() == null;
+                    if (!arch_is_empty) return false;
                 }
             }
             return true;
@@ -147,27 +154,35 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
             for (self.archetypes.items) |sig| {
                 var arch = self.registry.getArchetypeFromSignature(sig);
                 if (arch.len() != 0) {
-                    var inner_arch_iter = arch.iterator(req.q);
+                    var inner_arch_iter = arch.iterator(req.q, req.added, req.changed, self.system_data.last_run, self.registry.getTick());
                     return inner_arch_iter.next().?;
                 }
             }
             return null;
         }
-        /// get next tuple, asserting that there is at most one tuple in the query. Returns null if query is empty
+        /// get next tuple, panicking if there is more than one tuple in the query. Returns null if query is empty
         pub fn optSingle(self: @This()) ?Tuple {
-            std.debug.assert(self.len() == 0 or self.len() == 1);
-            if (self.len() == 1) {
-                return self.single();
-            }
-            return null;
-        }
-        /// get next tuple, asserting that there is exactly one tuple in the query. Panics if query is empty.
-        pub fn single(self: @This()) Tuple {
-            std.debug.assert(self.len() == 1);
+            if (self.empty()) return null;
+            var result: ?Tuple = null;
             for (self.archetypes.items) |sig| {
                 var arch = self.registry.getArchetypeFromSignature(sig);
                 if (arch.len() != 0) {
-                    var inner_arch_iter = arch.iterator(req.q);
+                    var inner_arch_iter = arch.iterator(req.q, req.added, req.changed, self.system_data.last_run, self.registry.getTick());
+                    if (inner_arch_iter.next()) |tuple| {
+                        if (result != null) @panic("optSingle found more than one valid tuple");
+                        result = tuple;
+                    }
+                }
+            }
+            return result;
+        }
+        /// get next tuple, asserting that there is exactly one tuple in the query. Panics if query is empty.
+        pub fn single(self: @This()) Tuple {
+            std.debug.assert(!self.empty() and self.len() == 1);
+            for (self.archetypes.items) |sig| {
+                var arch = self.registry.getArchetypeFromSignature(sig);
+                if (arch.len() != 0) {
+                    var inner_arch_iter = arch.iterator(req.q, req.added, req.changed, self.system_data.last_run, self.registry.getTick());
                     return inner_arch_iter.next().?;
                 }
             }
@@ -177,11 +192,13 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
         pub const Iterator = struct {
             registry: *Registry,
             archetypes: std.ArrayList(Components),
+            last_system_run: Tick,
             index: usize = 0,
-            pub fn init(reg: *Registry, archs: std.ArrayList(Components)) @This() {
+            pub fn init(reg: *Registry, archs: std.ArrayList(Components), last_system_run: Tick) @This() {
                 return .{
                     .registry = reg,
                     .archetypes = archs,
+                    .last_system_run = last_system_run,
                 };
             }
             fn nextArchetype(self: *@This()) ?*Archetype {
@@ -198,7 +215,13 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
             }
             pub fn next(self: *@This()) ?Tuple {
                 if (self.nextArchetype()) |arch| {
-                    var iterator = arch.iterator(req.q);
+                    var iterator = arch.iterator(
+                        req.q,
+                        req.added,
+                        req.changed,
+                        self.last_system_run,
+                        self.registry.getTick(),
+                    );
                     iterator.index = self.index;
                     const tuple = iterator.next().?;
                     self.index += 1;

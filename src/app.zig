@@ -9,7 +9,9 @@ const query = @import("query/query.zig");
 const commands = @import("commands/commands.zig");
 const resource = @import("resource/resource.zig");
 const event = @import("event/event.zig");
+const removed = @import("removed/removed.zig");
 const app_events = @import("app_events.zig");
+const Tick = @import("types.zig").Tick;
 
 pub const AppContextOptions = struct {
     Components: type,
@@ -76,6 +78,19 @@ pub fn AppContext(comptime options: AppContextOptions) type {
                 .T = T,
             });
         }
+
+        /// use in systems to return entities which had components recently removed (in the last schedule run). System signature should be like:
+        /// fn systemExample(r: Removed(u64), ...) !void {
+        ///     ...
+        /// }
+        pub fn Removed(comptime T: type) type {
+            return removed.Removed(.{
+                .Components = Components,
+                .Entity = Entity,
+                .T = T,
+                .Tick = Tick,
+            });
+        }
     };
 }
 
@@ -107,6 +122,10 @@ pub fn App(comptime options: AppOptions) type {
         });
         pub const EventStore = event.EventStore(.{
             .Events = Events,
+        });
+        pub const RemovedLog = removed.RemovedLog(.{
+            .Components = Components,
+            .Entity = Entity,
         });
         pub const Scheduler = SchedulerFactory(.{
             .Context = options.Context,

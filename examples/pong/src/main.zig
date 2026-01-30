@@ -3,8 +3,8 @@ const rl = @import("raylib");
 const options = @import("options");
 const ecs = @import("eczinho");
 
-const SCREEN_WIDTH = 1200;
-const SCREEN_HEIGHT = 800;
+const SCREEN_WIDTH = 800;
+const SCREEN_HEIGHT = 400;
 const PADDLE_WIDTH = 50;
 const PADDLE_HEIGHT = 200;
 const BALL_SIDE = 10;
@@ -59,12 +59,14 @@ const Context = ecs.AppContextBuilder.init()
     })
     .addComponent(Ball)
     .build();
+
 const Commands = Context.Commands;
 const EventReader = Context.EventReader;
 const EventWriter = Context.EventWriter;
 const Query = Context.Query;
 const Resource = Context.Resource;
 const Entity = Context.Entity;
+const Removed = Context.Removed;
 
 fn updatePositions(q: Query(.{ .q = &.{ *Position, Velocity } })) void {
     var iter = q.iter();
@@ -80,7 +82,7 @@ fn reactGoalCollision(commands: Commands, res: Resource(Score), q: Query(.{ .q =
     if (reader.readOne()) |goal| {
         reader.clear();
         const entt = single[0];
-        commands.despawn(entt);
+        commands.remove(Ball, entt);
         switch (goal) {
             .Right => res.get().enemy += 1,
             .Left => res.get().player += 1,
@@ -103,13 +105,15 @@ fn reactBallPaddleCollision(q: Query(.{ .q = &.{ *Velocity, *Position }, .with =
 fn reactTopBottomCollision(q: Query(.{ .q = &.{ *Velocity, *Position, Rect }, .with = &.{Ball} }), reader: EventReader(TopBottomCollision)) void {
     if (reader.readOne()) |col| {
         reader.clear();
-        const vel_ptr, const pos_ptr, const rect = q.single();
-        vel_ptr.y *= -1;
+        if (q.optSingle()) |data| {
+            const vel_ptr, const pos_ptr, const rect = data;
+            vel_ptr.y *= -1;
 
-        pos_ptr.y = switch (col) {
-            .Top => 1,
-            .Bottom => @as(f32, @floatFromInt(rl.getScreenHeight())) - rect.height - 1,
-        };
+            pos_ptr.y = switch (col) {
+                .Top => 1,
+                .Bottom => @as(f32, @floatFromInt(rl.getScreenHeight())) - rect.height - 1,
+            };
+        }
     }
 }
 
@@ -198,15 +202,25 @@ fn handleControls(q: Query(.{ .q = &.{ *Position, Rect }, .with = &.{Player} }),
     }
 }
 
-fn moveEnemy(q: Query(.{ .q = &.{ *Velocity, *Position, Rect }, .with = &.{Enemy} })) void {
-    const vel_ptr, const pos_ptr, const rect = q.single();
-    const screen_height: f32 = @floatFromInt(rl.getScreenHeight());
-    if (pos_ptr.y + rect.height > screen_height) {
-        vel_ptr.y *= -1;
-        pos_ptr.y = screen_height - rect.height;
-    } else if (pos_ptr.y < 0) {
-        vel_ptr.y *= -1;
-        pos_ptr.y = 0;
+fn moveEnemy(q: Query(.{ .q = &.{ *Position, Rect }, .with = &.{Enemy} })) void {
+    // const vel_ptr, const pos_ptr, const rect = q.single();
+    // const screen_height: f32 = @floatFromInt(rl.getScreenHeight());
+    // if (pos_ptr.y + rect.height > screen_height) {
+    //     vel_ptr.y *= -1;
+    //     pos_ptr.y = screen_height - rect.height;
+    // } else if (pos_ptr.y < 0) {
+    //     vel_ptr.y *= -1;
+    //     pos_ptr.y = 0;
+    // }
+    const pos_ptr, const rect = q.single();
+    if (rl.isKeyDown(rl.KeyboardKey.down)) {
+        if (pos_ptr.y + rect.height < @as(f32, @floatFromInt(rl.getScreenHeight()))) {
+            pos_ptr.y += PADDLE_SPEED;
+        }
+    } else if (rl.isKeyDown(rl.KeyboardKey.up)) {
+        if (pos_ptr.y > 0) {
+            pos_ptr.y -= PADDLE_SPEED;
+        }
     }
 }
 
@@ -232,6 +246,28 @@ fn createBall(commands: Commands, random: Resource(std.Random), q: Query(.{ .wit
         .add(Ball{});
 }
 
+fn respawnBall(commands: Commands, r: Removed(Ball)) void {
+    if (r.readOne()) |entt| {
+        _ = commands.entity(entt)
+            .add(Ball{});
+    }
+}
+
+fn repositionBall(q: Query(.{ .q = &.{ *Position, *Velocity }, .added = &.{Ball} }), random: Resource(std.Random)) void {
+    if (q.optSingle()) |data| {
+        const pos_ptr, const vel_ptr = data;
+        const rnd: std.Random = random.clone();
+        const angle = randomInRange(rnd, std.math.pi * 3.0 / 4.0, std.math.pi * 5.0 / 4.0);
+        const speed = BALL_MIN_SPEED + (rnd.float(f32) * (BALL_MAX_SPEED - BALL_MIN_SPEED));
+
+        const width: f32 = @floatFromInt(rl.getScreenWidth());
+        const height: f32 = @floatFromInt(rl.getScreenHeight());
+
+        pos_ptr.* = Position{ .x = width / 2, .y = height / 2 };
+        vel_ptr.* = Velocity{ .x = @cos(angle) * speed, .y = @sin(angle) * speed };
+    }
+}
+
 fn createPlayerPaddle(commands: Commands) void {
     _ = commands.spawn()
         .add(Position{ .x = 0, .y = 0 })
@@ -241,15 +277,18 @@ fn createPlayerPaddle(commands: Commands) void {
 
 fn createEnemyPaddle(commands: Commands) void {
     _ = commands.spawn()
-        .add(Enemy{})
         .add(Position{ .x = @as(f32, @floatFromInt(rl.getScreenWidth())) - PADDLE_WIDTH, .y = 0 })
         .add(Rect{ .width = PADDLE_WIDTH, .height = PADDLE_HEIGHT })
-        .add(Velocity{ .y = PADDLE_SPEED, .x = 0 });
+        .add(Enemy{});
+    // _ = commands.spawn()
+    //     .add(Enemy{})
+    //     .add(Position{ .x = @as(f32, @floatFromInt(rl.getScreenWidth())) - PADDLE_WIDTH, .y = 0 })
+    //     .add(Rect{ .width = PADDLE_WIDTH, .height = PADDLE_HEIGHT })
+    //     .add(Velocity{ .y = PADDLE_SPEED, .x = 0 });
 }
 
 fn renderRectangles(q: Query(.{ .q = &.{ Position, Rect } })) void {
     rl.beginDrawing();
-    defer rl.endDrawing();
     rl.clearBackground(rl.Color.black);
 
     var iter = q.iter();
@@ -264,6 +303,8 @@ fn renderRectangles(q: Query(.{ .q = &.{ Position, Rect } })) void {
 }
 
 fn renderScore(score: Resource(Score)) !void {
+    defer rl.endDrawing();
+
     const enemy_score = score.clone().enemy;
     const player_score = score.clone().player;
     var buf: [1024]u8 = undefined;
@@ -290,7 +331,8 @@ pub fn main() !void {
         .addSystem(.Startup, createPlayerPaddle)
         .addSystem(.Startup, createEnemyPaddle)
         .addSystem(.Startup, createBall)
-        .addSystem(.Update, createBall)
+        .addSystem(.Update, respawnBall)
+        .addSystem(.Update, repositionBall)
         .addSystem(.Update, handleControls)
         .addSystem(.Update, reactGoalCollision)
         .addSystem(.Update, checkGoalCollision)
@@ -314,9 +356,4 @@ pub fn main() !void {
     try app.insert(Score{});
 
     try app.run();
-    // while (!rl.windowShouldClose()) {
-    //     rl.beginDrawing();
-    //     defer rl.endDrawing();
-    //     rl.clearBackground(rl.Color.white);
-    // }
 }

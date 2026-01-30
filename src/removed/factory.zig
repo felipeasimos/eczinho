@@ -1,52 +1,34 @@
-const EventStoreFactory = @import("event_store.zig").EventStore;
+const RemovedLogFactory = @import("removed_log.zig").RemovedComponentsLog;
 const SystemData = @import("../system_data.zig").SystemData;
 const ParameterData = @import("../parameter_data.zig").ParameterData;
 
-pub const EventOptions = struct {
-    Events: type,
+pub const RemovedOptions = struct {
+    Components: type,
+    Entity: type,
     T: type,
+    Tick: type,
 };
 
-pub fn EventWriter(comptime options: EventOptions) type {
+pub fn Removed(comptime options: RemovedOptions) type {
     return struct {
-        pub const Marker = EventWriter;
+        pub const Marker = Removed;
         pub const T = options.T;
-        pub const Events = options.Events;
-        pub const EventStore = EventStoreFactory(.{
-            .Events = Events,
+        pub const Entity = options.Entity;
+        pub const Components = options.Components;
+        pub const Tick = options.Tick;
+        pub const RemovedLog = RemovedLogFactory(.{
+            .Entity = Entity,
+            .Components = Components,
         });
 
-        store: *EventStore,
-        pub fn init(store: *EventStore) @This() {
-            return .{
-                .store = store,
-            };
-        }
-        pub fn deinit(self: *@This()) void {
-            _ = self;
-        }
-        pub fn write(self: @This(), value: T) void {
-            self.store.write(value) catch @panic("panic when trying to write to event store");
-        }
-    };
-}
-
-pub fn EventReader(comptime options: EventOptions) type {
-    return struct {
-        pub const Marker = EventReader;
-        pub const T = options.T;
-        pub const Events = options.Events;
-        pub const EventStore = EventStoreFactory(.{
-            .Events = Events,
-        });
         pub const Reader = @This();
 
-        store: *EventStore,
+        logs: *RemovedLog,
         data: *SystemData,
         param: ParameterData,
-        pub fn init(store: *EventStore, data: *SystemData, param: ParameterData) @This() {
+        pub fn init(logs: *RemovedLog, data: *SystemData, param: ParameterData) @This() {
             return .{
-                .store = store,
+                .logs = logs,
                 .data = data,
                 .param = param,
             };
@@ -55,10 +37,13 @@ pub fn EventReader(comptime options: EventOptions) type {
             _ = self;
         }
         fn getReaderIndexPtr(self: @This()) *usize {
-            return self.data.getEventReaderIndexPtr(self.param.type_index);
+            return self.data.getRemovedReaderIndexPtr(self.param.type_index);
         }
-        pub fn readOne(self: @This()) ?T {
-            return self.store.readOne(T, self.getReaderIndexPtr());
+        pub fn readOne(self: @This()) ?Entity {
+            if (self.logs.readOne(T, self.getReaderIndexPtr())) |entry| {
+                return entry.entity;
+            }
+            return null;
         }
         /// how many events are left to read
         pub fn remaining(self: @This()) usize {

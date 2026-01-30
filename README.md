@@ -13,7 +13,6 @@ zig build --build-file examples/pong/build.zig
 # TODO
 
 - [ ] better compile error for double add in commands
-- [ ] added, changed and removed queries
 - [ ] cache queries
 - [ ] hierarchy
 - [ ] bundles
