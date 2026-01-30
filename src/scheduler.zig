@@ -2,6 +2,7 @@ const std = @import("std");
 const RegistryFactory = @import("registry.zig").Registry;
 const TypeStoreFactory = @import("resource/type_store.zig").TypeStore;
 const EventStoreFactory = @import("event/event_store.zig").EventStore;
+const RemovedLogFactory = @import("removed/removed_log.zig").RemovedComponentsLog;
 const SystemData = @import("system_data.zig").SystemData;
 
 pub const SchedulerLabel = enum {
@@ -48,6 +49,10 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
         });
         pub const EventStore = EventStoreFactory(.{
             .Events = Events,
+        });
+        pub const RemovedLog = RemovedLogFactory(.{
+            .Components = Components,
+            .Entity = Entity,
         });
 
         registry: *Registry,
@@ -104,8 +109,10 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
                     .registry = self.registry,
                     .type_store = self.resource_store,
                     .event_store = self.event_store,
+                    .removed_logs = &self.registry.removed,
                     .system_data = system_data_ptr,
                 });
+                system_data_ptr.last_run = self.registry.getTick();
             }
         }
 

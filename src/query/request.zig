@@ -11,13 +11,8 @@ pub const QueryRequest = struct {
     /// additional components that the entity must have.
     /// (but won't be returned).
     with: []const type = &.{},
-    // /// resources to be returned.
-    // /// both `Resource`, `*Resource` and `*const Resource` can be used here.
-    // res: []const type = &.{},
-    // /// only return entities which had these components added after this system's last run
-    // added: []const type = &.{},
-    // /// only return entities which had these components changed after this system's last run
-    // changed: []const type = &.{},
-    // /// only return entities which had these components removed after this system's last run
-    // removed: []const type = &.{},
+    /// only return entities which had these components added since this system last run
+    added: []const type = &.{},
+    /// only return entities which had these components changed since this system last run
+    changed: []const type = &.{},
 };

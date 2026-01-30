@@ -45,12 +45,12 @@ pub fn CommandsFactory(comptime options: CommandsFactoryOptions) type {
         pub fn add(self: @This(), entt: Entity, value: anytype) void {
             return self.getQueue().addCommand(.{ .entity = entt }, .{
                 .add = Components.getAsUnion(value),
-            });
+            }) catch @panic("Commands `add` error because of ArrayList.append");
         }
         pub fn remove(self: @This(), comptime Component: type, entt: Entity) void {
-            return self.getQueue().addCommand(.{ .entity = entt }, .{
+            self.getQueue().addCommand(.{ .entity = entt }, .{
                 .remove = Components.hash(Component),
-            });
+            }) catch @panic("Commands `remove` error because of ArrayList.append");
         }
         pub fn despawn(self: @This(), entt: Entity) void {
             self.getQueue().despawn(.{ .entity = entt }) catch @panic("Commands `despawn` error because of ArrayList.append");
