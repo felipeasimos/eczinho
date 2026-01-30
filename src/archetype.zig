@@ -286,7 +286,6 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                                 tuple[i] = self.getComponent(Type);
                             }
                         }
-                        self.index += 1;
                         return tuple;
                     }
                     return null;

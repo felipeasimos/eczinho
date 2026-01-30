@@ -121,53 +121,73 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
         pub fn iter(self: @This()) Iterator {
             return Iterator.init(self.registry, self.archetypes, self.system_data.last_run);
         }
-        // pub fn len(self: @This()) usize {
-        //     var count: usize = 0;
-        //     for (self.archetypes.items) |sig| {
-        //         const arch = self.registry.getArchetypeFromSignature(sig);
-        //     }
-        //     return count;
-        // }
-        // pub fn empty(self: @This()) bool {
-        //     for (self.archetypes.items) |sig| {
-        //         var arch = self.registry.getArchetypeFromSignature(sig);
-        //         if (arch.len() != 0) {
-        //             return false;
-        //         }
-        //     }
-        //     return true;
-        // }
-        // /// get next tuple, returning null if query is empty
-        // pub fn peek(self: @This()) ?Tuple {
-        //     for (self.archetypes.items) |sig| {
-        //         var arch = self.registry.getArchetypeFromSignature(sig);
-        //         if (arch.len() != 0) {
-        //             var inner_arch_iter = arch.iterator(req.q);
-        //             return inner_arch_iter.next().?;
-        //         }
-        //     }
-        //     return null;
-        // }
-        // /// get next tuple, asserting that there is at most one tuple in the query. Returns null if query is empty
-        // pub fn optSingle(self: @This()) ?Tuple {
-        //     std.debug.assert(self.len() == 0 or self.len() == 1);
-        //     if (self.len() == 1) {
-        //         return self.single();
-        //     }
-        //     return null;
-        // }
-        // /// get next tuple, asserting that there is exactly one tuple in the query. Panics if query is empty.
-        // pub fn single(self: @This()) Tuple {
-        //     std.debug.assert(self.len() == 1);
-        //     for (self.archetypes.items) |sig| {
-        //         var arch = self.registry.getArchetypeFromSignature(sig);
-        //         if (arch.len() != 0) {
-        //             var inner_arch_iter = arch.iterator(req.q);
-        //             return inner_arch_iter.next().?;
-        //         }
-        //     }
-        //     @panic("no tuple found");
-        // }
+        pub fn len(self: @This()) usize {
+            var count: usize = 0;
+            for (self.archetypes.items) |sig| {
+                const arch = self.registry.getArchetypeFromSignature(sig);
+                if (comptime req.added.len == 0 and req.changed.len == 0) {
+                    count += arch.len();
+                } else {
+                    var arch_iter = Iterator(&.{}, req.added, req.changed).init(self, self.system_data.last_run);
+                    while (arch_iter.next()) |_| {
+                        count += 1;
+                    }
+                }
+            }
+            return count;
+        }
+        pub fn empty(self: @This()) bool {
+            for (self.archetypes.items) |sig| {
+                var arch = self.registry.getArchetypeFromSignature(sig);
+                if (comptime req.added.len == 0 and req.changed.len == 0) {
+                    if (arch.len() != 0) return false;
+                } else if (arch.len() != 0) {
+                    var arch_iter = Iterator(&.{}, req.added, req.changed).init(self, self.system_data.last_run);
+                    const arch_is_empty = arch_iter.next() == null;
+                    if (!arch_is_empty) return false;
+                }
+            }
+            return true;
+        }
+        /// get next tuple, returning null if query is empty
+        pub fn peek(self: @This()) ?Tuple {
+            for (self.archetypes.items) |sig| {
+                var arch = self.registry.getArchetypeFromSignature(sig);
+                if (arch.len() != 0) {
+                    var inner_arch_iter = arch.iterator(req.q, req.added, req.changed, self.system_data.last_run);
+                    return inner_arch_iter.next().?;
+                }
+            }
+            return null;
+        }
+        /// get next tuple, panicking if there is more than one tuple in the query. Returns null if query is empty
+        pub fn optSingle(self: @This()) ?Tuple {
+            if (self.empty()) return null;
+            var result: ?Tuple = null;
+            for (self.archetypes.items) |sig| {
+                var arch = self.registry.getArchetypeFromSignature(sig);
+                if (arch.len() != 0) {
+                    var inner_arch_iter = arch.iterator(req.q, req.added, req.changed, self.system_data.last_run);
+                    if (inner_arch_iter.next()) |tuple| {
+                        if (result != null) @panic("optSingle found more than one valid tuple");
+                        result = tuple;
+                    }
+                }
+            }
+            return result;
+        }
+        /// get next tuple, asserting that there is exactly one tuple in the query. Panics if query is empty.
+        pub fn single(self: @This()) Tuple {
+            std.debug.assert(!self.empty() and self.len() == 1);
+            for (self.archetypes.items) |sig| {
+                var arch = self.registry.getArchetypeFromSignature(sig);
+                if (arch.len() != 0) {
+                    var inner_arch_iter = arch.iterator(req.q, req.added, req.changed, self.system_data.last_run);
+                    return inner_arch_iter.next().?;
+                }
+            }
+            @panic("no tuple found");
+        }
 
         pub const Iterator = struct {
             registry: *Registry,
