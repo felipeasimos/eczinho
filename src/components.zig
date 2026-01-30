@@ -5,16 +5,19 @@ pub fn Components(comptime ComponentTypes: []const type) type {
     return struct {
         const Hasher = TypeHasher(ComponentTypes);
         pub const ComponentTypeId = Hasher.TypeId;
+        pub const Len = Hasher.Len;
         pub const Union = Hasher.Union;
         pub const getCanonicalType = Hasher.getCanonicalType;
         pub const getAlignment = Hasher.getAlignment;
         pub const getSize = Hasher.getSize;
+        pub const getIndex = Hasher.getIndex;
         pub const checkSize = Hasher.checkSize;
         pub const checkType = Hasher.checkType;
         pub const getAsUnion = Hasher.getAsUnion;
         pub const isComponent = Hasher.isRegisteredType;
         pub const getAccessType = Hasher.getAccessType;
         pub const hash = Hasher.hash;
+        pub const TypeIterator = Hasher.Iterator;
 
         const BitSet = std.bit_set.StaticBitSet(ComponentTypes.len);
         /// this is where archetype signatures are stored. Comptime static maps and arrays
@@ -74,16 +77,27 @@ pub fn Components(comptime ComponentTypes: []const type) type {
             return self.bitset.subsetOf(other.bitset);
         }
 
+        pub fn len(self: *const @This()) usize {
+            return self.bitset.count();
+        }
+
         pub fn has(self: *@This(), tid_or_component: anytype) bool {
             Hasher.checkType(tid_or_component);
             return self.bitset.isSet(Hasher.getIndex(tid_or_component));
+        }
+
+        pub fn getIndexInSet(self: *@This(), tid_or_component: anytype) usize {
+            const index = getIndex(tid_or_component);
+            var only_left = self.bitset;
+            only_left.setRangeValue(.{ .start = index, .end = ComponentTypes.len }, false);
+            return only_left.count();
         }
 
         pub fn iterator(self: @This()) Iterator {
             return Iterator.init(self.bitset);
         }
 
-        const Iterator = struct {
+        pub const Iterator = struct {
             iter: BitSet.Iterator(.{ .kind = .set, .direction = .forward }),
             pub fn init(set: BitSet) @This() {
                 return .{

@@ -106,6 +106,7 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
                     .event_store = self.event_store,
                     .system_data = system_data_ptr,
                 });
+                system_data_ptr.last_run = self.registry.getTick();
             }
         }
 

@@ -1,10 +1,12 @@
 const std = @import("std");
+const Tick = @import("types.zig").Tick;
 
 /// per-system persistent data, store in the scheduler struct.
 /// Notice this isn't a custom created type. This is necessary to get proper pointers
 /// in user-facing types that don't have system type information
 pub const SystemData = struct {
     event_reader_next_indices: []usize,
+    last_run: Tick = 0,
     pub fn init(alloc: std.mem.Allocator, num_event_readers: usize) !@This() {
         const next_indices_ptr = try alloc.alloc(usize, num_event_readers);
         @memset(next_indices_ptr, 0);

@@ -2,11 +2,19 @@ const std = @import("std");
 const entity = @import("entity.zig");
 const archetype = @import("archetype.zig");
 const commands = @import("commands/commands.zig");
+const Tick = @import("types.zig").Tick;
 
 pub const RegistryOptions = struct {
     Components: type,
     Entity: type = entity.EntityTypeFactory(.medium),
 };
+
+fn RemovedComponentBuffer(comptime Entity: type) type {
+    return std.ArrayList(struct {
+        entity: Entity,
+        tick: Tick,
+    });
+}
 
 pub fn Registry(comptime options: RegistryOptions) type {
     return struct {
@@ -28,13 +36,16 @@ pub fn Registry(comptime options: RegistryOptions) type {
             version: options.Entity.Version = 0,
         };
 
+        const RemovedComponentBufferType = RemovedComponentBuffer(Entity);
+
         allocator: std.mem.Allocator,
         archetypes: std.AutoHashMap(Components, Archetype),
         /// entity index to -> generations + archetype
         entities_to_locations: std.ArrayList(EntityLocation) = .empty,
         free_entity_list: std.ArrayList(Entity.Index) = .empty,
         queues: std.ArrayList(CommandsQueue) = .empty,
-        global_tick: usize = 0,
+        removed: [Components.Len]RemovedComponentBufferType = .{RemovedComponentBufferType.empty} ** Components.Len,
+        global_tick: Tick = 0,
 
         pub fn init(allocator: std.mem.Allocator) @This() {
             return .{
@@ -52,10 +63,28 @@ pub fn Registry(comptime options: RegistryOptions) type {
             self.entities_to_locations.deinit(self.allocator);
             self.free_entity_list.deinit(self.allocator);
             self.deinitQueues();
+
+            comptime var component_iter = Components.TypeIterator.init();
+            inline while (component_iter.nextType()) |Component| {
+                self.getRemovedComponentBuffer(Component).deinit(self.allocator);
+            }
         }
 
         pub fn tick(self: *@This()) void {
             self.global_tick +%= 1;
+        }
+        pub fn getTick(self: *const @This()) Tick {
+            return self.global_tick;
+        }
+        fn getRemovedComponentBuffer(self: *@This(), tid_or_component: anytype) *RemovedComponentBuffer(Entity) {
+            return &self.removed[Components.getIndex(tid_or_component)];
+        }
+        pub fn addRemoved(self: *@This(), tid: Components.ComponentTypeId, entt: Entity) !void {
+            var buf = self.getRemovedComponentBuffer(tid);
+            try buf.append(self.allocator, .{
+                .entity = entt,
+                .tick = self.getTick(),
+            });
         }
 
         pub fn len(self: *@This()) usize {
@@ -95,7 +124,7 @@ pub fn Registry(comptime options: RegistryOptions) type {
             if (entry.found_existing) {
                 return @ptrCast(@alignCast(entry.value_ptr));
             }
-            entry.value_ptr.* = Archetype.init(self.allocator, signature);
+            entry.value_ptr.* = try Archetype.init(self.allocator, signature);
             return entry.value_ptr;
         }
 
@@ -147,7 +176,7 @@ pub fn Registry(comptime options: RegistryOptions) type {
 
         fn moveTo(self: *@This(), entt: Entity, from: *Archetype, to: *Archetype) !void {
             std.debug.assert(self.valid(entt));
-            try from.moveTo(entt, to);
+            try from.moveTo(entt, to, self);
             self.entities_to_locations.items[entt.index].signature = to.signature;
         }
 
@@ -213,10 +242,18 @@ pub fn Registry(comptime options: RegistryOptions) type {
         }
 
         pub fn sync(self: *@This()) !void {
+            // clean removed
+            comptime var component_iter = Components.TypeIterator.init();
+            inline while (component_iter.nextType()) |Component| {
+                var buf = self.getRemovedComponentBuffer(Component);
+                buf.shrinkRetainingCapacity(0);
+            }
+            // sync queues
             for (0..self.queues.items.len) |index| {
                 try self.syncQueue(index);
             }
             self.deinitQueues();
+            self.tick();
         }
 
         fn syncQueue(self: *@This(), index: usize) !void {

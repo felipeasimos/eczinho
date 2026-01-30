@@ -3,6 +3,8 @@ const sparseset = @import("sparse_set.zig");
 const entity = @import("entity.zig");
 const components = @import("components.zig");
 const array = @import("array.zig");
+const Tick = @import("types.zig").Tick;
+const registry = @import("registry.zig");
 
 pub const ArchetypeOptions = struct {
     Components: type,
@@ -16,6 +18,10 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
         const ComponentTypeId = options.Components.ComponentTypeId;
         const Components = options.Components;
         const Entity = options.Entity;
+        const Registry = registry.Registry(.{
+            .Components = Components,
+            .Entity = Entity,
+        });
         signature: Components,
         components: std.AutoHashMap(ComponentTypeId, array.Array),
         entities_to_component_index: sparseset.SparseSet(.{
@@ -23,6 +29,8 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             .PageMask = Entity.entity_mask,
         }),
         allocator: std.mem.Allocator,
+        added: []std.ArrayList(Tick) = &.{},
+        changed: []std.ArrayList(Tick) = &.{},
 
         inline fn hash(tid_or_component: anytype) ComponentTypeId {
             if (comptime @TypeOf(tid_or_component) == ComponentTypeId) {
@@ -57,8 +65,14 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             return self.components.getEntry(hash(tid_or_component)).?.value_ptr;
         }
 
-        pub fn init(alloc: std.mem.Allocator, sig: Components) @This() {
+        pub fn init(alloc: std.mem.Allocator, sig: Components) !@This() {
+            const added = try alloc.alloc(std.ArrayList(Tick), sig.len());
+            const changed = try alloc.alloc(std.ArrayList(Tick), sig.len());
+            @memset(added, .empty);
+            @memset(changed, .empty);
             return .{
+                .added = added,
+                .changed = changed,
                 .signature = sig,
                 .components = @FieldType(@This(), "components").init(alloc),
                 .entities_to_component_index = @FieldType(@This(), "entities_to_component_index").init(alloc),
@@ -75,6 +89,12 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             }
             self.components.deinit();
             self.entities_to_component_index.deinit();
+            for (self.added, self.changed) |*added, *changed| {
+                added.deinit(self.allocator);
+                changed.deinit(self.allocator);
+            }
+            self.allocator.free(self.added);
+            self.allocator.free(self.changed);
         }
 
         pub inline fn len(self: *@This()) usize {
@@ -126,20 +146,10 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                 try component_arr.reserve(self.allocator, 1);
             }
             try self.entities_to_component_index.add(entt.toInt());
-        }
-
-        /// add entities with its component values to this archetype.
-        /// zero sized components must not be passed.
-        /// ignored component will be undefined.
-        pub fn add(self: *@This(), entt: Entity, values: anytype) !void {
-            std.debug.assert(!self.valid(entt));
-
-            inline for (values) |value| {
-                Components.checkSize(@TypeOf(value));
-                const component_arr = try self.tryGetComponentArray(@TypeOf(value));
-                try component_arr.append(self.allocator, value);
+            for (self.added, self.changed) |*added, *changed| {
+                try added.append(self.allocator, 0);
+                try changed.append(self.allocator, 0);
             }
-            try self.entities_to_component_index.add(entt.toInt());
         }
 
         pub fn remove(self: *@This(), entt: Entity) void {
@@ -152,35 +162,65 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                     _ = arr.swapRemove(entt_index);
                 }
             }
+            for (self.added, self.changed) |*added, *changed| {
+                _ = added.swapRemove(entt_index);
+                _ = changed.swapRemove(entt_index);
+            }
+        }
+
+        pub fn getAddedArray(self: *@This(), tid_or_component: anytype) *std.ArrayList(Tick) {
+            const index = self.signature.getIndexInSet(tid_or_component);
+            return &self.added[index];
+        }
+
+        pub fn getChangedArray(self: *@This(), tid_or_component: anytype) *std.ArrayList(Tick) {
+            const index = self.signature.getIndexInSet(tid_or_component);
+            return &self.changed[index];
         }
 
         /// move entity to new archetype.
         /// this function only copies the values from component that exist in both archetypes.
         /// components only present in 'new_arch' must be set after this call.
-        pub fn moveTo(self: *@This(), entt: Entity, new_arch: *@This()) !void {
+        pub fn moveTo(self: *@This(), entt: Entity, new_arch: *@This(), reg: *Registry) !void {
             std.debug.assert(self.valid(entt));
             std.debug.assert(!new_arch.valid(entt));
 
-            const entt_index = self.getEntityComponentIndex(entt);
+            const old_entt_index = self.getEntityComponentIndex(entt);
             try new_arch.reserve(entt);
-            var iter_type_id = self.signature.iterator();
-            while (iter_type_id.nextTypeIdNonEmpty()) |tid| {
+            const new_entt_index = new_arch.getEntityComponentIndex(entt);
+
+            var old_iter_type_id = self.signature.iterator();
+            while (old_iter_type_id.nextTypeId()) |tid| {
                 if (new_arch.signature.has(tid)) {
-                    const old_addr = self.getComponentArray(tid).get(entt_index);
-                    const new_addr = new_arch.getComponentArray(tid).get(entt_index);
-                    @memcpy(new_addr, old_addr);
+                    if (Components.getSize(tid) != 0) {
+                        const old_addr = self.getComponentArray(tid).get(old_entt_index);
+                        const new_addr = new_arch.getComponentArray(tid).get(new_entt_index);
+                        @memcpy(new_addr, old_addr);
+                    }
+                } else {
+                    // component removed in new arch
+                    try reg.addRemoved(tid, entt);
+                }
+            }
+            var new_iter_type_id = new_arch.signature.iterator();
+            while (new_iter_type_id.nextTypeId()) |tid| {
+                if (self.signature.has(tid)) {
+                    new_arch.getAddedArray(tid).items[new_entt_index] = self.getAddedArray(tid).items[old_entt_index];
+                    new_arch.getChangedArray(tid).items[new_entt_index] = self.getChangedArray(tid).items[old_entt_index];
+                } else {
+                    const tick = reg.getTick();
+                    new_arch.getAddedArray(tid).items[new_entt_index] = tick;
+                    new_arch.getChangedArray(tid).items[new_entt_index] = tick;
                 }
             }
             self.remove(entt);
         }
 
-        pub fn iterator(self: *@This(), comptime ReturnTypes: []const type) Iterator(ReturnTypes) {
-            return .{
-                .archetype = self,
-            };
+        pub fn iterator(self: *@This(), comptime ReturnTypes: []const type, comptime Added: []const type, comptime Changed: []const type, last_run: Tick) Iterator(ReturnTypes, Added, Changed) {
+            return Iterator(ReturnTypes, Added, Changed).init(self, last_run);
         }
 
-        pub fn Iterator(comptime ReturnTypes: []const type) type {
+        pub fn Iterator(comptime ReturnTypes: []const type, comptime Added: []const type, comptime Changed: []const type) type {
             for (ReturnTypes) |Type| {
                 if (@sizeOf(Type) == 0) {
                     @compileError("Can't iterate over zero sized component array");
@@ -190,9 +230,11 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             return struct {
                 archetype: *Self,
                 index: usize = 0,
-                pub fn init(archtype: *Self) @This() {
+                last_run: Tick,
+                pub fn init(archtype: *Self, last_run: Tick) @This() {
                     return .{
                         .archetype = archtype,
+                        .last_run = last_run,
                     };
                 }
                 fn getComponent(self: *@This(), comptime Type: type) Type {
@@ -208,22 +250,46 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                         .OptionalPointerConst => @ptrCast(comp_arr.getAs(CanonicalType, self.index)),
                     };
                 }
+                fn hasValidTicks(self: *@This()) bool {
+                    const entt_int = self.archetype.entities_to_component_index.items()[self.index];
+                    inline for (Added) |Type| {
+                        const added_tick = self.archetype.getAddedArray(Type).items[entt_int];
+                        if (added_tick < self.last_run) return false;
+                    }
+                    inline for (Changed) |Type| {
+                        const changed_tick = self.archetype.getChangedArray(Type).items[entt_int];
+                        if (changed_tick < self.last_run) return false;
+                    }
+                    return true;
+                }
+                fn nextValidEntity(self: *@This()) ?Entity.Int {
+                    if (self.index >= self.archetype.len()) {
+                        return null;
+                    }
+                    while (!self.hasValidTicks()) {
+                        self.index += 1;
+                        if (self.index >= self.archetype.len()) return null;
+                    }
+                    return self.archetype.entities_to_component_index.items()[self.index];
+                }
                 pub fn next(self: *@This()) ?Tuple {
                     if (self.index >= self.archetype.len()) {
                         return null;
                     }
-                    // SAFETY: immediatly filled in the following lines
-                    var tuple: std.meta.Tuple(ReturnTypes) = undefined;
-                    inline for (ReturnTypes, 0..) |Type, i| {
-                        if (comptime Type == Entity) {
-                            const entt_int = self.archetype.entities_to_component_index.items()[self.index];
-                            tuple[i] = Entity.fromInt(entt_int);
-                        } else {
-                            tuple[i] = self.getComponent(Type);
+                    if (self.nextValidEntity()) |entt_int| {
+                        // SAFETY: immediatly filled in the following lines
+                        var tuple: std.meta.Tuple(ReturnTypes) = undefined;
+                        inline for (ReturnTypes, 0..) |Type, i| {
+                            if (comptime Type == Entity) {
+                                tuple[i] = Entity.fromInt(entt_int);
+                            } else {
+                                tuple[i] = self.getComponent(Type);
+                            }
                         }
+                        self.index += 1;
+                        return tuple;
                     }
-                    self.index += 1;
-                    return tuple;
+                    return null;
                 }
             };
         }
@@ -241,7 +307,7 @@ test Archetype {
         .Entity = entity.EntityTypeFactory(.medium),
         .Components = Components,
     });
-    var archetype = ArchetypeType.init(std.testing.allocator, Components.init(&.{ typeA, typeC, typeE }));
+    var archetype = try ArchetypeType.init(std.testing.allocator, Components.init(&.{ typeA, typeC, typeE }));
     defer archetype.deinit();
 
     try std.testing.expect(archetype.has(typeA));
@@ -250,39 +316,4 @@ test Archetype {
     try std.testing.expect(archetype.has(typeC));
     try std.testing.expect(!archetype.has(typeD));
     try std.testing.expect(archetype.has(typeE));
-
-    var values = .{ @as(typeA, 4), typeE{ .a = 23, .b = 342 } };
-    const entt_id = entity.EntityTypeFactory(.medium){ .index = 1, .version = 0 };
-    try archetype.add(entt_id, &values);
-    try std.testing.expect(archetype.valid(entt_id));
-    try std.testing.expectEqual(@as(typeA, 4), archetype.getConst(typeA, entt_id));
-    try std.testing.expectEqual(@as(typeE, .{ .a = 23, .b = 342 }), archetype.getConst(typeE, entt_id));
-    var iter = archetype.iterator(&.{ typeE, typeA });
-    try std.testing.expectEqual(.{ typeE{ .a = 23, .b = 342 }, @as(typeA, 4) }, iter.next());
-    archetype.remove(entt_id);
-    try std.testing.expect(!archetype.valid(entt_id));
-}
-
-test "moveTo" {
-    const typeA = u64;
-    const typeC = struct {};
-    const typeD = struct { a: u43 };
-    const typeE = struct { a: u32, b: u54 };
-    const Components = components.Components(&.{ typeA, typeC, typeD, typeE });
-    const ArchetypeType = Archetype(.{
-        .Entity = entity.EntityTypeFactory(.medium),
-        .Components = Components,
-    });
-    var empty_arch = ArchetypeType.init(std.testing.allocator, Components.init(&.{ typeA, typeC, typeE, typeD }));
-    defer empty_arch.deinit();
-    var archetype = ArchetypeType.init(std.testing.allocator, Components.init(&.{ typeA, typeC, typeE, typeD }));
-    defer archetype.deinit();
-
-    const entt_id = entity.EntityTypeFactory(.medium){ .index = 1, .version = 0 };
-    try empty_arch.reserve(entt_id);
-    try std.testing.expectEqual(1, empty_arch.len());
-    try std.testing.expectEqual(0, archetype.len());
-    try empty_arch.moveTo(entt_id, &archetype);
-    try std.testing.expectEqual(0, empty_arch.len());
-    try std.testing.expectEqual(1, archetype.len());
 }
