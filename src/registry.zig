@@ -18,7 +18,7 @@ pub fn Registry(comptime options: RegistryOptions) type {
             .Entity = Entity,
             .Components = Components,
         });
-        pub const CommandsQueue = commands.CommandsQueueFactory(.{
+        pub const CommandsQueue = commands.CommandsQueue(.{
             .Entity = Entity,
             .Components = Components,
         });
@@ -207,13 +207,9 @@ pub fn Registry(comptime options: RegistryOptions) type {
             return self.getEntityArchetype(entt).getConst(Component, entt);
         }
 
-        pub fn createQueue(self: *@This()) !usize {
+        pub fn createQueue(self: *@This()) !*CommandsQueue {
             try self.queues.append(self.allocator, CommandsQueue.init(self.allocator));
-            return self.queues.items.len - 1;
-        }
-
-        pub fn getQueue(self: *@This(), index: usize) *CommandsQueue {
-            return &self.queues.items[index];
+            return &self.queues.items[self.queues.items.len - 1];
         }
 
         fn deinitQueues(self: *@This()) void {
@@ -228,15 +224,14 @@ pub fn Registry(comptime options: RegistryOptions) type {
             // swap removed
             self.removed.swap();
             // sync queues
-            for (0..self.queues.items.len) |index| {
-                try self.syncQueue(index);
+            for (self.queues.items) |*queue| {
+                try self.syncQueue(queue);
             }
             self.deinitQueues();
             self.tick();
         }
 
-        fn syncQueue(self: *@This(), index: usize) !void {
-            const queue = self.getQueue(index);
+        fn syncQueue(self: *@This(), queue: *CommandsQueue) !void {
             std.debug.assert(queue.commands.items.len == 0 or queue.commands.items[0] == .context or queue.commands.items[0] == .despawn);
 
             // deal with despawn case

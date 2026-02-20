@@ -1,2 +1,2 @@
-pub const CommandsQueueFactory = @import("queue.zig").CommandsQueue;
+pub const CommandsQueue = @import("queue.zig").CommandsQueueFactory;
 pub const Commands = @import("factory.zig").CommandsFactory;

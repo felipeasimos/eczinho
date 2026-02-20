@@ -5,7 +5,7 @@ pub const CommandsQueueOptions = struct {
     Entity: type,
 };
 
-pub fn CommandsQueue(comptime options: CommandsQueueOptions) type {
+pub fn CommandsQueueFactory(comptime options: CommandsQueueOptions) type {
     return struct {
         pub const Entity = options.Entity;
         pub const Components = options.Components;
@@ -59,25 +59,6 @@ pub fn CommandsQueue(comptime options: CommandsQueueOptions) type {
             self.commands.deinit(self.allocator);
         }
 
-        fn startContext(self: *@This(), new_context_id: ContextId) !void {
-            self.current_context_index = self.commands.items.len;
-            try self.commands.append(self.allocator, .{
-                .context = .{
-                    .id = new_context_id,
-                    .size = 0,
-                },
-            });
-        }
-
-        fn handleContextChange(self: *@This(), incoming_context_id: ContextId) !void {
-            if (self.getCurrentContext()) |current_context| {
-                if (std.meta.eql(incoming_context_id, current_context.id)) {
-                    return;
-                }
-            }
-            try self.startContext(incoming_context_id);
-        }
-
         pub fn addCommand(self: *@This(), context: ContextId, command: Command) !void {
             try self.handleContextChange(context);
             try self.commands.append(self.allocator, command);
@@ -96,17 +77,6 @@ pub fn CommandsQueue(comptime options: CommandsQueueOptions) type {
             });
             self.next_entity_placeholder += 1;
             return new_placeholder;
-        }
-
-        pub fn useEntity(self: *@This(), entt: Entity) void {
-            self.handleContextChange(.{ .entity = entt });
-        }
-
-        fn getCurrentContext(self: *@This()) ?Context {
-            if (self.current_context_index) |index| {
-                return self.commands.items[index].context;
-            }
-            return null;
         }
 
         pub fn despawn(self: *@This(), context_id: ContextId) !void {
@@ -140,17 +110,62 @@ pub fn CommandsQueue(comptime options: CommandsQueueOptions) type {
                 self.index -= 1;
             }
         };
+
+        fn startContext(self: *@This(), new_context_id: ContextId) !void {
+            self.current_context_index = self.commands.items.len;
+            try self.commands.append(self.allocator, .{
+                .context = .{
+                    .id = new_context_id,
+                    .size = 0,
+                },
+            });
+        }
+
+        fn handleContextChange(self: *@This(), incoming_context_id: ContextId) !void {
+            if (self.getCurrentContext()) |current_context| {
+                if (std.meta.eql(incoming_context_id, current_context.id)) {
+                    return;
+                }
+            }
+            try self.startContext(incoming_context_id);
+        }
+
+        fn getCurrentContext(self: *@This()) ?Context {
+            if (self.current_context_index) |index| {
+                return self.commands.items[index].context;
+            }
+            return null;
+        }
     };
 }
 
-test CommandsQueue {
-    const EntityTypeFactory = @import("../entity.zig").EntityTypeFactory;
-    const Components = @import("../components.zig").Components;
-    const typeA = u64;
-    const typeB = u32;
-    var queue = CommandsQueue(.{
-        .Components = Components(&.{ typeA, typeB }),
-        .Entity = EntityTypeFactory(.medium),
-    }).init(std.testing.allocator);
+test CommandsQueueFactory {
+    const Entity = @import("../entity.zig").EntityTypeFactory(.small);
+    const Components = @import("../components.zig").Components(&.{ u64, u32 });
+    const CommandsQueueType = CommandsQueueFactory(.{
+        .Components = Components,
+        .Entity = Entity,
+    });
+    var queue = CommandsQueueType.init(std.testing.allocator);
+
+    const placeholder = try queue.addNewEntity();
+    try queue.addCommand(.{ .placeholder = placeholder }, .{ .add = Components.getAsUnion(@as(u64, 8)) });
+    try std.testing.expectEqual(2, queue.commands.items.len);
+
+    var iter = queue.iterator();
+    try std.testing.expectEqual(CommandsQueueType.Command{
+        .context = CommandsQueueType.Context{
+            .id = CommandsQueueType.ContextId{ .placeholder = placeholder },
+            .size = 1,
+        },
+    }, iter.next());
+
+    try std.testing.expectEqual(CommandsQueueType.Command{
+        .add = Components.getAsUnion(@as(u64, 8)),
+    }, iter.next());
+
+    try std.testing.expectEqual(null, iter.next());
+    try std.testing.expectEqual(0, queue.current_context_index);
+
     defer queue.deinit();
 }

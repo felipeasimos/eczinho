@@ -9,7 +9,7 @@ fi
 
 git add .
 
-if ! zlint; then
+if ! zlint --deny-warnings; then
     exit 1
 fi
 

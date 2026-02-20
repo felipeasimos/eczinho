@@ -9,10 +9,7 @@ pub const Removed = @import("removed/factory.zig").Removed;
 pub const SchedulerLabel = @import("scheduler.zig").SchedulerLabel;
 pub const AppEvents = @import("app_events.zig");
 
-test "all" {
-    _ = @import("registry.zig").Registry;
-    _ = @import("query/query.zig");
-    _ = @import("query/factory.zig");
-    _ = @import("app.zig");
-    _ = @import("builder.zig");
+test "eczinho" {
+    const std = @import("std");
+    std.testing.refAllDeclsRecursive(@This());
 }

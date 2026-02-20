@@ -38,8 +38,3 @@ fn EventIndexBuffer(comptime T: type) type {
         }
     };
 }
-
-test EventIndexBuffer {
-    var buf = EventIndexBuffer(u64).init(std.testing.allocator);
-    defer buf.deinit();
-}
