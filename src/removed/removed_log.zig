@@ -12,7 +12,7 @@ pub fn RemovedComponentsLog(comptime options: RemovedComponentsLogOptions) type 
         pub const Components = options.Components;
         pub const Entity = options.Entity;
 
-        const RemovedLogEntryType = struct {
+        pub const RemovedLogEntryType = struct {
             entity: Entity,
             tick: Tick,
         };
@@ -59,4 +59,21 @@ pub fn RemovedComponentsLog(comptime options: RemovedComponentsLogOptions) type 
             });
         }
     };
+}
+
+test RemovedComponentsLog {
+    const Entity = @import("../entity.zig").EntityTypeFactory(.medium);
+    const Components = @import("../components.zig").Components(&.{ u64, u32 });
+    var removed = RemovedComponentsLog(.{ .Components = Components, .Entity = Entity }).init(std.testing.allocator);
+    defer removed.deinit();
+
+    try std.testing.expectEqual(0, removed.total(u64));
+    try removed.addRemoved(u64, Entity.fromInt(0), 0);
+    try std.testing.expectEqual(1, removed.total(u64));
+
+    var cursor: usize = 0;
+    try std.testing.expectEqual(0, removed.remaining(u64, &cursor));
+    removed.swap();
+    try std.testing.expectEqual(1, removed.remaining(u64, &cursor));
+    try std.testing.expectEqual(@TypeOf(removed).RemovedLogEntryType{ .entity = Entity.fromInt(0), .tick = 0 }, removed.readOne(u64, &cursor));
 }

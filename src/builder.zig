@@ -63,7 +63,7 @@ pub const AppContextBuilder = struct {
     }
     pub fn build(self: @This()) type {
         return app.AppContext(.{
-            .Events = EventsFactory(self.events, &.{app_events.AppExit}),
+            .Events = EventsFactory(self.events ++ .{app_events.AppExit}),
             .Resources = ResourcesFactory(self.resources),
             .Components = ComponentsFactory(self.components),
             .Entity = self.entity,

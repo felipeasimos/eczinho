@@ -86,3 +86,40 @@ pub fn EventReader(comptime options: EventOptions) type {
         };
     };
 }
+
+test EventWriter {
+    const std = @import("std");
+    const Events = @import("events.zig").Events(&.{ u64, u32 });
+    const EventStore = EventStoreFactory(.{
+        .Events = Events,
+    });
+    var store = EventStore.init(std.testing.allocator);
+    defer store.deinit();
+
+    var writer = EventWriter(.{ .Events = Events, .T = u64 }).init(&store);
+    defer writer.deinit();
+    writer.write(@as(u64, 8));
+}
+
+test EventReader {
+    const std = @import("std");
+    const Events = @import("events.zig").Events(&.{ u64, u32 });
+    const EventStore = EventStoreFactory(.{
+        .Events = Events,
+    });
+    var store = EventStore.init(std.testing.allocator);
+    defer store.deinit();
+
+    var data = try SystemData.init(std.testing.allocator, 1, 1);
+    defer data.deinit(std.testing.allocator);
+
+    const param = ParameterData{ .global_index = 0, .type_index = 0 };
+
+    var reader = EventReader(.{ .Events = Events, .T = u64 }).init(&store, &data, param);
+    defer reader.deinit();
+
+    try std.testing.expectEqual(0, reader.remaining());
+    try std.testing.expectEqual(true, reader.empty());
+    try std.testing.expectEqual(null, reader.readOne());
+    reader.clear();
+}

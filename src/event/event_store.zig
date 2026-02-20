@@ -91,3 +91,43 @@ pub fn EventStore(comptime options: EventStoreOptions) type {
         }
     };
 }
+
+test EventStore {
+    const Events = @import("events.zig").Events;
+    const EventStoreType = EventStore(.{ .Events = Events(&.{ u64, u32 }) });
+    var store = EventStoreType.init(std.testing.allocator);
+    defer store.deinit();
+
+    try store.write(@as(u64, 1));
+    try store.write(@as(u64, 2));
+    try store.write(@as(u64, 3));
+
+    try store.write(@as(u32, 4));
+    try store.write(@as(u32, 5));
+    try store.write(@as(u32, 6));
+
+    var u64_cursor: usize = 0;
+    var u32_cursor: usize = 0;
+
+    try std.testing.expectEqual(0, store.remaining(u64, &u64_cursor));
+    try std.testing.expectEqual(0, store.remaining(u32, &u32_cursor));
+    store.swap();
+    try std.testing.expectEqual(3, store.remaining(u64, &u64_cursor));
+    try std.testing.expectEqual(3, store.remaining(u32, &u32_cursor));
+
+    // u64
+    try std.testing.expectEqual(1, store.readOne(u64, &u64_cursor));
+    try std.testing.expectEqual(2, store.remaining(u64, &u64_cursor));
+
+    store.clear(u64, &u64_cursor);
+
+    try std.testing.expectEqual(0, store.remaining(u64, &u64_cursor));
+
+    // u32
+    try std.testing.expectEqual(4, store.readOne(u32, &u32_cursor));
+    try std.testing.expectEqual(2, store.remaining(u32, &u32_cursor));
+
+    store.clear(u32, &u32_cursor);
+
+    try std.testing.expectEqual(0, store.remaining(u32, &u32_cursor));
+}

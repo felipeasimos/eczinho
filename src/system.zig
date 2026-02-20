@@ -6,6 +6,7 @@ const EventStoreFactory = @import("event/event_store.zig").EventStore;
 const RemovedLogFactory = @import("removed/removed_log.zig").RemovedComponentsLog;
 const event = @import("event/event.zig");
 const removed = @import("removed/removed.zig");
+const commands = @import("commands/commands.zig");
 const SystemData = @import("system_data.zig").SystemData;
 const ParameterData = @import("parameter_data.zig").ParameterData;
 
@@ -27,6 +28,10 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             .Events = Events,
         });
         pub const RemovedLog = RemovedLogFactory(.{
+            .Components = Components,
+            .Entity = Entity,
+        });
+        pub const CommandsQueue = commands.CommandsQueue(.{
             .Components = Components,
             .Entity = Entity,
         });
@@ -123,6 +128,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
                     *EventStore => deps.event_store,
                     *SystemData => deps.system_data,
                     *RemovedLog => deps.removed_logs,
+                    *CommandsQueue => try deps.registry.createQueue(),
                     ParameterData => ParameterData{
                         .global_index = i,
                         .type_index = numOfType(InitParams[0..i], param.type.?),

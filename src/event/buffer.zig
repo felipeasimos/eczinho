@@ -12,34 +12,63 @@ pub fn EventBuffer(comptime T: type) type {
 
 fn EventIndexBuffer(comptime T: type) type {
     return struct {
+        // max number of written events
         count: usize = 0,
-        read_count: usize = 0,
-        pub fn init(_: std.mem.Allocator) @This() {
+        // last readable id
+        last_readable_count: usize = 0,
+        // first avaiable readable event
+        first_readable_id: usize = 0,
+        pub inline fn init(_: std.mem.Allocator) @This() {
             return .{};
         }
-        pub fn deinit(self: *@This()) void {
+        pub inline fn deinit(self: *@This()) void {
             _ = self;
         }
-        pub fn swap(self: *@This()) void {
-            self.read_count = self.count;
+        pub inline fn swap(self: *@This()) void {
+            self.first_readable_id = self.last_readable_count;
+            self.last_readable_count = self.count;
         }
-        pub fn write(self: *@This(), _: T) !void {
+        pub inline fn write(self: *@This(), _: T) !void {
             self.count += 1;
         }
-        pub fn remaining(self: *@This(), index_ptr: *usize) usize {
-            return self.read_count - index_ptr.*;
+        inline fn normalize(self: *@This(), index_ptr: *usize) void {
+            if (index_ptr.* < self.first_readable_id) {
+                index_ptr.* = self.first_readable_id;
+            }
         }
-        pub fn readOne(self: *@This(), index_ptr: *usize) T {
-            std.debug.assert(index_ptr.* < self.read_count);
+        pub inline fn remaining(self: *@This(), index_ptr: *usize) usize {
+            self.normalize(index_ptr);
+            return self.last_readable_count - index_ptr.*;
+        }
+        pub inline fn readOne(self: *@This(), index_ptr: *usize) T {
+            std.debug.assert(index_ptr.* < self.last_readable_count);
+            self.normalize(index_ptr);
+            index_ptr.* += 1;
             return T{};
         }
-        pub fn clear(self: *@This(), index_ptr: *usize) void {
-            index_ptr.* = self.read_count;
+        pub inline fn clear(self: *@This(), index_ptr: *usize) void {
+            index_ptr.* = self.last_readable_count;
         }
     };
 }
 
 test EventIndexBuffer {
-    var buf = EventIndexBuffer(u64).init(std.testing.allocator);
+    const ZST = struct {};
+    var buf = EventIndexBuffer(ZST).init(std.testing.allocator);
     defer buf.deinit();
+
+    try buf.write(.{});
+    try buf.write(.{});
+    try buf.write(.{});
+
+    var cursor: usize = 0;
+    try std.testing.expectEqual(0, buf.remaining(&cursor));
+    buf.swap();
+    try std.testing.expectEqual(3, buf.remaining(&cursor));
+
+    try std.testing.expectEqual(ZST{}, buf.readOne(&cursor));
+    try std.testing.expectEqual(2, buf.remaining(&cursor));
+    buf.clear(&cursor);
+
+    try std.testing.expectEqual(0, buf.remaining(&cursor));
 }

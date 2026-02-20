@@ -105,7 +105,7 @@ pub const Array = struct {
         additional: usize,
     ) !void {
         try self.ensureCapacity(allocator, self.len + additional);
-        self.len += 1;
+        self.len += additional;
     }
 
     pub fn append(
@@ -134,7 +134,7 @@ pub const Array = struct {
         return self.getAs(T, index).*;
     }
 
-    pub fn removeLast(self: *Array) void {
+    fn removeLast(self: *Array) void {
         std.debug.assert(self.len > 0);
         self.len -= 1;
     }
@@ -152,3 +152,21 @@ pub const Array = struct {
         self.len -= 1;
     }
 };
+
+test Array {
+    var arr = Array.init(@sizeOf(u64), @alignOf(u64));
+    defer arr.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(0, arr.length());
+    try arr.reserve(std.testing.allocator, 8);
+    try std.testing.expectEqual(8, arr.length());
+    try arr.append(std.testing.allocator, @as(u64, 8));
+    try arr.append(std.testing.allocator, @as(u64, 16));
+
+    try std.testing.expectEqual(8, arr.getAs(u64, 8).*);
+    try std.testing.expectEqual(8, arr.getConst(u64, 8));
+
+    arr.swapRemove(9);
+    try std.testing.expectEqual(9, arr.length());
+    try std.testing.expectEqual(8, arr.getConst(u64, 8));
+}
