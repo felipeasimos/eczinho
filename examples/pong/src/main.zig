@@ -36,17 +36,10 @@ const BallPaddleCollision = struct {
     safe_x: f32,
     paddle: enum { Left, Right },
 };
-const TopBottomCollision = enum {
-    Top,
-    Bottom,
-};
+
 const GoalCollision = enum { Left, Right };
 
 const Context = ecs.AppContextBuilder.init()
-    .addEvents(&.{
-        BallPaddleCollision,
-        TopBottomCollision,
-    })
     .addEvent(GoalCollision)
     .addResource(std.Random)
     .addResource(Score)
@@ -90,36 +83,11 @@ fn reactGoalCollision(commands: Commands, res: Resource(Score), q: Query(.{ .q =
     }
 }
 
-fn reactBallPaddleCollision(q: Query(.{ .q = &.{ *Velocity, *Position }, .with = &.{Ball} }), reader: EventReader(BallPaddleCollision)) void {
-    if (reader.readOne()) |col| {
-        reader.clear();
-        const vel_ptr, const pos_ptr = q.single();
-        vel_ptr.x *= -1.2;
-
-        pos_ptr.x = col.safe_x;
-
-        vel_ptr.y = col.center_diff * BALL_MAX_SPEED;
-    }
-}
-
-fn reactTopBottomCollision(q: Query(.{ .q = &.{ *Velocity, *Position, Rect }, .with = &.{Ball} }), reader: EventReader(TopBottomCollision)) void {
-    if (reader.readOne()) |col| {
-        reader.clear();
-        if (q.optSingle()) |data| {
-            const vel_ptr, const pos_ptr, const rect = data;
-            vel_ptr.y *= -1;
-
-            pos_ptr.y = switch (col) {
-                .Top => 1,
-                .Bottom => @as(f32, @floatFromInt(rl.getScreenHeight())) - rect.height - 1,
-            };
-        }
-    }
-}
-
 fn checkCollision(
-    a: struct { Rect, Position },
-    b: struct { Rect, Position },
+    a: anytype,
+    b: anytype,
+    // a: struct { Rect, Position },
+    // b: struct { Rect, Position },
 ) bool {
     const a_rect, const a_pos = a;
     const b_rect, const b_pos = b;
@@ -152,37 +120,48 @@ fn checkGoalCollision(b: ball, writer: EventWriter(GoalCollision)) void {
     }
 }
 
+const ball_ptr = Query(.{ .q = &.{ Rect, *Position, *Velocity }, .with = &.{Ball} });
 const enemy = Query(.{ .q = &.{ Rect, Position }, .with = &.{Enemy} });
 const player = Query(.{ .q = &.{ Rect, Position }, .with = &.{Player} });
-fn checkPaddleBallCollision(b: ball, e: enemy, p: player, writer: EventWriter(BallPaddleCollision)) !void {
-    const ball_info = b.optSingle() orelse return;
+fn checkPaddleBallCollision(b: ball_ptr, e: enemy, p: player) !void {
+    const ball_rect, const ball_pos_ptr, const ball_vel_ptr = b.optSingle() orelse return;
     const enemy_info = e.single();
     const player_info = p.single();
-    if (checkCollision(ball_info, enemy_info)) {
-        const enemy_half = enemy_info[1].y + (enemy_info[0].height / 2);
-        const ball_half = ball_info[1].y + (ball_info[0].height / 2);
-        writer.write(BallPaddleCollision{
-            .paddle = .Right,
-            .safe_x = @as(f32, @floatFromInt(rl.getScreenWidth())) - enemy_info[0].width - ball_info[0].width,
-            .center_diff = (ball_half - enemy_half) / enemy_half,
-        });
-    } else if (checkCollision(ball_info, player_info)) {
-        const player_half = player_info[1].y + (player_info[0].height / 2);
-        const ball_half = ball_info[1].y + (ball_info[0].height / 2);
-        writer.write(BallPaddleCollision{
-            .paddle = .Left,
-            .safe_x = player_info[0].width,
-            .center_diff = (ball_half - player_half) / player_half,
-        });
+    const result: ?struct { f32, f32 } = collision_result: {
+        if (checkCollision(.{ ball_rect, ball_pos_ptr }, enemy_info)) {
+            const enemy_half = enemy_info[1].y + (enemy_info[0].height / 2);
+            const ball_half = ball_pos_ptr.y + (ball_rect.height / 2);
+            const safe_x = @as(f32, @floatFromInt(rl.getScreenWidth())) - enemy_info[0].width - ball_rect.width;
+            const center_diff = (ball_half - enemy_half) / enemy_half;
+            break :collision_result .{ safe_x, center_diff };
+        } else if (checkCollision(.{ ball_rect, ball_pos_ptr }, player_info)) {
+            const player_half = player_info[1].y + (player_info[0].height / 2);
+            const ball_half = ball_pos_ptr.y + (ball_rect.height / 2);
+
+            const safe_x = player_info[0].width;
+            const center_diff = (ball_half - player_half) / player_half;
+            break :collision_result .{ safe_x, center_diff };
+        }
+        break :collision_result null;
+    };
+    if (result) |collision_info| {
+        const safe_x, const center_diff = collision_info;
+        ball_vel_ptr.x *= -1.2;
+        ball_pos_ptr.x = safe_x;
+
+        ball_vel_ptr.y = center_diff * BALL_MAX_SPEED;
     }
 }
 
-fn checkTopBottomCollision(q: Query(.{ .q = &.{ Rect, Position }, .with = &.{Ball} }), writer: EventWriter(TopBottomCollision)) void {
-    const rect, const pos = q.optSingle() orelse return;
-    if (pos.y + rect.height > @as(f32, @floatFromInt(rl.getScreenHeight()))) {
-        writer.write(TopBottomCollision.Bottom);
-    } else if (pos.y < 0) {
-        writer.write(TopBottomCollision.Top);
+fn checkTopBottomCollision(q: Query(.{ .q = &.{ Rect, *Position, *Velocity }, .with = &.{Ball} })) void {
+    const rect, const pos_ptr, const vel_ptr = q.optSingle() orelse return;
+
+    if (pos_ptr.y + rect.height > @as(f32, @floatFromInt(rl.getScreenHeight())) and vel_ptr.y > 0) {
+        vel_ptr.y *= -1;
+        pos_ptr.y = @as(f32, @floatFromInt(rl.getScreenHeight())) - rect.height - 1;
+    } else if (pos_ptr.y < 0 and vel_ptr.y < 0) {
+        vel_ptr.y *= -1;
+        pos_ptr.y = 1;
     }
 }
 
@@ -334,12 +313,10 @@ pub fn main() !void {
         .addSystem(.Update, respawnBall)
         .addSystem(.Update, repositionBall)
         .addSystem(.Update, handleControls)
+        .addSystem(.Update, checkTopBottomCollision)
+        .addSystem(.Update, checkPaddleBallCollision)
         .addSystem(.Update, reactGoalCollision)
         .addSystem(.Update, checkGoalCollision)
-        .addSystem(.Update, reactBallPaddleCollision)
-        .addSystem(.Update, checkPaddleBallCollision)
-        .addSystem(.Update, reactTopBottomCollision)
-        .addSystem(.Update, checkTopBottomCollision)
         .addSystem(.Update, updatePositions)
         .addSystem(.Update, moveEnemy)
         .addSystem(.Render, renderRectangles)
