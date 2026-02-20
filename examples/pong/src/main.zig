@@ -31,12 +31,6 @@ const Ball = struct {};
 const Score = struct { player: u32 = 0, enemy: u32 = 0 };
 
 // events
-const BallPaddleCollision = struct {
-    center_diff: f32,
-    safe_x: f32,
-    paddle: enum { Left, Right },
-};
-
 const GoalCollision = enum { Left, Right };
 
 const Context = ecs.AppContextBuilder.init()

@@ -20,6 +20,7 @@ pub fn RemovedComponentsLog(comptime options: RemovedComponentsLogOptions) type 
         logs: [Components.Len]RemovedComponentLogType,
 
         pub fn init(alloc: std.mem.Allocator) @This() {
+            // SAFETY: populated right away
             var new: @This() = undefined;
             for (0..Components.Len) |i| {
                 new.logs[i] = RemovedComponentLogType.init(alloc);

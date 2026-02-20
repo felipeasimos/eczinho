@@ -4,7 +4,6 @@ const archetype = @import("archetype.zig");
 const commands = @import("commands/commands.zig");
 const removed = @import("removed/removed.zig");
 const Tick = @import("types.zig").Tick;
-const Messages = @import("messages.zig").Messages;
 
 pub const RegistryOptions = struct {
     Components: type,
