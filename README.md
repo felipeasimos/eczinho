@@ -12,10 +12,9 @@ zig build --build-file examples/pong/build.zig
 
 # TODO
 
-- [ ] better compile error for double add in commands
-- [ ] added, changed and removed queries
-- [ ] cache queries
-- [ ] hierarchy
+- [ ] zbench
+- [ ] more tests as example in source files
+- [ ] more test files
 - [ ] bundles
    - [ ] reflection bundle
    - [ ] spatial bundle
@@ -28,4 +27,6 @@ zig build --build-file examples/pong/build.zig
    - [ ] scheduler
    - [ ] event store
    - [ ] app builder
+- [ ] cache queries
+- [ ] hierarchy
 - [ ] 0.16 std.Io multithreading

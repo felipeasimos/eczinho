@@ -3,8 +3,8 @@ const rl = @import("raylib");
 const options = @import("options");
 const ecs = @import("eczinho");
 
-const SCREEN_WIDTH = 1200;
-const SCREEN_HEIGHT = 800;
+const SCREEN_WIDTH = 800;
+const SCREEN_HEIGHT = 400;
 const PADDLE_WIDTH = 50;
 const PADDLE_HEIGHT = 200;
 const BALL_SIDE = 10;
@@ -31,22 +31,9 @@ const Ball = struct {};
 const Score = struct { player: u32 = 0, enemy: u32 = 0 };
 
 // events
-const BallPaddleCollision = struct {
-    center_diff: f32,
-    safe_x: f32,
-    paddle: enum { Left, Right },
-};
-const TopBottomCollision = enum {
-    Top,
-    Bottom,
-};
 const GoalCollision = enum { Left, Right };
 
 const Context = ecs.AppContextBuilder.init()
-    .addEvents(&.{
-        BallPaddleCollision,
-        TopBottomCollision,
-    })
     .addEvent(GoalCollision)
     .addResource(std.Random)
     .addResource(Score)
@@ -59,12 +46,14 @@ const Context = ecs.AppContextBuilder.init()
     })
     .addComponent(Ball)
     .build();
+
 const Commands = Context.Commands;
 const EventReader = Context.EventReader;
 const EventWriter = Context.EventWriter;
 const Query = Context.Query;
 const Resource = Context.Resource;
 const Entity = Context.Entity;
+const Removed = Context.Removed;
 
 fn updatePositions(q: Query(.{ .q = &.{ *Position, Velocity } })) void {
     var iter = q.iter();
@@ -80,7 +69,7 @@ fn reactGoalCollision(commands: Commands, res: Resource(Score), q: Query(.{ .q =
     if (reader.readOne()) |goal| {
         reader.clear();
         const entt = single[0];
-        commands.despawn(entt);
+        commands.remove(Ball, entt);
         switch (goal) {
             .Right => res.get().enemy += 1,
             .Left => res.get().player += 1,
@@ -88,34 +77,11 @@ fn reactGoalCollision(commands: Commands, res: Resource(Score), q: Query(.{ .q =
     }
 }
 
-fn reactBallPaddleCollision(q: Query(.{ .q = &.{ *Velocity, *Position }, .with = &.{Ball} }), reader: EventReader(BallPaddleCollision)) void {
-    if (reader.readOne()) |col| {
-        reader.clear();
-        const vel_ptr, const pos_ptr = q.single();
-        vel_ptr.x *= -1.2;
-
-        pos_ptr.x = col.safe_x;
-
-        vel_ptr.y = col.center_diff * BALL_MAX_SPEED;
-    }
-}
-
-fn reactTopBottomCollision(q: Query(.{ .q = &.{ *Velocity, *Position, Rect }, .with = &.{Ball} }), reader: EventReader(TopBottomCollision)) void {
-    if (reader.readOne()) |col| {
-        reader.clear();
-        const vel_ptr, const pos_ptr, const rect = q.single();
-        vel_ptr.y *= -1;
-
-        pos_ptr.y = switch (col) {
-            .Top => 1,
-            .Bottom => @as(f32, @floatFromInt(rl.getScreenHeight())) - rect.height - 1,
-        };
-    }
-}
-
 fn checkCollision(
-    a: struct { Rect, Position },
-    b: struct { Rect, Position },
+    a: anytype,
+    b: anytype,
+    // a: struct { Rect, Position },
+    // b: struct { Rect, Position },
 ) bool {
     const a_rect, const a_pos = a;
     const b_rect, const b_pos = b;
@@ -148,37 +114,48 @@ fn checkGoalCollision(b: ball, writer: EventWriter(GoalCollision)) void {
     }
 }
 
+const ball_ptr = Query(.{ .q = &.{ Rect, *Position, *Velocity }, .with = &.{Ball} });
 const enemy = Query(.{ .q = &.{ Rect, Position }, .with = &.{Enemy} });
 const player = Query(.{ .q = &.{ Rect, Position }, .with = &.{Player} });
-fn checkPaddleBallCollision(b: ball, e: enemy, p: player, writer: EventWriter(BallPaddleCollision)) !void {
-    const ball_info = b.optSingle() orelse return;
+fn checkPaddleBallCollision(b: ball_ptr, e: enemy, p: player) !void {
+    const ball_rect, const ball_pos_ptr, const ball_vel_ptr = b.optSingle() orelse return;
     const enemy_info = e.single();
     const player_info = p.single();
-    if (checkCollision(ball_info, enemy_info)) {
-        const enemy_half = enemy_info[1].y + (enemy_info[0].height / 2);
-        const ball_half = ball_info[1].y + (ball_info[0].height / 2);
-        writer.write(BallPaddleCollision{
-            .paddle = .Right,
-            .safe_x = @as(f32, @floatFromInt(rl.getScreenWidth())) - enemy_info[0].width - ball_info[0].width,
-            .center_diff = (ball_half - enemy_half) / enemy_half,
-        });
-    } else if (checkCollision(ball_info, player_info)) {
-        const player_half = player_info[1].y + (player_info[0].height / 2);
-        const ball_half = ball_info[1].y + (ball_info[0].height / 2);
-        writer.write(BallPaddleCollision{
-            .paddle = .Left,
-            .safe_x = player_info[0].width,
-            .center_diff = (ball_half - player_half) / player_half,
-        });
+    const result: ?struct { f32, f32 } = collision_result: {
+        if (checkCollision(.{ ball_rect, ball_pos_ptr }, enemy_info)) {
+            const enemy_half = enemy_info[1].y + (enemy_info[0].height / 2);
+            const ball_half = ball_pos_ptr.y + (ball_rect.height / 2);
+            const safe_x = @as(f32, @floatFromInt(rl.getScreenWidth())) - enemy_info[0].width - ball_rect.width;
+            const center_diff = (ball_half - enemy_half) / enemy_half;
+            break :collision_result .{ safe_x, center_diff };
+        } else if (checkCollision(.{ ball_rect, ball_pos_ptr }, player_info)) {
+            const player_half = player_info[1].y + (player_info[0].height / 2);
+            const ball_half = ball_pos_ptr.y + (ball_rect.height / 2);
+
+            const safe_x = player_info[0].width;
+            const center_diff = (ball_half - player_half) / player_half;
+            break :collision_result .{ safe_x, center_diff };
+        }
+        break :collision_result null;
+    };
+    if (result) |collision_info| {
+        const safe_x, const center_diff = collision_info;
+        ball_vel_ptr.x *= -1.2;
+        ball_pos_ptr.x = safe_x;
+
+        ball_vel_ptr.y = center_diff * BALL_MAX_SPEED;
     }
 }
 
-fn checkTopBottomCollision(q: Query(.{ .q = &.{ Rect, Position }, .with = &.{Ball} }), writer: EventWriter(TopBottomCollision)) void {
-    const rect, const pos = q.optSingle() orelse return;
-    if (pos.y + rect.height > @as(f32, @floatFromInt(rl.getScreenHeight()))) {
-        writer.write(TopBottomCollision.Bottom);
-    } else if (pos.y < 0) {
-        writer.write(TopBottomCollision.Top);
+fn checkTopBottomCollision(q: Query(.{ .q = &.{ Rect, *Position, *Velocity }, .with = &.{Ball} })) void {
+    const rect, const pos_ptr, const vel_ptr = q.optSingle() orelse return;
+
+    if (pos_ptr.y + rect.height > @as(f32, @floatFromInt(rl.getScreenHeight())) and vel_ptr.y > 0) {
+        vel_ptr.y *= -1;
+        pos_ptr.y = @as(f32, @floatFromInt(rl.getScreenHeight())) - rect.height - 1;
+    } else if (pos_ptr.y < 0 and vel_ptr.y < 0) {
+        vel_ptr.y *= -1;
+        pos_ptr.y = 1;
     }
 }
 
@@ -198,15 +175,25 @@ fn handleControls(q: Query(.{ .q = &.{ *Position, Rect }, .with = &.{Player} }),
     }
 }
 
-fn moveEnemy(q: Query(.{ .q = &.{ *Velocity, *Position, Rect }, .with = &.{Enemy} })) void {
-    const vel_ptr, const pos_ptr, const rect = q.single();
-    const screen_height: f32 = @floatFromInt(rl.getScreenHeight());
-    if (pos_ptr.y + rect.height > screen_height) {
-        vel_ptr.y *= -1;
-        pos_ptr.y = screen_height - rect.height;
-    } else if (pos_ptr.y < 0) {
-        vel_ptr.y *= -1;
-        pos_ptr.y = 0;
+fn moveEnemy(q: Query(.{ .q = &.{ *Position, Rect }, .with = &.{Enemy} })) void {
+    // const vel_ptr, const pos_ptr, const rect = q.single();
+    // const screen_height: f32 = @floatFromInt(rl.getScreenHeight());
+    // if (pos_ptr.y + rect.height > screen_height) {
+    //     vel_ptr.y *= -1;
+    //     pos_ptr.y = screen_height - rect.height;
+    // } else if (pos_ptr.y < 0) {
+    //     vel_ptr.y *= -1;
+    //     pos_ptr.y = 0;
+    // }
+    const pos_ptr, const rect = q.single();
+    if (rl.isKeyDown(rl.KeyboardKey.down)) {
+        if (pos_ptr.y + rect.height < @as(f32, @floatFromInt(rl.getScreenHeight()))) {
+            pos_ptr.y += PADDLE_SPEED;
+        }
+    } else if (rl.isKeyDown(rl.KeyboardKey.up)) {
+        if (pos_ptr.y > 0) {
+            pos_ptr.y -= PADDLE_SPEED;
+        }
     }
 }
 
@@ -232,6 +219,28 @@ fn createBall(commands: Commands, random: Resource(std.Random), q: Query(.{ .wit
         .add(Ball{});
 }
 
+fn respawnBall(commands: Commands, r: Removed(Ball)) void {
+    if (r.readOne()) |entt| {
+        _ = commands.entity(entt)
+            .add(Ball{});
+    }
+}
+
+fn repositionBall(q: Query(.{ .q = &.{ *Position, *Velocity }, .added = &.{Ball} }), random: Resource(std.Random)) void {
+    if (q.optSingle()) |data| {
+        const pos_ptr, const vel_ptr = data;
+        const rnd: std.Random = random.clone();
+        const angle = randomInRange(rnd, std.math.pi * 3.0 / 4.0, std.math.pi * 5.0 / 4.0);
+        const speed = BALL_MIN_SPEED + (rnd.float(f32) * (BALL_MAX_SPEED - BALL_MIN_SPEED));
+
+        const width: f32 = @floatFromInt(rl.getScreenWidth());
+        const height: f32 = @floatFromInt(rl.getScreenHeight());
+
+        pos_ptr.* = Position{ .x = width / 2, .y = height / 2 };
+        vel_ptr.* = Velocity{ .x = @cos(angle) * speed, .y = @sin(angle) * speed };
+    }
+}
+
 fn createPlayerPaddle(commands: Commands) void {
     _ = commands.spawn()
         .add(Position{ .x = 0, .y = 0 })
@@ -241,15 +250,18 @@ fn createPlayerPaddle(commands: Commands) void {
 
 fn createEnemyPaddle(commands: Commands) void {
     _ = commands.spawn()
-        .add(Enemy{})
         .add(Position{ .x = @as(f32, @floatFromInt(rl.getScreenWidth())) - PADDLE_WIDTH, .y = 0 })
         .add(Rect{ .width = PADDLE_WIDTH, .height = PADDLE_HEIGHT })
-        .add(Velocity{ .y = PADDLE_SPEED, .x = 0 });
+        .add(Enemy{});
+    // _ = commands.spawn()
+    //     .add(Enemy{})
+    //     .add(Position{ .x = @as(f32, @floatFromInt(rl.getScreenWidth())) - PADDLE_WIDTH, .y = 0 })
+    //     .add(Rect{ .width = PADDLE_WIDTH, .height = PADDLE_HEIGHT })
+    //     .add(Velocity{ .y = PADDLE_SPEED, .x = 0 });
 }
 
 fn renderRectangles(q: Query(.{ .q = &.{ Position, Rect } })) void {
     rl.beginDrawing();
-    defer rl.endDrawing();
     rl.clearBackground(rl.Color.black);
 
     var iter = q.iter();
@@ -264,6 +276,8 @@ fn renderRectangles(q: Query(.{ .q = &.{ Position, Rect } })) void {
 }
 
 fn renderScore(score: Resource(Score)) !void {
+    defer rl.endDrawing();
+
     const enemy_score = score.clone().enemy;
     const player_score = score.clone().player;
     var buf: [1024]u8 = undefined;
@@ -290,14 +304,13 @@ pub fn main() !void {
         .addSystem(.Startup, createPlayerPaddle)
         .addSystem(.Startup, createEnemyPaddle)
         .addSystem(.Startup, createBall)
-        .addSystem(.Update, createBall)
+        .addSystem(.Update, respawnBall)
+        .addSystem(.Update, repositionBall)
         .addSystem(.Update, handleControls)
+        .addSystem(.Update, checkTopBottomCollision)
+        .addSystem(.Update, checkPaddleBallCollision)
         .addSystem(.Update, reactGoalCollision)
         .addSystem(.Update, checkGoalCollision)
-        .addSystem(.Update, reactBallPaddleCollision)
-        .addSystem(.Update, checkPaddleBallCollision)
-        .addSystem(.Update, reactTopBottomCollision)
-        .addSystem(.Update, checkTopBottomCollision)
         .addSystem(.Update, updatePositions)
         .addSystem(.Update, moveEnemy)
         .addSystem(.Render, renderRectangles)
@@ -314,9 +327,4 @@ pub fn main() !void {
     try app.insert(Score{});
 
     try app.run();
-    // while (!rl.windowShouldClose()) {
-    //     rl.beginDrawing();
-    //     defer rl.endDrawing();
-    //     rl.clearBackground(rl.Color.white);
-    // }
 }

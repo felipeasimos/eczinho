@@ -3,7 +3,9 @@ const std = @import("std");
 const RegistryFactory = @import("registry.zig").Registry;
 const TypeStoreFactory = @import("resource/type_store.zig").TypeStore;
 const EventStoreFactory = @import("event/event_store.zig").EventStore;
+const RemovedLogFactory = @import("removed/removed_log.zig").RemovedComponentsLog;
 const event = @import("event/event.zig");
+const removed = @import("removed/removed.zig");
 const SystemData = @import("system_data.zig").SystemData;
 const ParameterData = @import("parameter_data.zig").ParameterData;
 
@@ -24,6 +26,10 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
         pub const EventStore = EventStoreFactory(.{
             .Events = Events,
         });
+        pub const RemovedLog = RemovedLogFactory(.{
+            .Components = Components,
+            .Entity = Entity,
+        });
 
         pub const FuncType = @TypeOf(function);
         pub const FuncInfo = @typeInfo(FuncType).@"fn";
@@ -37,9 +43,10 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
         pub const ArgsTuple = std.meta.ArgsTuple(FuncType);
 
         pub const NumEventReaders = numOfMarker(ParamsSlice, event.EventReader);
+        pub const NumRemovedReaders = numOfMarker(ParamsSlice, removed.Removed);
 
         pub fn initData(alloc: std.mem.Allocator) !SystemData {
-            return SystemData.init(alloc, NumEventReaders);
+            return SystemData.init(alloc, NumEventReaders, NumRemovedReaders);
         }
 
         fn getBaseType(comptime T: type) type {
@@ -98,6 +105,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             type_store: *TypeStore,
             event_store: *EventStore,
             system_data: *SystemData,
+            removed_logs: *RemovedLog,
         };
         inline fn initArg(comptime ArgType: type, deps: Dependencies) !ArgType {
             const InitFunc = @TypeOf(ArgType.init);
@@ -114,6 +122,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
                     *Registry => deps.registry,
                     *EventStore => deps.event_store,
                     *SystemData => deps.system_data,
+                    *RemovedLog => deps.removed_logs,
                     ParameterData => ParameterData{
                         .global_index = i,
                         .type_index = numOfType(InitParams[0..i], param.type.?),
