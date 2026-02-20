@@ -1,9 +1,9 @@
 const std = @import("std");
 const TypeHasher = @import("../type_hasher.zig").TypeHasher;
 
-pub fn Events(comptime EventTypes: []const type, comptime AdditionalTypes: []const type) type {
+pub fn Events(comptime EventTypes: []const type) type {
     return struct {
-        const Hasher = TypeHasher(EventTypes ++ AdditionalTypes);
+        const Hasher = TypeHasher(EventTypes);
         pub const EventTypeId = Hasher.TypeId;
         pub const Union = Hasher.Union;
         pub const Len = Hasher.Len;
@@ -27,7 +27,7 @@ test Events {
     const typeD = struct { a: u43 };
     const typeE = struct { a: u32, b: u54 };
 
-    const signature = Events(&.{ typeA, typeC, typeD, typeE }, &.{});
+    const signature = Events(&.{ typeA, typeC, typeD, typeE });
     try std.testing.expect(signature.isEvent(typeA));
     try std.testing.expect(!signature.isEvent(typeB));
     try std.testing.expect(signature.isEvent(typeC));

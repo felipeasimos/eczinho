@@ -183,7 +183,7 @@ pub fn App(comptime options: AppOptions) type {
 const TestAppContext = AppContext(.{
     .Resources = resource.Resources(&.{u7}),
     .Components = ComponentsFactory(&.{ u8, u64, u32 }),
-    .Events = event.Events(&.{u4}, &.{}),
+    .Events = event.Events(&.{u4}),
 });
 const Query = TestAppContext.Query;
 const Commands = TestAppContext.Commands;
