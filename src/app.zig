@@ -4,7 +4,7 @@ const ComponentsFactory = @import("components.zig").Components;
 const RegistryFactory = @import("registry.zig").Registry;
 const SchedulerFactory = @import("scheduler.zig").Scheduler;
 const EntityTypeFactory = @import("entity.zig").EntityTypeFactory;
-const SchedulerLabel = @import("scheduler.zig").SchedulerLabel;
+const StageLabel = @import("stage_label.zig").StageLabel;
 const query = @import("query/query.zig");
 const commands = @import("commands/commands.zig");
 const resource = @import("resource/resource.zig");
@@ -12,11 +12,13 @@ const event = @import("event/event.zig");
 const removed = @import("removed/removed.zig");
 const app_events = @import("app_events.zig");
 const Tick = @import("types.zig").Tick;
+const Bundle = @import("bundle/bundle.zig").Bundle;
 
 pub const AppContextOptions = struct {
     Components: type,
     Resources: type,
     Events: type,
+    Bundles: []const Bundle = &.{},
     Entity: type = EntityTypeFactory(.medium),
 };
 
@@ -26,6 +28,7 @@ pub fn AppContext(comptime options: AppContextOptions) type {
         pub const Components = options.Components;
         pub const Resources = options.Resources;
         pub const Events = options.Events;
+        pub const Bundles = options.Bundles;
         pub const TypeStore = resource.TypeStore(.{
             .Resources = Resources,
         });
@@ -97,7 +100,7 @@ pub fn AppContext(comptime options: AppContextOptions) type {
 pub const AppOptions = struct {
     Context: type,
     Systems: []const type = &.{},
-    Labels: []const SchedulerLabel = &.{},
+    Labels: []const StageLabel = &.{},
 };
 
 /// comptime struct used to encapsulate part of an application in modularized

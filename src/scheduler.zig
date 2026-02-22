@@ -4,22 +4,17 @@ const TypeStoreFactory = @import("resource/type_store.zig").TypeStore;
 const EventStoreFactory = @import("event/event_store.zig").EventStore;
 const RemovedLogFactory = @import("removed/removed_log.zig").RemovedComponentsLog;
 const SystemData = @import("system_data.zig").SystemData;
-
-pub const SchedulerLabel = enum {
-    Startup,
-    Update,
-    Render,
-};
+const StageLabel = @import("stage_label.zig").StageLabel;
 
 pub const SchedulerOptions = struct {
     Context: type,
     Systems: []const type,
-    Labels: []const SchedulerLabel,
+    Labels: []const StageLabel,
 };
 
-fn initSchedulerStages(comptime systems: []const type, comptime labels: []const SchedulerLabel) std.EnumArray(SchedulerLabel, []const type) {
-    var stages = std.EnumArray(SchedulerLabel, []const type).initFill(&.{});
-    for (std.enums.values(SchedulerLabel)) |label| {
+fn initSchedulerStages(comptime systems: []const type, comptime labels: []const StageLabel) std.EnumArray(StageLabel, []const type) {
+    var stages = std.EnumArray(StageLabel, []const type).initFill(&.{});
+    for (std.enums.values(StageLabel)) |label| {
         var stage_systems: []const type = &.{};
         for (systems, 0..) |system, i| {
             if (labels[i] == label) {
@@ -102,7 +97,7 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
             // sync deferred changes
             try self.registry.sync();
         }
-        fn runStage(self: *@This(), comptime label: SchedulerLabel) !void {
+        fn runStage(self: *@This(), comptime label: StageLabel) !void {
             inline for (SchedulerStages.get(label)) |system| {
                 const system_data_ptr = self.getSystemData(system);
                 try system.call(.{
@@ -119,7 +114,7 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
         pub fn run(self: *@This()) !void {
             try self.syncBarrier();
             // run every stage in order, except for startup
-            inline for (comptime std.enums.values(SchedulerLabel)[1..]) |label| {
+            inline for (comptime std.enums.values(StageLabel)[1..]) |label| {
                 try self.runStage(label);
             }
         }

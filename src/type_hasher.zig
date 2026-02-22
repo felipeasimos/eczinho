@@ -1,4 +1,5 @@
 const std = @import("std");
+const TypeIdInt = @import("types.zig").TypeIdInt;
 
 fn checkForNameCollision(comptime Types: []const type) void {
     inline for (Types, 0..) |T, i| {
@@ -23,14 +24,24 @@ fn initTypeId(comptime Types: []const type) type {
     }
     return @Type(.{ .@"enum" = .{
         .is_exhaustive = true,
-        .tag_type = std.math.IntFittingRange(0, Types.len),
+        .tag_type = TypeIdInt,
         .decls = &.{},
         .fields = &fields,
     } });
 }
 
-pub fn TypeHasher(comptime Types: []const type) type {
+pub fn TypeHasher(comptime RawTypes: []const type) type {
     return struct {
+        /// remove repeated types
+        pub const Types = Types: {
+            var types: []const type = &.{};
+            for (RawTypes) |Type| {
+                if (std.mem.indexOfScalar(type, types, Type) == null) {
+                    types = types ++ .{Type};
+                }
+            }
+            break :Types types;
+        };
         /// enum that will be used to make typeIds (tid) typed
         /// EVERY tid should be TypeId
         pub const TypeId = initTypeId(Types);
@@ -168,7 +179,7 @@ pub fn TypeHasher(comptime Types: []const type) type {
             return switch (@typeInfo(T)) {
                 .pointer => |p| {
                     if (!isRegisteredType(p.child)) {
-                        @compileError("Pointer doesn't point to a registered type");
+                        @compileError("Pointer " ++ @typeName(T) ++ " doesn't point to a registered type");
                     }
                     return p.child;
                 },
