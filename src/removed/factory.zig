@@ -65,7 +65,7 @@ pub fn Removed(comptime options: RemovedOptions) type {
                     .reader = reader,
                 };
             }
-            pub fn next(self: *@This()) ?T {
+            pub fn next(self: *@This()) ?Entity {
                 return self.reader.readOne();
             }
         };

@@ -2,7 +2,16 @@ const std = @import("std");
 const StageLabel = @import("../stage_label.zig").StageLabel;
 
 pub const Bundle = struct {
-    Context: BundleContext = .{},
+    ContextConstructor: fn (comptime Entity: type) BundleContext = (struct {
+        pub fn default(comptime _: type) BundleContext {
+            return BundleContext.Builder.init().build();
+        }
+    }).default,
+    FunctionsConstructor: fn (comptime AppContext: type) type = (struct {
+        pub fn default(comptime _: type) type {
+            return struct {};
+        }
+    }).default,
 
     /// system constructor should return a type in which all public declarations are either
     /// system functions or stagelabels. Each function should have a public StageLabel
@@ -16,7 +25,11 @@ pub const Bundle = struct {
     ///         }
     ///     };
     /// }
-    SystemsConstructor: fn (comptime AppContext: type) type,
+    SystemsConstructor: fn (comptime AppContext: type) type = (struct {
+        pub fn default(comptime _: type) type {
+            return struct {};
+        }
+    }).default,
 
     fn getSystemsStructDeclarations(self: @This(), comptime Context: type) []const std.builtin.Type.Declaration {
         return @typeInfo(self.SystemsConstructor(Context)).@"struct".decls;
