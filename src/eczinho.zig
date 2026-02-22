@@ -8,6 +8,7 @@ pub const Resource = @import("resource/factory.zig").ResourceFactory;
 pub const Removed = @import("removed/factory.zig").Removed;
 pub const StageLabel = @import("stage_label.zig").StageLabel;
 pub const AppEvents = @import("app_events.zig");
+pub const CoreBundles = @import("bundle/core/core.zig");
 
 test "eczinho" {
     const std = @import("std");

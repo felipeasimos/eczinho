@@ -13,10 +13,8 @@ const BALL_MIN_SPEED = 10;
 const PADDLE_SPEED = 7;
 
 // components
-const Position = struct {
-    x: f32,
-    y: f32,
-};
+const Position = ecs.CoreBundles.transform.Position;
+const Visible = ecs.CoreBundles.visibility.Visible;
 const Velocity = struct {
     x: f32,
     y: f32,
@@ -26,6 +24,7 @@ const Rect = struct {
     height: f32,
 };
 const Player = struct {};
+const Paddle = struct {};
 const Enemy = struct {};
 const Ball = struct {};
 const Score = struct { player: u32 = 0, enemy: u32 = 0 };
@@ -37,12 +36,18 @@ const Context = ecs.AppContextBuilder.init()
     .addEvent(GoalCollision)
     .addResource(std.Random)
     .addResource(Score)
+    .addBundle(ecs.CoreBundles.Transform)
+    .addBundle(ecs.CoreBundles.Visibility)
     .addComponents(&.{
         Velocity,
+        // oops? we added position in addBundle and also through here!
+        // No problem though! The system checks for redundant components
+        // (beware of type aliases btw!)
         Position,
         Rect,
         Player,
         Enemy,
+        Paddle,
     })
     .addComponent(Ball)
     .build();
@@ -213,10 +218,30 @@ fn createBall(commands: Commands, random: Resource(std.Random), q: Query(.{ .wit
     const height: f32 = @floatFromInt(rl.getScreenHeight());
     _ = commands.spawn()
         .add(Position{ .x = width / 2, .y = height / 2 })
+        .add(Visible.Visible)
         // .add(Velocity{ .x = @cos(angle) * speed, .y = speed })
         .add(Velocity{ .x = @cos(angle) * speed, .y = @sin(angle) * speed })
         .add(Rect{ .width = BALL_SIDE, .height = BALL_SIDE })
         .add(Ball{});
+}
+
+fn flickerOffPaddles(q: Query(.{ .q = &.{*Visible}, .with = &.{Paddle} }), r: Removed(Ball)) void {
+    if (r.empty()) return;
+    r.clear();
+    var iter = q.iter();
+    while (iter.next()) |tuple| {
+        const vis_ptr = tuple[0];
+        vis_ptr.* = Visible.Hidden;
+    }
+}
+
+fn flickerOnPaddles(q: Query(.{ .q = &.{*Visible}, .with = &.{Paddle} }), ball_is_back: Query(.{ .added = &.{Ball} })) void {
+    if (ball_is_back.empty()) return;
+    var iter = q.iter();
+    while (iter.next()) |tuple| {
+        const vis_ptr = tuple[0];
+        vis_ptr.* = Visible.Visible;
+    }
 }
 
 fn respawnBall(commands: Commands, r: Removed(Ball)) void {
@@ -245,6 +270,8 @@ fn createPlayerPaddle(commands: Commands) void {
     _ = commands.spawn()
         .add(Position{ .x = 0, .y = 0 })
         .add(Rect{ .width = PADDLE_WIDTH, .height = PADDLE_HEIGHT })
+        .add(Visible.Visible)
+        .add(Paddle{})
         .add(Player{});
 }
 
@@ -252,6 +279,8 @@ fn createEnemyPaddle(commands: Commands) void {
     _ = commands.spawn()
         .add(Position{ .x = @as(f32, @floatFromInt(rl.getScreenWidth())) - PADDLE_WIDTH, .y = 0 })
         .add(Rect{ .width = PADDLE_WIDTH, .height = PADDLE_HEIGHT })
+        .add(Visible.Visible)
+        .add(Paddle{})
         .add(Enemy{});
     // _ = commands.spawn()
     //     .add(Enemy{})
@@ -260,13 +289,14 @@ fn createEnemyPaddle(commands: Commands) void {
     //     .add(Velocity{ .y = PADDLE_SPEED, .x = 0 });
 }
 
-fn renderRectangles(q: Query(.{ .q = &.{ Position, Rect } })) void {
+fn renderRectangles(q: Query(.{ .q = &.{ Position, Rect, Visible } })) void {
     rl.beginDrawing();
     rl.clearBackground(rl.Color.black);
 
     var iter = q.iter();
     while (iter.next()) |data| {
-        const pos, const rect = data;
+        const pos, const rect, const vis = data;
+        if (vis == .Hidden) continue;
         rl.drawRectangleLinesEx(
             .{ .x = pos.x, .y = pos.y, .width = rect.width, .height = rect.height },
             2,
@@ -308,6 +338,8 @@ pub fn main() !void {
         .addSystem(.Update, repositionBall)
         .addSystem(.Update, handleControls)
         .addSystem(.Update, checkTopBottomCollision)
+        .addSystem(.Update, flickerOffPaddles)
+        .addSystem(.Update, flickerOnPaddles)
         .addSystem(.Update, checkPaddleBallCollision)
         .addSystem(.Update, reactGoalCollision)
         .addSystem(.Update, checkGoalCollision)

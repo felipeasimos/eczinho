@@ -47,13 +47,13 @@ pub fn Removed(comptime options: RemovedOptions) type {
         }
         /// how many events are left to read
         pub fn remaining(self: @This()) usize {
-            return self.store.remaining(T, self.getReaderIndexPtr());
+            return self.logs.remaining(T, self.getReaderIndexPtr());
         }
         pub fn empty(self: @This()) bool {
             return self.remaining() == 0;
         }
         pub fn clear(self: @This()) void {
-            return self.store.clear(T, self.getReaderIndexPtr());
+            return self.logs.clear(T, self.getReaderIndexPtr());
         }
         pub fn iterator(self: @This()) Iterator {
             return Iterator.init(self);
