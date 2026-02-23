@@ -12,17 +12,9 @@ zig build --build-file examples/pong/build.zig
 
 # TODO
 
-- [ ] zbench
-- [ ] more tests as example in source files
-- [ ] more test files
 - [ ] bundles
-   - [ ] reflection bundle
-   - [ ] spatial bundle
-      - [ ] transform -> translation, rotation, scale
-   - [ ] debug gui bundle
-   - [ ] camera 2d bundle
-   - [ ] camera 3d bundle
-- [ ] more unit tests
+- [ ] chunks
+- [ ] zbench
 - [ ] move more code to comptime
    - [ ] scheduler
    - [ ] event store
