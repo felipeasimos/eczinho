@@ -5,6 +5,7 @@ const components = @import("components.zig");
 const array = @import("array.zig");
 const Tick = @import("types.zig").Tick;
 const registry = @import("registry.zig");
+const chunks = @import("chunks.zig");
 
 pub const ArchetypeOptions = struct {
     Components: type,
@@ -21,6 +22,10 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
         const Registry = registry.Registry(.{
             .Components = Components,
             .Entity = Entity,
+        });
+        pub const Chunk = chunks.ChunkFactory(.{
+            .Entity = Entity,
+            .Components = Components,
         });
         signature: Components,
         components: std.AutoHashMap(ComponentTypeId, array.Array),
