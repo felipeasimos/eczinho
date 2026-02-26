@@ -9,6 +9,7 @@ pub fn Components(comptime ComponentTypes: []const type) type {
         pub const Union = Hasher.Union;
         pub const getCanonicalType = Hasher.getCanonicalType;
         pub const getAlignment = Hasher.getAlignment;
+        pub const MaxAlignment = Hasher.MaxAlignment;
         pub const getSize = Hasher.getSize;
         pub const getIndex = Hasher.getIndex;
         pub const checkSize = Hasher.checkSize;
@@ -93,7 +94,7 @@ pub fn Components(comptime ComponentTypes: []const type) type {
             return only_left.count();
         }
 
-        pub fn iterator(self: @This()) Iterator {
+        pub fn iterator(self: *const @This()) Iterator {
             return Iterator.init(self.bitset);
         }
 

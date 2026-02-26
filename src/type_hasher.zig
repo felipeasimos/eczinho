@@ -35,6 +35,7 @@ pub fn TypeHasher(comptime Types: []const type) type {
         /// EVERY tid should be TypeId
         pub const TypeId = initTypeId(Types);
         pub const Len = Types.len;
+        pub const MaxAlignment = std.mem.max(usize, TypeIdAlignmentMap.values[0..]);
 
         pub const Union = Union: {
             @setEvalBranchQuota(10000);
@@ -270,7 +271,7 @@ pub fn TypeHasher(comptime Types: []const type) type {
                 return tid;
             }
             pub fn nextTypeIdNonEmpty(self: *@This()) ?TypeId {
-                while (self.iter.nextTypeId()) |idx| {
+                while (self.nextTypeId()) |idx| {
                     const size = Sizes[idx];
                     if (size != 0) {
                         return TypeIds[idx];

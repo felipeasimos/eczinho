@@ -28,13 +28,13 @@ pub fn Registry(comptime options: RegistryOptions) type {
             .Entity = Entity,
         });
 
-        const EntityLocation = struct {
+        pub const EntityLocation = struct {
             // pointer to archetype
             arch: *Archetype,
             // if entity is alive, this points to its chunk
-            // chunk_index: *Chunk,
+            chunk: *Chunk,
             // index inside the chunk
-            // slot_index: u16,
+            slot_index: u16,
             // current (if alive) or next (if dead) generation of an entity index.
             version: options.Entity.Version = 0,
         };
@@ -146,28 +146,36 @@ pub fn Registry(comptime options: RegistryOptions) type {
             };
             // update entity_to_locations with new id
             const empty_arch = try self.tryGetArchetypeFromSignature(Components.init(&.{}));
+
+            const chunk, const slot_index = try empty_arch.reserve(entity_id);
             self.entities_to_locations.items[@intCast(entity_id.index)] = EntityLocation{
                 .arch = empty_arch,
                 .version = entity_id.version,
+                .chunk = chunk,
+                .slot_index = @intCast(slot_index),
             };
-            try empty_arch.reserve(entity_id);
 
             return entity_id;
         }
 
+        inline fn correctEntityIndex(self: *@This(), entt: Entity, slot_index: usize) void {
+            self.entities_to_locations.items[entt.index].slot_index = @intCast(slot_index);
+        }
+
         pub fn destroy(self: *@This(), entt: Entity) !void {
             std.debug.assert(self.valid(entt));
-            const current_arch = self.getEntityArchetype(entt);
-            current_arch.remove(entt);
-            try self.free_entity_list.append(self.allocator, entt.index);
             const location = &self.entities_to_locations.items[entt.index];
+            const swapped_entt, const new_slot_index = location.chunk.remove(@intCast(location.slot_index));
+            self.correctEntityIndex(swapped_entt, new_slot_index);
+            try self.free_entity_list.append(self.allocator, entt.index);
             location.version += 1;
         }
 
         fn moveTo(self: *@This(), entt: Entity, from: *Archetype, to: *Archetype) !void {
             std.debug.assert(self.valid(entt));
-            try from.moveTo(entt, to, self.getTick(), &self.removed);
-            self.entities_to_locations.items[entt.index].arch = to;
+            const location_ptr = &self.entities_to_locations.items[entt.index];
+            const swapped_entt, const new_slot_index = try from.moveTo(entt, location_ptr, to, self.getTick(), &self.removed);
+            self.correctEntityIndex(swapped_entt, new_slot_index);
         }
 
         pub fn has(self: *@This(), comptime Component: type, entt: Entity) bool {
@@ -195,23 +203,23 @@ pub fn Registry(comptime options: RegistryOptions) type {
             new_signature.add(Component);
 
             const new_arch = try self.tryGetArchetypeFromSignature(new_signature);
-            // note: we need to grab old_arch after new_arch, because new_arch may
-            // do a realloc and invalidate archetype pointers
             const old_arch = self.getArchetypeFromSignature(old_arch_sig);
             try self.moveTo(entt, old_arch, new_arch);
             if (@sizeOf(Component) != 0) {
-                new_arch.get(Component, entt).* = value;
+                self.get(Component, entt).* = value;
             }
         }
 
         pub fn get(self: *@This(), comptime Component: type, entt: Entity) *Component {
             std.debug.assert(self.valid(entt));
-            return self.getEntityArchetype(entt).get(Component, entt);
+            const location = self.entities_to_locations.items[entt.index];
+            return location.chunk.get(Component, location.slot_index);
         }
 
         pub fn getConst(self: *@This(), comptime Component: type, entt: Entity) Component {
             std.debug.assert(self.valid(entt));
-            return self.getEntityArchetype(entt).getConst(Component, entt);
+            const location = self.entities_to_locations.items[entt.index];
+            return location.chunk.getConst(Component, location.slot_index);
         }
 
         pub fn createQueue(self: *@This()) !*CommandsQueue {
