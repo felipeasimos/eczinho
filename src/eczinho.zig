@@ -11,5 +11,6 @@ pub const AppEvents = @import("app_events.zig");
 
 test "eczinho" {
     const std = @import("std");
+    _ = @import("chunks.zig");
     std.testing.refAllDeclsRecursive(@This());
 }

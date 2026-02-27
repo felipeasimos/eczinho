@@ -35,6 +35,7 @@ pub fn TypeHasher(comptime Types: []const type) type {
         /// EVERY tid should be TypeId
         pub const TypeId = initTypeId(Types);
         pub const Len = Types.len;
+        pub const MaxAlignment = std.mem.max(usize, TypeIdAlignmentMap.values[0..]);
 
         pub const Union = Union: {
             @setEvalBranchQuota(10000);
@@ -84,6 +85,15 @@ pub fn TypeHasher(comptime Types: []const type) type {
                 map.set(type_id, i);
             }
             break :TypeIdIndexMap map;
+        };
+        const TypeIdNameMap = TypeIdNameMap: {
+            @setEvalBranchQuota(10000);
+            var map = std.EnumArray(TypeId, [:0]const u8).initUndefined();
+            for (Types) |Type| {
+                const type_id = std.meta.stringToEnum(TypeId, @typeName(Type)).?;
+                map.set(type_id, @typeName(Type));
+            }
+            break :TypeIdNameMap map;
         };
 
         pub const TypeIds = TypeIds: {
@@ -244,6 +254,15 @@ pub fn TypeHasher(comptime Types: []const type) type {
             @compileError("invalid type " ++ @typeName(@TypeOf(tid_or_type)) ++ ": must be a TypeId or a type in the registered list");
         }
 
+        pub inline fn getName(tid_or_type: anytype) [:0]const u8 {
+            if (comptime @TypeOf(tid_or_type) == TypeId) {
+                return TypeIdNameMap.get(tid_or_type);
+            } else if (comptime isRegisteredType(tid_or_type)) {
+                return @typeName(tid_or_type);
+            }
+            @compileError("invalid type " ++ @typeName(@TypeOf(tid_or_type)) ++ ": must be a TypeId or a type in the registered list");
+        }
+
         pub const Iterator = struct {
             index: usize = 0,
             pub fn init() @This() {
@@ -270,7 +289,7 @@ pub fn TypeHasher(comptime Types: []const type) type {
                 return tid;
             }
             pub fn nextTypeIdNonEmpty(self: *@This()) ?TypeId {
-                while (self.iter.nextTypeId()) |idx| {
+                while (self.nextTypeId()) |idx| {
                     const size = Sizes[idx];
                     if (size != 0) {
                         return TypeIds[idx];

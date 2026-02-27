@@ -1,10 +1,9 @@
 const std = @import("std");
-const sparseset = @import("sparse_set.zig");
 const entity = @import("entity.zig");
 const components = @import("components.zig");
-const array = @import("array.zig");
 const Tick = @import("types.zig").Tick;
-const registry = @import("registry.zig");
+const chunks = @import("chunks.zig");
+const RegistryFactory = @import("registry.zig").Registry;
 
 pub const ArchetypeOptions = struct {
     Components: type,
@@ -18,19 +17,19 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
         const ComponentTypeId = options.Components.ComponentTypeId;
         const Components = options.Components;
         const Entity = options.Entity;
-        const Registry = registry.Registry(.{
+        pub const Registry = RegistryFactory(.{
             .Components = Components,
             .Entity = Entity,
         });
+        const EntityLocation = Registry.EntityLocation;
+        pub const Chunks = chunks.ChunksFactory(.{
+            .Entity = Entity,
+            .Components = Components,
+        });
+        pub const Chunk = Chunks.Chunk;
         signature: Components,
-        components: std.AutoHashMap(ComponentTypeId, array.Array),
-        entities_to_component_index: sparseset.SparseSet(.{
-            .T = Entity.Int,
-            .PageMask = Entity.entity_mask,
-        }),
+        chunks: Chunks,
         allocator: std.mem.Allocator,
-        added: []std.ArrayList(Tick) = &.{},
-        changed: []std.ArrayList(Tick) = &.{},
 
         inline fn hash(tid_or_component: anytype) ComponentTypeId {
             if (comptime @TypeOf(tid_or_component) == ComponentTypeId) {
@@ -40,165 +39,44 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             }
         }
 
-        /// creates the array if it doesn't exist. Uses type.
-        inline fn tryGetComponentArray(self: *@This(), tid_or_component: anytype) !*array.Array {
-            Components.checkSize(tid_or_component);
-            const component_size = Components.getSize(tid_or_component);
-            const component_alignment = Components.getAlignment(tid_or_component);
-            const new_array = array.Array.init(component_size, component_alignment);
-            const entry = try self.components.getOrPutValue(hash(tid_or_component), new_array);
-            return entry.value_ptr;
-        }
-
-        /// returns null if the array doesn't exist. Uses type
-        inline fn optGetComponentArray(self: *@This(), tid_or_component: anytype) ?*array.Array {
-            Components.checkSize(tid_or_component);
-            if (self.components.getEntry(hash(tid_or_component))) |entry| {
-                return entry.value_ptr;
-            }
-            return null;
-        }
-
-        /// returns the array assuming that it exists. Uses type
-        pub inline fn getComponentArray(self: *@This(), tid_or_component: anytype) *array.Array {
-            Components.checkSize(tid_or_component);
-            return self.components.getEntry(hash(tid_or_component)).?.value_ptr;
-        }
-
         pub fn init(alloc: std.mem.Allocator, sig: Components) !@This() {
-            const added = try alloc.alloc(std.ArrayList(Tick), sig.len());
-            const changed = try alloc.alloc(std.ArrayList(Tick), sig.len());
-            @memset(added, .empty);
-            @memset(changed, .empty);
             return .{
-                .added = added,
-                .changed = changed,
+                .chunks = try Chunks.init(sig, alloc),
                 .signature = sig,
-                .components = @FieldType(@This(), "components").init(alloc),
-                .entities_to_component_index = @FieldType(@This(), "entities_to_component_index").init(alloc),
                 .allocator = alloc,
             };
         }
 
         pub fn deinit(self: *@This()) void {
-            var iter = self.signature.iterator();
-            while (iter.nextTypeIdNonEmpty()) |tid| {
-                if (self.optGetComponentArray(tid)) |arr| {
-                    arr.deinit(self.allocator);
-                }
-            }
-            self.components.deinit();
-            self.entities_to_component_index.deinit();
-            for (self.added, self.changed) |*added, *changed| {
-                added.deinit(self.allocator);
-                changed.deinit(self.allocator);
-            }
-            self.allocator.free(self.added);
-            self.allocator.free(self.changed);
+            self.chunks.deinit();
         }
 
         pub inline fn len(self: *@This()) usize {
-            return self.entities_to_component_index.len();
+            return self.chunks.len();
         }
 
         pub inline fn has(self: *@This(), tid_or_component: anytype) bool {
             return self.signature.has(tid_or_component);
         }
 
-        pub inline fn entities(self: *@This()) []Entity {
-            return self.entities_to_component_index.items();
-        }
-
-        inline fn getEntityComponentIndex(self: *@This(), entt: Entity) usize {
-            return self.entities_to_component_index.getDenseIndex(entt.toInt());
-        }
-
-        pub fn get(self: *@This(), comptime Component: type, entt: Entity) *Component {
-            Components.checkSize(Component);
-            std.debug.assert(self.has(Component));
-            std.debug.assert(self.valid(entt));
-
-            const entt_index = self.entities_to_component_index.getDenseIndex(entt.toInt());
-            const component_arr = self.getComponentArray(Component);
-            return component_arr.getAs(Component, entt_index);
-        }
-
-        pub fn getConst(self: *@This(), comptime Component: type, entt: Entity) Component {
-            Components.checkSize(Component);
-            std.debug.assert(self.has(Component));
-            std.debug.assert(self.valid(entt));
-
-            const entt_index = self.entities_to_component_index.getDenseIndex(entt.toInt());
-            const component_arr = self.getComponentArray(Component);
-            return component_arr.getConst(Component, entt_index);
-        }
-
-        pub fn valid(self: *@This(), entt: Entity) bool {
-            return self.entities_to_component_index.contains(entt.toInt());
-        }
-
-        pub fn reserve(self: *@This(), entt: Entity) !void {
-            std.debug.assert(!self.valid(entt));
-
-            var iter = self.signature.iterator();
-            while (iter.nextTypeIdNonEmpty()) |tid| {
-                const component_arr = try self.tryGetComponentArray(tid);
-                try component_arr.reserve(self.allocator, 1);
-            }
-            try self.entities_to_component_index.add(entt.toInt());
-            for (self.added, self.changed) |*added, *changed| {
-                try added.append(self.allocator, 0);
-                try changed.append(self.allocator, 0);
-            }
-        }
-
-        pub fn remove(self: *@This(), entt: Entity) void {
-            std.debug.assert(self.valid(entt));
-
-            const entt_index = self.entities_to_component_index.remove(entt.toInt());
-            var iter = self.signature.iterator();
-            while (iter.nextTypeIdNonEmpty()) |tid| {
-                if (self.optGetComponentArray(tid)) |arr| {
-                    _ = arr.swapRemove(entt_index);
-                }
-            }
-            for (self.added, self.changed) |*added, *changed| {
-                _ = added.swapRemove(entt_index);
-                _ = changed.swapRemove(entt_index);
-            }
-        }
-
-        pub fn getAddedArray(self: *@This(), tid_or_component: anytype) *std.ArrayList(Tick) {
-            const index = self.signature.getIndexInSet(tid_or_component);
-            return &self.added[index];
-        }
-
-        pub fn getChangedArray(self: *@This(), tid_or_component: anytype) *std.ArrayList(Tick) {
-            const index = self.signature.getIndexInSet(tid_or_component);
-            return &self.changed[index];
-        }
-
-        fn markAsChanged(self: *@This(), tid_or_component: anytype, entt_dense_index: usize, current_tick: Tick) void {
-            self.getChangedArray(tid_or_component).items[entt_dense_index] = current_tick;
+        pub fn reserve(self: *@This(), entt: Entity) !struct { *Chunk, usize } {
+            return self.chunks.reserve(entt);
         }
 
         /// move entity to new archetype.
         /// this function only copies the values from component that exist in both archetypes.
         /// components only present in 'new_arch' must be set after this call.
-        pub fn moveTo(self: *@This(), entt: Entity, new_arch: *@This(), current_tick: Tick, removed_logs: anytype) !void {
-            std.debug.assert(self.valid(entt));
-            std.debug.assert(!new_arch.valid(entt));
-
-            const old_entt_index = self.getEntityComponentIndex(entt);
-            try new_arch.reserve(entt);
-            const new_entt_index = new_arch.getEntityComponentIndex(entt);
+        pub fn moveTo(self: *@This(), entt: Entity, location: *EntityLocation, new_arch: *@This(), current_tick: Tick, removed_logs: anytype) !struct { Entity, usize } {
+            const new_chunk, const new_slot_index = try new_arch.reserve(entt);
 
             var old_iter_type_id = self.signature.iterator();
             while (old_iter_type_id.nextTypeId()) |tid| {
                 if (new_arch.signature.has(tid)) {
                     if (Components.getSize(tid) != 0) {
-                        const old_addr = self.getComponentArray(tid).get(old_entt_index);
-                        const new_addr = new_arch.getComponentArray(tid).get(new_entt_index);
+                        const old_type_index = location.chunk.getNonEmptyTypeIndex(tid);
+                        const old_addr = location.chunk.getElemWithTypeIndex(old_type_index, @intCast(location.slot_index));
+                        const new_chunk_type_index = new_chunk.getNonEmptyTypeIndex(tid);
+                        const new_addr = new_chunk.getElemWithTypeIndex(new_chunk_type_index, new_slot_index);
                         @memcpy(new_addr, old_addr);
                     }
                 } else {
@@ -207,15 +85,34 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             }
             var new_iter_type_id = new_arch.signature.iterator();
             while (new_iter_type_id.nextTypeId()) |tid| {
+                const is_zst = Components.getSize(tid) == 0;
                 if (self.signature.has(tid)) {
-                    new_arch.getAddedArray(tid).items[new_entt_index] = self.getAddedArray(tid).items[old_entt_index];
-                    new_arch.getChangedArray(tid).items[new_entt_index] = self.getChangedArray(tid).items[old_entt_index];
+                    if (is_zst) {
+                        const old_type_index = location.chunk.getZSTIndex(tid);
+                        const new_type_index = new_chunk.getZSTIndex(tid);
+                        new_chunk.getZSTMetadataArray(new_type_index)[new_slot_index] = location.chunk.getZSTMetadataArray(old_type_index)[@intCast(location.slot_index)];
+                    } else {
+                        const old_type_index = location.chunk.getNonEmptyTypeIndex(tid);
+                        const new_type_index = new_chunk.getNonEmptyTypeIndex(tid);
+                        new_chunk.getNonEmptyMetadataArray(new_type_index, .Added)[new_slot_index] = location.chunk.getNonEmptyMetadataArray(old_type_index, .Added)[@intCast(location.slot_index)];
+                        new_chunk.getNonEmptyMetadataArray(new_type_index, .Changed)[new_slot_index] = location.chunk.getNonEmptyMetadataArray(old_type_index, .Changed)[@intCast(location.slot_index)];
+                    }
                 } else {
-                    new_arch.getAddedArray(tid).items[new_entt_index] = current_tick;
-                    new_arch.getChangedArray(tid).items[new_entt_index] = current_tick;
+                    if (is_zst) {
+                        const new_type_index = new_chunk.getZSTIndex(tid);
+                        new_chunk.getZSTMetadataArray(new_type_index)[new_slot_index] = current_tick;
+                    } else {
+                        const new_type_index = new_chunk.getNonEmptyTypeIndex(tid);
+                        new_chunk.getNonEmptyMetadataArray(new_type_index, .Added)[new_slot_index] = current_tick;
+                        new_chunk.getNonEmptyMetadataArray(new_type_index, .Changed)[new_slot_index] = current_tick;
+                    }
                 }
             }
-            self.remove(entt);
+            const removed_result = location.chunk.remove(@intCast(location.slot_index));
+            location.slot_index = @intCast(new_slot_index);
+            location.chunk = new_chunk;
+            location.arch = new_arch;
+            return removed_result;
         }
 
         pub fn iterator(self: *@This(), comptime ReturnTypes: []const type, comptime Added: []const type, comptime Changed: []const type, last_run: Tick, current_run: Tick) Iterator(ReturnTypes, Added, Changed) {
@@ -230,16 +127,20 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             }
             const Tuple = std.meta.Tuple(ReturnTypes);
             return struct {
-                archetype: *Self,
-                index: usize = 0,
                 last_run: Tick,
                 current_run: Tick,
+                iter: Chunks.Iterator,
                 pub fn init(archtype: *Self, last_run: Tick, current_run: Tick) @This() {
                     return .{
-                        .archetype = archtype,
+                        .iter = Chunks.Iterator.init(&archtype.chunks),
                         .last_run = last_run,
                         .current_run = current_run,
                     };
+                }
+                pub fn peek(self: *@This()) ?Tuple {
+                    const old_iter = self.iter;
+                    defer self.iter = old_iter;
+                    return self.nextWithoutMarkingChange();
                 }
                 pub fn next(self: *@This()) ?Tuple {
                     return self.nextInner(true);
@@ -248,69 +149,72 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                     return self.nextInner(false);
                 }
                 fn nextInner(self: *@This(), comptime mark_change: bool) ?Tuple {
-                    if (self.index >= self.archetype.len()) {
-                        return null;
-                    }
-                    if (self.nextValidEntity()) |indices| {
-                        const index, const entt_int = indices;
+                    if (self.nextValidEntity()) |iter_result| {
+                        const chunk, const slot_index = iter_result;
                         // SAFETY: immediatly filled in the following lines
                         var tuple: std.meta.Tuple(ReturnTypes) = undefined;
                         inline for (ReturnTypes, 0..) |Type, i| {
                             if (comptime Type == Entity) {
-                                tuple[i] = Entity.fromInt(entt_int);
+                                tuple[i] = chunk.getConst(Entity, slot_index);
                             } else {
-                                tuple[i] = self.getComponent(Type, index, mark_change);
+                                tuple[i] = self.getComponent(Type, chunk, slot_index, mark_change);
                             }
                         }
                         return tuple;
                     }
                     return null;
                 }
-                /// return dense index and entity ID as Int of next valid entity
-                fn nextValidEntity(self: *@This()) ?struct { usize, Entity.Int } {
-                    if (self.index >= self.archetype.len()) {
-                        return null;
+                /// iterate until we get a valid entity, or return null
+                fn nextValidEntity(self: *@This()) ?struct { *Chunk, usize } {
+                    while (self.iter.next()) |iter_result| {
+                        const chunk, const slot_index = iter_result;
+                        if (self.hasValidTicks(chunk, slot_index)) {
+                            return .{ chunk, slot_index };
+                        }
                     }
-                    while (!self.hasValidTicks(self.index)) {
-                        self.index += 1;
-                        if (self.index >= self.archetype.len()) return null;
-                    }
-                    const index = self.index;
-                    self.index += 1;
-                    return .{
-                        index,
-                        self.archetype.entities_to_component_index.items()[index],
-                    };
+                    return null;
                 }
-                fn hasValidTicks(self: *@This(), entt_index: usize) bool {
+                inline fn hasValidTicks(self: *@This(), chunk: *Chunk, slot_index: usize) bool {
                     inline for (Added) |Type| {
-                        const added_tick = self.archetype.getAddedArray(Type).items[entt_index];
-                        if (added_tick < self.last_run) return false;
+                        if (comptime @sizeOf(Type) != 0) {
+                            const type_index = chunk.getNonEmptyTypeIndex(Type);
+                            const added_tick = chunk.getNonEmptyMetadataArray(type_index, .Added)[slot_index];
+                            if (added_tick < self.last_run) return false;
+                        } else {
+                            const type_index = chunk.getZSTIndex(Type);
+                            const added_tick = chunk.getZSTMetadataArray(type_index)[slot_index];
+                            if (added_tick < self.last_run) return false;
+                        }
                     }
                     inline for (Changed) |Type| {
-                        const changed_tick = self.archetype.getChangedArray(Type).items[entt_index];
-                        if (changed_tick < self.last_run) return false;
+                        if (comptime @sizeOf(Type) != 0) {
+                            const type_index = chunk.getNonEmptyTypeIndex(Type);
+                            const changed_tick = chunk.getNonEmptyMetadataArray(type_index, .Changed)[slot_index];
+                            if (changed_tick < self.last_run) return false;
+                        }
                     }
                     return true;
                 }
-                fn getComponent(self: *@This(), comptime Type: type, entt_index: usize, comptime mark_change: bool) Type {
+                fn getComponent(self: *@This(), comptime Type: type, chunk: *Chunk, slot_index: usize, comptime mark_change: bool) Type {
                     const CanonicalType = comptime Components.getCanonicalType(Type);
                     const access_type = comptime Components.getAccessType(Type);
-                    const comp_arr = self.archetype.getComponentArray(CanonicalType);
                     const return_value: Type = switch (comptime access_type) {
-                        .Const => comp_arr.getConst(CanonicalType, entt_index),
-                        .PointerConst => @ptrCast(comp_arr.getAs(CanonicalType, entt_index)),
-                        .PointerMut => comp_arr.getAs(CanonicalType, entt_index),
-                        .OptionalConst => comp_arr.getConst(CanonicalType, entt_index),
-                        .OptionalPointerMut => comp_arr.getAs(CanonicalType, entt_index),
-                        .OptionalPointerConst => @ptrCast(comp_arr.getAs(CanonicalType, entt_index)),
+                        .Const => chunk.getConst(CanonicalType, slot_index),
+                        .PointerConst => @ptrCast(chunk.getConst(CanonicalType, slot_index)),
+                        .PointerMut => chunk.get(CanonicalType, slot_index),
+                        .OptionalConst => chunk.getConst(CanonicalType, slot_index),
+                        .OptionalPointerMut => chunk.get(CanonicalType, slot_index),
+                        .OptionalPointerConst => @ptrCast(chunk.getConst(CanonicalType, slot_index)),
                     };
+                    // ZSTs don't change, so we can ignore this for ZSTs
                     if (comptime mark_change) {
                         if (comptime (access_type == .PointerMut)) {
-                            self.archetype.markAsChanged(CanonicalType, entt_index, self.current_run);
+                            const tid = chunk.getNonEmptyTypeIndex(CanonicalType);
+                            chunk.getNonEmptyMetadataArray(tid, .Changed)[slot_index] = self.current_run;
                         } else if (comptime (access_type == .OptionalPointerMut)) {
                             if (return_value != null) {
-                                self.archetype.markAsChanged(CanonicalType, entt_index, self.current_run);
+                                const tid = chunk.getNonEmptyTypeIndex(CanonicalType);
+                                chunk.getNonEmptyMetadataArray(tid, .Changed)[slot_index] = self.current_run;
                             }
                         }
                     }

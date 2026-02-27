@@ -18,6 +18,7 @@ pub fn Registry(comptime options: RegistryOptions) type {
             .Entity = Entity,
             .Components = Components,
         });
+        pub const Chunk = Archetype.Chunk;
         pub const CommandsQueue = commands.CommandsQueue(.{
             .Entity = Entity,
             .Components = Components,
@@ -27,15 +28,19 @@ pub fn Registry(comptime options: RegistryOptions) type {
             .Entity = Entity,
         });
 
-        const EntityLocation = struct {
-            // null if entity is dead
-            signature: ?Components = null,
+        pub const EntityLocation = struct {
+            // pointer to archetype
+            arch: *Archetype,
+            // if entity is alive, this points to its chunk
+            chunk: *Chunk,
+            // index inside the chunk
+            slot_index: u16,
             // current (if alive) or next (if dead) generation of an entity index.
             version: options.Entity.Version = 0,
         };
 
         allocator: std.mem.Allocator,
-        archetypes: std.AutoHashMap(Components, Archetype),
+        archetypes: std.AutoHashMap(Components, *Archetype),
         /// entity index to -> generations + archetype
         entities_to_locations: std.ArrayList(EntityLocation) = .empty,
         free_entity_list: std.ArrayList(Entity.Index) = .empty,
@@ -54,7 +59,9 @@ pub fn Registry(comptime options: RegistryOptions) type {
         pub fn deinit(self: *@This()) void {
             var iter = self.archetypes.valueIterator();
             while (iter.next()) |arch| {
-                arch.deinit();
+                const arch_ptr = arch.*;
+                arch_ptr.deinit();
+                self.allocator.destroy(arch_ptr);
             }
             self.archetypes.deinit();
             self.entities_to_locations.deinit(self.allocator);
@@ -74,21 +81,20 @@ pub fn Registry(comptime options: RegistryOptions) type {
             var count: usize = 0;
             var iter = self.archetypes.valueIterator();
             while (iter.next()) |arch| {
-                count += arch.len();
+                const arch_ptr = arch.*;
+                count += arch_ptr.len();
             }
             return count;
         }
 
         fn getEntityArchetype(self: *@This(), entt: Entity) *Archetype {
             std.debug.assert(self.valid(entt));
-            const signature = self.getEntitySignature(entt);
-            return self.archetypes.getPtr(signature).?;
+            return self.entities_to_locations.items[entt.index].arch;
         }
 
         fn getEntitySignature(self: *@This(), entt: Entity) Components {
             std.debug.assert(self.valid(entt));
-            const signature = self.entities_to_locations.items[entt.index].signature.?;
-            return signature;
+            return self.entities_to_locations.items[entt.index].arch.signature;
         }
         fn optGetEntitySignature(self: *@This(), entt: Entity) ?Components {
             std.debug.assert(self.valid(entt));
@@ -99,16 +105,18 @@ pub fn Registry(comptime options: RegistryOptions) type {
         }
 
         pub fn getArchetypeFromSignature(self: *@This(), signature: Components) *Archetype {
-            return self.archetypes.getEntry(signature).?.value_ptr;
+            return self.archetypes.get(signature).?;
         }
 
         pub fn tryGetArchetypeFromSignature(self: *@This(), signature: Components) !*Archetype {
             const entry = try self.archetypes.getOrPut(signature);
             if (entry.found_existing) {
-                return @ptrCast(@alignCast(entry.value_ptr));
+                return entry.value_ptr.*;
             }
-            entry.value_ptr.* = try Archetype.init(self.allocator, signature);
-            return entry.value_ptr;
+            const arch_ptr = try self.allocator.create(Archetype);
+            arch_ptr.* = try Archetype.init(self.allocator, signature);
+            entry.value_ptr.* = arch_ptr;
+            return arch_ptr;
         }
 
         pub fn valid(self: *@This(), id: Entity) bool {
@@ -138,29 +146,36 @@ pub fn Registry(comptime options: RegistryOptions) type {
             };
             // update entity_to_locations with new id
             const empty_arch = try self.tryGetArchetypeFromSignature(Components.init(&.{}));
-            self.entities_to_locations.items[@intCast(entity_id.index)] = .{
-                .signature = empty_arch.signature,
+
+            const chunk, const slot_index = try empty_arch.reserve(entity_id);
+            self.entities_to_locations.items[@intCast(entity_id.index)] = EntityLocation{
+                .arch = empty_arch,
                 .version = entity_id.version,
+                .chunk = chunk,
+                .slot_index = @intCast(slot_index),
             };
-            try empty_arch.reserve(entity_id);
 
             return entity_id;
         }
 
+        inline fn correctEntityIndex(self: *@This(), entt: Entity, slot_index: usize) void {
+            self.entities_to_locations.items[entt.index].slot_index = @intCast(slot_index);
+        }
+
         pub fn destroy(self: *@This(), entt: Entity) !void {
             std.debug.assert(self.valid(entt));
-            const current_arch = self.getEntityArchetype(entt);
-            current_arch.remove(entt);
-            try self.free_entity_list.append(self.allocator, entt.index);
             const location = &self.entities_to_locations.items[entt.index];
+            const swapped_entt, const new_slot_index = location.chunk.remove(@intCast(location.slot_index));
+            self.correctEntityIndex(swapped_entt, new_slot_index);
+            try self.free_entity_list.append(self.allocator, entt.index);
             location.version += 1;
-            location.signature = null;
         }
 
         fn moveTo(self: *@This(), entt: Entity, from: *Archetype, to: *Archetype) !void {
             std.debug.assert(self.valid(entt));
-            try from.moveTo(entt, to, self.getTick(), &self.removed);
-            self.entities_to_locations.items[entt.index].signature = to.signature;
+            const location_ptr = &self.entities_to_locations.items[entt.index];
+            const swapped_entt, const new_slot_index = try from.moveTo(entt, location_ptr, to, self.getTick(), &self.removed);
+            self.correctEntityIndex(swapped_entt, new_slot_index);
         }
 
         pub fn has(self: *@This(), comptime Component: type, entt: Entity) bool {
@@ -188,23 +203,23 @@ pub fn Registry(comptime options: RegistryOptions) type {
             new_signature.add(Component);
 
             const new_arch = try self.tryGetArchetypeFromSignature(new_signature);
-            // note: we need to grab old_arch after new_arch, because new_arch may
-            // do a realloc and invalidate archetype pointers
             const old_arch = self.getArchetypeFromSignature(old_arch_sig);
             try self.moveTo(entt, old_arch, new_arch);
             if (@sizeOf(Component) != 0) {
-                new_arch.get(Component, entt).* = value;
+                self.get(Component, entt).* = value;
             }
         }
 
         pub fn get(self: *@This(), comptime Component: type, entt: Entity) *Component {
             std.debug.assert(self.valid(entt));
-            return self.getEntityArchetype(entt).get(Component, entt);
+            const location = self.entities_to_locations.items[entt.index];
+            return location.chunk.get(Component, location.slot_index);
         }
 
         pub fn getConst(self: *@This(), comptime Component: type, entt: Entity) Component {
             std.debug.assert(self.valid(entt));
-            return self.getEntityArchetype(entt).getConst(Component, entt);
+            const location = self.entities_to_locations.items[entt.index];
+            return location.chunk.getConst(Component, location.slot_index);
         }
 
         pub fn createQueue(self: *@This()) !*CommandsQueue {
