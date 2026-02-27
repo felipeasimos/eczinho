@@ -42,6 +42,12 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
             .decls = &.{},
         },
     });
+    // check if all changed types are not zst
+    for (req.changed) |Type| {
+        if (@sizeOf(Type) == 0) {
+            @compileError("ZST types don't have Changed metadata");
+        }
+    }
     return struct {
         /// used to acknowledge that this type came from QueryFactory()
         pub const Marker = QueryFactory;
@@ -155,7 +161,7 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
                 var arch = self.registry.getArchetypeFromSignature(sig);
                 if (arch.len() != 0) {
                     var inner_arch_iter = arch.iterator(req.q, req.added, req.changed, self.system_data.last_run, self.registry.getTick());
-                    return inner_arch_iter.next().?;
+                    return inner_arch_iter.peek();
                 }
             }
             return null;

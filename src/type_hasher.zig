@@ -86,6 +86,15 @@ pub fn TypeHasher(comptime Types: []const type) type {
             }
             break :TypeIdIndexMap map;
         };
+        const TypeIdNameMap = TypeIdNameMap: {
+            @setEvalBranchQuota(10000);
+            var map = std.EnumArray(TypeId, [:0]const u8).initUndefined();
+            for (Types) |Type| {
+                const type_id = std.meta.stringToEnum(TypeId, @typeName(Type)).?;
+                map.set(type_id, @typeName(Type));
+            }
+            break :TypeIdNameMap map;
+        };
 
         pub const TypeIds = TypeIds: {
             @setEvalBranchQuota(10000);
@@ -241,6 +250,15 @@ pub fn TypeHasher(comptime Types: []const type) type {
                 if (comptime std.mem.indexOfScalar(type, Types, tid_or_type)) |idx| {
                     return idx;
                 }
+            }
+            @compileError("invalid type " ++ @typeName(@TypeOf(tid_or_type)) ++ ": must be a TypeId or a type in the registered list");
+        }
+
+        pub inline fn getName(tid_or_type: anytype) [:0]const u8 {
+            if (comptime @TypeOf(tid_or_type) == TypeId) {
+                return TypeIdNameMap.get(tid_or_type);
+            } else if (comptime isRegisteredType(tid_or_type)) {
+                return @typeName(tid_or_type);
             }
             @compileError("invalid type " ++ @typeName(@TypeOf(tid_or_type)) ++ ": must be a TypeId or a type in the registered list");
         }

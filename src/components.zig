@@ -12,6 +12,7 @@ pub fn Components(comptime ComponentTypes: []const type) type {
         pub const MaxAlignment = Hasher.MaxAlignment;
         pub const getSize = Hasher.getSize;
         pub const getIndex = Hasher.getIndex;
+        pub const getName = Hasher.getName;
         pub const checkSize = Hasher.checkSize;
         pub const checkType = Hasher.checkType;
         pub const getAsUnion = Hasher.getAsUnion;
@@ -82,6 +83,25 @@ pub fn Components(comptime ComponentTypes: []const type) type {
             return self.bitset.count();
         }
 
+        pub fn format(self: *const @This(), w: *std.Io.Writer) !void {
+            var iter = self.iterator();
+            _ = try w.write(".{ ");
+            while (iter.nextTypeId()) |tid| {
+                _ = try w.write(getName(tid));
+                _ = try w.write(", ");
+            }
+            _ = try w.write(" }");
+        }
+
+        pub fn lenNonEmpty(self: *const @This()) usize {
+            var iter = self.iterator();
+            var i: usize = 0;
+            while (iter.nextTypeIdNonEmpty()) |_| {
+                i += 1;
+            }
+            return i;
+        }
+
         pub fn has(self: *@This(), tid_or_component: anytype) bool {
             Hasher.checkType(tid_or_component);
             return self.bitset.isSet(Hasher.getIndex(tid_or_component));
@@ -129,6 +149,15 @@ pub fn Components(comptime ComponentTypes: []const type) type {
                 while (self.iter.next()) |idx| {
                     const size = Hasher.Sizes[idx];
                     if (size != 0) {
+                        return Hasher.TypeIds[idx];
+                    }
+                }
+                return null;
+            }
+            pub fn nextTypeIdZST(self: *@This()) ?ComponentTypeId {
+                while (self.iter.next()) |idx| {
+                    const size = Hasher.Sizes[idx];
+                    if (size == 0) {
                         return Hasher.TypeIds[idx];
                     }
                 }

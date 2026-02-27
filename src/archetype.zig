@@ -67,41 +67,49 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
         /// this function only copies the values from component that exist in both archetypes.
         /// components only present in 'new_arch' must be set after this call.
         pub fn moveTo(self: *@This(), entt: Entity, location: *EntityLocation, new_arch: *@This(), current_tick: Tick, removed_logs: anytype) !struct { Entity, usize } {
-            const new_chunk, const new_index = try new_arch.reserve(entt);
+            const new_chunk, const new_slot_index = try new_arch.reserve(entt);
 
             var old_iter_type_id = self.signature.iterator();
-            var type_index: usize = 0;
             while (old_iter_type_id.nextTypeId()) |tid| {
-                const is_zst = Components.getSize(tid) == 0;
                 if (new_arch.signature.has(tid)) {
-                    if (!is_zst) {
-                        const old_addr = location.chunk.getElemWithTypeIndex(type_index, @intCast(location.slot_index));
-                        const new_chunk_type_index = new_chunk.getTypeIndex(tid);
-                        const new_addr = new_chunk.getElemWithTypeIndex(new_chunk_type_index, new_index);
+                    if (Components.getSize(tid) != 0) {
+                        const old_type_index = location.chunk.getNonEmptyTypeIndex(tid);
+                        const old_addr = location.chunk.getElemWithTypeIndex(old_type_index, @intCast(location.slot_index));
+                        const new_chunk_type_index = new_chunk.getNonEmptyTypeIndex(tid);
+                        const new_addr = new_chunk.getElemWithTypeIndex(new_chunk_type_index, new_slot_index);
                         @memcpy(new_addr, old_addr);
                     }
                 } else {
                     try removed_logs.addRemoved(tid, entt, current_tick);
                 }
-                if (!is_zst) {
-                    type_index += 1;
-                }
             }
             var new_iter_type_id = new_arch.signature.iterator();
-            type_index = 0;
-            while (new_iter_type_id.nextTypeIdNonEmpty()) |tid| {
+            while (new_iter_type_id.nextTypeId()) |tid| {
+                const is_zst = Components.getSize(tid) == 0;
                 if (self.signature.has(tid)) {
-                    const old_type_index = location.chunk.getTypeIndex(tid);
-                    new_chunk.getMetadataArray(type_index, .Added)[new_index] = location.chunk.getMetadataArray(old_type_index, .Added)[@intCast(location.slot_index)];
-                    new_chunk.getMetadataArray(type_index, .Changed)[new_index] = location.chunk.getMetadataArray(old_type_index, .Changed)[@intCast(location.slot_index)];
+                    if (is_zst) {
+                        const old_type_index = location.chunk.getZSTIndex(tid);
+                        const new_type_index = new_chunk.getZSTIndex(tid);
+                        new_chunk.getZSTMetadataArray(new_type_index)[new_slot_index] = location.chunk.getZSTMetadataArray(old_type_index)[@intCast(location.slot_index)];
+                    } else {
+                        const old_type_index = location.chunk.getNonEmptyTypeIndex(tid);
+                        const new_type_index = new_chunk.getNonEmptyTypeIndex(tid);
+                        new_chunk.getNonEmptyMetadataArray(new_type_index, .Added)[new_slot_index] = location.chunk.getNonEmptyMetadataArray(old_type_index, .Added)[@intCast(location.slot_index)];
+                        new_chunk.getNonEmptyMetadataArray(new_type_index, .Changed)[new_slot_index] = location.chunk.getNonEmptyMetadataArray(old_type_index, .Changed)[@intCast(location.slot_index)];
+                    }
                 } else {
-                    new_chunk.getMetadataArray(type_index, .Changed)[new_index] = current_tick;
-                    new_chunk.getMetadataArray(type_index, .Added)[new_index] = current_tick;
+                    if (is_zst) {
+                        const new_type_index = new_chunk.getZSTIndex(tid);
+                        new_chunk.getZSTMetadataArray(new_type_index)[new_slot_index] = current_tick;
+                    } else {
+                        const new_type_index = new_chunk.getNonEmptyTypeIndex(tid);
+                        new_chunk.getNonEmptyMetadataArray(new_type_index, .Added)[new_slot_index] = current_tick;
+                        new_chunk.getNonEmptyMetadataArray(new_type_index, .Changed)[new_slot_index] = current_tick;
+                    }
                 }
-                type_index += 1;
             }
             const removed_result = location.chunk.remove(@intCast(location.slot_index));
-            location.slot_index = @intCast(new_index);
+            location.slot_index = @intCast(new_slot_index);
             location.chunk = new_chunk;
             location.arch = new_arch;
             return removed_result;
@@ -168,14 +176,22 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                 }
                 inline fn hasValidTicks(self: *@This(), chunk: *Chunk, slot_index: usize) bool {
                     inline for (Added) |Type| {
-                        const tid = chunk.getTypeIndex(Type);
-                        const added_tick = chunk.getMetadataArray(tid, .Added)[slot_index];
-                        if (added_tick < self.last_run) return false;
+                        if (comptime @sizeOf(Type) != 0) {
+                            const type_index = chunk.getNonEmptyTypeIndex(Type);
+                            const added_tick = chunk.getNonEmptyMetadataArray(type_index, .Added)[slot_index];
+                            if (added_tick < self.last_run) return false;
+                        } else {
+                            const type_index = chunk.getZSTIndex(Type);
+                            const added_tick = chunk.getZSTMetadataArray(type_index)[slot_index];
+                            if (added_tick < self.last_run) return false;
+                        }
                     }
                     inline for (Changed) |Type| {
-                        const tid = chunk.getTypeIndex(Type);
-                        const changed_tick = chunk.getMetadataArray(tid, .Changed)[slot_index];
-                        if (changed_tick < self.last_run) return false;
+                        if (comptime @sizeOf(Type) != 0) {
+                            const type_index = chunk.getNonEmptyTypeIndex(Type);
+                            const changed_tick = chunk.getNonEmptyMetadataArray(type_index, .Changed)[slot_index];
+                            if (changed_tick < self.last_run) return false;
+                        }
                     }
                     return true;
                 }
@@ -190,14 +206,15 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                         .OptionalPointerMut => chunk.get(CanonicalType, slot_index),
                         .OptionalPointerConst => @ptrCast(chunk.getConst(CanonicalType, slot_index)),
                     };
+                    // ZSTs don't change, so we can ignore this for ZSTs
                     if (comptime mark_change) {
                         if (comptime (access_type == .PointerMut)) {
-                            const tid = chunk.getTypeIndex(CanonicalType);
-                            chunk.getMetadataArray(tid, .Changed)[slot_index] = self.current_run;
+                            const tid = chunk.getNonEmptyTypeIndex(CanonicalType);
+                            chunk.getNonEmptyMetadataArray(tid, .Changed)[slot_index] = self.current_run;
                         } else if (comptime (access_type == .OptionalPointerMut)) {
                             if (return_value != null) {
-                                const tid = chunk.getTypeIndex(CanonicalType);
-                                chunk.getMetadataArray(tid, .Changed)[slot_index] = self.current_run;
+                                const tid = chunk.getNonEmptyTypeIndex(CanonicalType);
+                                chunk.getNonEmptyMetadataArray(tid, .Changed)[slot_index] = self.current_run;
                             }
                         }
                     }
