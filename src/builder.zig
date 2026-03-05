@@ -5,6 +5,9 @@ const EntityOptions = @import("entity.zig").EntityOptions;
 const EntityTypeFactory = @import("entity.zig").EntityTypeFactory;
 const ComponentsFactory = @import("components.zig").Components;
 const ResourcesFactory = @import("resource/resources.zig").Resources;
+const RegistryFactory = @import("registry.zig").Registry;
+const TypeStoreFactory = @import("resource/type_store.zig").TypeStore;
+const EventStoreFactory = @import("event/event_store.zig").EventStore;
 const EventsFactory = @import("event/events.zig").Events;
 const BundleContext = @import("bundle/bundle.zig").BundleContext;
 const Bundle = @import("bundle/bundle.zig").Bundle;
@@ -114,7 +117,22 @@ pub const AppBuilder = struct {
         return new;
     }
     pub fn build(comptime self: @This(), allocator: std.mem.Allocator) app.App(self.options) {
-        return app.App(self.options).init(allocator);
+        const Registry = RegistryFactory(.{
+            .Components = self.options.Context.Components,
+            .Entity = self.options.Context.Entity,
+        });
+        const TypeStore = TypeStoreFactory(.{
+            .Resources = self.options.Context.Resources,
+        });
+        const EventStore = EventStoreFactory(.{
+            .Events = self.options.Context.Events,
+        });
+        return app.App(self.options){
+            .allocator = allocator,
+            .registry = Registry.init(allocator),
+            .resource_store = TypeStore.init(allocator),
+            .event_store = EventStore.init(allocator),
+        };
     }
 };
 

@@ -151,7 +151,7 @@ pub const BundleContext = struct {
         var new = self;
         const bundles = self.Bundles;
         for (bundles) |bundle| {
-            new = self.merge(bundle.Context);
+            new = self.merge(bundle.flattenContext().Context);
         }
         return new;
     }

@@ -142,15 +142,6 @@ pub fn App(comptime options: AppOptions) type {
         event_store: EventStore,
         scheduler: ?Scheduler = null,
 
-        pub fn init(alloc: std.mem.Allocator) @This() {
-            return .{
-                .allocator = alloc,
-                .registry = Registry.init(alloc),
-                .resource_store = TypeStore.init(alloc),
-                .event_store = EventStore.init(alloc),
-            };
-        }
-
         fn shouldExit(self: *@This()) bool {
             return self.event_store.total(app_events.AppExit) != 0;
         }
@@ -224,11 +215,18 @@ fn testSystemB(comms: Commands, q: Query(.{ .q = &.{ *u8, ?u64, EntityId } }), r
 }
 
 test App {
-    var app = App(.{
+    const AppType = App(.{
         .Context = TestAppContext,
         .Systems = &.{ System(testSystemA, TestAppContext), System(testSystemB, TestAppContext) },
         .Labels = &.{ .Startup, .Startup },
-    }).init(std.testing.allocator);
+    });
+    var app = AppType{
+        .allocator = std.testing.allocator,
+        .registry = AppType.Registry.init(std.testing.allocator),
+        .resource_store = AppType.TypeStore.init(std.testing.allocator),
+        .event_store = AppType.EventStore.init(std.testing.allocator),
+        .scheduler = null,
+    };
     defer app.deinit();
 
     try app.resource_store.insert(@as(u7, 8));
