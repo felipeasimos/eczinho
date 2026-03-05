@@ -165,8 +165,10 @@ pub fn Registry(comptime options: RegistryOptions) type {
         pub fn destroy(self: *@This(), entt: Entity) !void {
             std.debug.assert(self.valid(entt));
             const location = &self.entities_to_locations.items[entt.index];
-            const swapped_entt, const new_slot_index = location.chunk.remove(@intCast(location.slot_index));
-            self.correctEntityIndex(swapped_entt, new_slot_index);
+            if (try location.chunk.remove(@intCast(location.slot_index))) |removal_result| {
+                const swapped_entt, const new_slot_index = removal_result;
+                self.correctEntityIndex(swapped_entt, new_slot_index);
+            }
             try self.free_entity_list.append(self.allocator, entt.index);
             location.version += 1;
         }
@@ -174,8 +176,10 @@ pub fn Registry(comptime options: RegistryOptions) type {
         fn moveTo(self: *@This(), entt: Entity, from: *Archetype, to: *Archetype) !void {
             std.debug.assert(self.valid(entt));
             const location_ptr = &self.entities_to_locations.items[entt.index];
-            const swapped_entt, const new_slot_index = try from.moveTo(entt, location_ptr, to, self.getTick(), &self.removed);
-            self.correctEntityIndex(swapped_entt, new_slot_index);
+            if (try from.moveTo(entt, location_ptr, to, self.getTick(), &self.removed)) |removal_result| {
+                const swapped_entt, const new_slot_index = removal_result;
+                self.correctEntityIndex(swapped_entt, new_slot_index);
+            }
         }
 
         pub fn has(self: *@This(), comptime Component: type, entt: Entity) bool {
@@ -204,6 +208,7 @@ pub fn Registry(comptime options: RegistryOptions) type {
 
             const new_arch = try self.tryGetArchetypeFromSignature(new_signature);
             const old_arch = self.getArchetypeFromSignature(old_arch_sig);
+
             try self.moveTo(entt, old_arch, new_arch);
             if (@sizeOf(Component) != 0) {
                 self.get(Component, entt).* = value;
@@ -343,6 +348,8 @@ test "registry remove test" {
     const entt_id = try registry.create();
     try registry.add(entt_id, @as(u64, 7));
     try registry.remove(u64, entt_id);
+    try std.testing.expectEqual(1, registry.len());
     const another_id = try registry.create();
+    try std.testing.expectEqual(2, registry.len());
     try registry.add(another_id, true);
 }

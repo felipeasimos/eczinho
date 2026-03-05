@@ -29,7 +29,6 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
         pub const Chunk = Chunks.Chunk;
         signature: Components,
         chunks: Chunks,
-        allocator: std.mem.Allocator,
 
         inline fn hash(tid_or_component: anytype) ComponentTypeId {
             if (comptime @TypeOf(tid_or_component) == ComponentTypeId) {
@@ -43,7 +42,6 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             return .{
                 .chunks = try Chunks.init(sig, alloc),
                 .signature = sig,
-                .allocator = alloc,
             };
         }
 
@@ -66,7 +64,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
         /// move entity to new archetype.
         /// this function only copies the values from component that exist in both archetypes.
         /// components only present in 'new_arch' must be set after this call.
-        pub fn moveTo(self: *@This(), entt: Entity, location: *EntityLocation, new_arch: *@This(), current_tick: Tick, removed_logs: anytype) !struct { Entity, usize } {
+        pub fn moveTo(self: *@This(), entt: Entity, location: *EntityLocation, new_arch: *@This(), current_tick: Tick, removed_logs: anytype) !?struct { Entity, usize } {
             const new_chunk, const new_slot_index = try new_arch.reserve(entt);
 
             var old_iter_type_id = self.signature.iterator();

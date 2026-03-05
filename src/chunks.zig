@@ -76,6 +76,7 @@ pub fn ChunksFactory(comptime options: ChunkOptions) type {
             for (self.chunks.items) |chunk| {
                 self.allocator.destroy(chunk);
             }
+            self.free_list.deinit(self.allocator);
             self.chunks.deinit(self.allocator);
             self.allocator.free(self.component_arrays_offsets);
             self.allocator.free(self.component_sizes);
@@ -165,6 +166,7 @@ pub fn ChunksFactory(comptime options: ChunkOptions) type {
             }
             const chunk_ptr = try self.allocator.create(Chunk);
             chunk_ptr.* = Chunk.init(self);
+            self.insertion_chunk = chunk_ptr;
             try self.chunks.append(self.allocator, chunk_ptr);
             return self.chunks.items[self.chunks.items.len - 1];
         }
@@ -347,8 +349,10 @@ pub fn ChunkFactory(comptime options: ChunkOptions) type {
             }
         }
         /// Return swapped entity and its new index
-        pub fn remove(self: *@This(), index: usize) struct { Entity, usize } {
+        pub fn remove(self: *@This(), index: usize) !?struct { Entity, usize } {
             std.debug.assert(index < self.len());
+            defer self.count -= 1;
+            defer self.chunks.entity_count -= 1;
 
             // swap remove entity ID
             self.get(Entity, index).* = self.getConst(Entity, self.count - 1);
@@ -373,14 +377,17 @@ pub fn ChunkFactory(comptime options: ChunkOptions) type {
                     added[index] = added[self.count - 1];
                     i += 1;
                 }
+                const swapped_entt = self.getConst(Entity, index);
+                return .{
+                    swapped_entt,
+                    index,
+                };
             }
-            const swapped_entt = self.getConst(Entity, index);
-            self.count -= 1;
-            self.chunks.entity_count -= 1;
-            return .{
-                swapped_entt,
-                index,
-            };
+
+            if (self.empty()) {
+                try self.chunks.free_list.append(self.chunks.allocator, self);
+            }
+            return null;
         }
     };
 }
