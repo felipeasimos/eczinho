@@ -42,6 +42,12 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
             .decls = &.{},
         },
     });
+    // check if all changed types are not zst
+    for (req.changed) |Type| {
+        if (@sizeOf(Type) == 0) {
+            @compileError("ZST types don't have Changed metadata");
+        }
+    }
     return struct {
         /// used to acknowledge that this type came from QueryFactory()
         pub const Marker = QueryFactory;
@@ -155,7 +161,7 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
                 var arch = self.registry.getArchetypeFromSignature(sig);
                 if (arch.len() != 0) {
                     var inner_arch_iter = arch.iterator(req.q, req.added, req.changed, self.system_data.last_run, self.registry.getTick());
-                    return inner_arch_iter.next().?;
+                    return inner_arch_iter.peek();
                 }
             }
             return null;
@@ -193,28 +199,20 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
             registry: *Registry,
             archetypes: std.ArrayList(Components),
             last_system_run: Tick,
-            index: usize = 0,
+            current_iter: ?Archetype.Iterator(req.q, req.added, req.changed),
             pub fn init(reg: *Registry, archs: std.ArrayList(Components), last_system_run: Tick) @This() {
-                return .{
+                var new: @This() = .{
                     .registry = reg,
                     .archetypes = archs,
                     .last_system_run = last_system_run,
+                    .current_iter = null,
                 };
+                new.current_iter = new.nextArchetypeIterator();
+                return new;
             }
-            fn nextArchetype(self: *@This()) ?*Archetype {
-                while (self.archetypes.getLastOrNull()) |sig| {
-                    var arch = self.registry.getArchetypeFromSignature(sig);
-                    if (self.index >= arch.len()) {
-                        _ = self.archetypes.pop().?;
-                        self.index = 0;
-                        continue;
-                    }
-                    return arch;
-                }
-                return null;
-            }
-            pub fn next(self: *@This()) ?Tuple {
-                if (self.nextArchetype()) |arch| {
+            inline fn nextArchetypeIterator(self: *@This()) ?Archetype.Iterator(req.q, req.added, req.changed) {
+                while (self.archetypes.pop()) |sig| {
+                    const arch = self.registry.getArchetypeFromSignature(sig);
                     var iterator = arch.iterator(
                         req.q,
                         req.added,
@@ -222,10 +220,23 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
                         self.last_system_run,
                         self.registry.getTick(),
                     );
-                    iterator.index = self.index;
-                    const tuple = iterator.next().?;
-                    self.index += 1;
+                    if (iterator.peek()) |_| {
+                        return iterator;
+                    }
+                }
+                return null;
+            }
+            pub fn next(self: *@This()) ?Tuple {
+                if (self.current_iter == null) {
+                    return null;
+                }
+                if (self.current_iter.?.next()) |tuple| {
                     return tuple;
+                }
+                // if nothing is returned from the current iter
+                if (self.nextArchetypeIterator()) |iterator| {
+                    self.current_iter = iterator;
+                    return self.current_iter.?.next();
                 }
                 return null;
             }

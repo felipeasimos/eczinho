@@ -12,5 +12,6 @@ pub const CoreBundles = @import("bundle/core/core.zig");
 
 test "eczinho" {
     const std = @import("std");
+    _ = @import("chunks.zig");
     std.testing.refAllDeclsRecursive(@This());
 }
