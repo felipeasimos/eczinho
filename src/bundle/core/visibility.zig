@@ -12,10 +12,10 @@ pub const Visible = enum {
     Inherited,
 };
 
-pub fn BundleContextConstructor(comptime _: type) BundleContext {
+pub fn BundleContextConstructor(comptime Entity: type) BundleContext {
     return BundleContext.Builder.init()
         .addComponents(&.{Visible})
-        .build();
+        .build(Entity);
 }
 
 pub fn BundleSystems(comptime _: type) type {
