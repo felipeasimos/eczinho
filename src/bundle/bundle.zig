@@ -31,6 +31,13 @@ pub const Bundle = struct {
         }
     }).default,
 
+    pub fn eq(self: *const @This(), other: *const @This()) bool {
+        if (self.ContextConstructor != other.ContextConstructor) return false;
+        if (self.FunctionsConstructor != other.FunctionsConstructor) return false;
+        if (self.SystemsConstructor != other.SystemsConstructor) return false;
+        return true;
+    }
+
     fn getSystemsStructDeclarations(self: @This(), comptime Context: type) []const std.builtin.Type.Declaration {
         return @typeInfo(self.SystemsConstructor(Context)).@"struct".decls;
     }
@@ -135,33 +142,60 @@ pub const BundleContext = struct {
             }
             return new;
         }
-        pub fn build(self: @This()) BundleContext {
-            return .{
+        pub fn build(self: @This(), comptime Entity: type) BundleContext {
+            var context = BundleContext{
                 .ComponentTypes = self.components,
                 .ResourceTypes = self.resources,
                 .EventTypes = self.events,
                 .Bundles = self.bundles,
             };
+            return context.mergeWithBundles(Entity);
         }
     };
 
-    /// recursively merge dependency bundle context into this one
-    /// we still need to keep bundles around because of their systems
-    fn flattenContext(self: @This()) @This() {
-        var new = self;
-        const bundles = self.Bundles;
-        for (bundles) |bundle| {
-            new = self.merge(bundle.flattenContext().Context);
+    fn containsBundle(bundles: []const Bundle, bundle: Bundle) bool {
+        for (bundles) |b| {
+            if (b.eq(&bundle)) {
+                return true;
+            }
         }
-        return new;
+        return false;
     }
-    pub fn merge(self: @This(), other: @This()) @This() {
-        const flatten_other = other.flattenContext();
+
+    /// recursively go through given bundles, to get a complete list of bundles
+    /// without duplicates
+    /// `current_bundles` should be an empty list initially
+    fn getCompleteListOfBundles(current_bundles: []const Bundle, additional_bundles: []const Bundle, comptime Entity: type) []const Bundle {
+        if (current_bundles.len == 0 and additional_bundles.len == 0) {
+            return &.{};
+        }
+        var final_bundles: []const Bundle = current_bundles;
+        // first attach first-level bundles to this one
+        for (additional_bundles) |bundle| {
+            if (!containsBundle(final_bundles, bundle)) {
+                final_bundles = final_bundles ++ .{bundle};
+                const bundle_context = bundle.ContextConstructor(Entity);
+                final_bundles = getCompleteListOfBundles(final_bundles, bundle_context.Bundles, Entity);
+            }
+        }
+        return final_bundles;
+    }
+    fn mergeWithBundles(self: @This(), comptime Entity: type) @This() {
+        const bundles = getCompleteListOfBundles(&.{}, self.Bundles, Entity);
+        var final_components: []const type = self.ComponentTypes;
+        var final_resources: []const type = self.ResourceTypes;
+        var final_events: []const type = self.EventTypes;
+        for (bundles) |bundle| {
+            const bundle_context = bundle.ContextConstructor(Entity);
+            final_components = final_components ++ bundle_context.ComponentTypes;
+            final_resources = final_resources ++ bundle_context.ResourceTypes;
+            final_events = final_events ++ bundle_context.EventTypes;
+        }
         return .{
-            .ComponentTypes = self.ComponentTypes ++ flatten_other.ComponentTypes,
-            .ResourceTypes = self.ResourceTypes ++ flatten_other.ResourceTypes,
-            .EventTypes = self.EventTypes ++ flatten_other.EventTypes,
-            .Bundles = self.Bundles ++ flatten_other.Bundles,
+            .ComponentTypes = final_components,
+            .ResourceTypes = final_resources,
+            .EventTypes = final_events,
+            .Bundles = bundles,
         };
     }
 };

@@ -66,10 +66,7 @@ pub const AppContextBuilder = struct {
         return new;
     }
     pub fn build(self: @This()) type {
-        var context: BundleContext = self.bundle_builder.build();
-        for (self.bundle_builder.bundles) |bundle| {
-            context = context.merge(bundle.ContextConstructor(self.entity));
-        }
+        const context: BundleContext = comptime self.bundle_builder.build(self.entity);
         return app.AppContext(.{
             .Events = EventsFactory(context.EventTypes ++ .{app_events.AppExit}),
             .Resources = ResourcesFactory(context.ResourceTypes),

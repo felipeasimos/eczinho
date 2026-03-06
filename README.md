@@ -12,8 +12,10 @@ zig build --build-file examples/pong/build.zig
 
 # TODO
 
-- [ ] bundles
-- [ ] chunks
+- [ ] choose storage options per-component type:
+   - [ ] archetype table (like Bevy)
+   - [ ] archetype chunks (like DOTS)
+   - [ ] sparse sets (like EnTT/Bevy)
 - [ ] zbench
 - [ ] move more code to comptime
    - [ ] scheduler
