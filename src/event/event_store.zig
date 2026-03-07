@@ -41,7 +41,6 @@ pub fn EventStore(comptime options: EventStoreOptions) type {
         pub const BuffersTuple = initBuffersTuple(Events);
 
         buffers: BuffersTuple,
-        allocator: std.mem.Allocator,
 
         pub fn init(alloc: std.mem.Allocator) @This() {
             comptime var iter = Events.Iterator.init();
@@ -53,7 +52,6 @@ pub fn EventStore(comptime options: EventStoreOptions) type {
                 i += 1;
             }
             return .{
-                .allocator = alloc,
                 .buffers = buffers,
             };
         }

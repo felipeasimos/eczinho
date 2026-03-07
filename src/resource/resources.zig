@@ -5,6 +5,7 @@ pub fn Resources(comptime ResourceTypes: []const type) type {
     return struct {
         const Hasher = TypeHasher(ResourceTypes);
         pub const ResourceTypeId = Hasher.TypeId;
+        pub const Len = Hasher.Len;
         pub const Union = Hasher.Union;
         pub const getCanonicalType = Hasher.getCanonicalType;
         pub const getAlignment = Hasher.getAlignment;
