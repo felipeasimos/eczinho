@@ -40,10 +40,6 @@ const Context = ecs.AppContextBuilder.init()
     .addBundle(ecs.CoreBundles.Visibility)
     .addComponents(&.{
         Velocity,
-        // oops? we added position in addBundle and also through here!
-        // No problem though! The system checks for redundant components
-        // (beware of type aliases btw!)
-        Position,
         Rect,
         Player,
         Enemy,

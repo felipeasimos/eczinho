@@ -1,13 +1,16 @@
 const eczinho = @import("eczinho");
 const std = @import("std");
 
-test "simple" {
-    const typeA = struct { a: u34 };
+test "resource insertion" {
+    const ResourceA = struct { a: f32 };
     const Context = eczinho.AppContextBuilder.init()
-        .addComponent(typeA)
+        .addResource(ResourceA)
         .build();
     var app = eczinho.AppBuilder
         .init(Context)
         .build(std.testing.allocator);
+    try app.insert(ResourceA{ .a = 34 });
     defer app.deinit();
+
+    try std.testing.expect(app.resource_store.optGet(ResourceA) != null);
 }

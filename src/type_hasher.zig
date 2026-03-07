@@ -32,7 +32,10 @@ fn initTypeId(comptime Types: []const type) type {
 
 pub fn TypeHasher(comptime RawTypes: []const type) type {
     return struct {
-        /// remove repeated types
+        // TODO: remove this code? This would cause confusion when dealing with type aliases
+        // but just using raw types leave bundles exposed to use repeated types and breaking component
+        // uniqueness
+        // remove repeated types
         pub const Types = Types: {
             var types: []const type = &.{};
             for (RawTypes) |Type| {
@@ -42,6 +45,9 @@ pub fn TypeHasher(comptime RawTypes: []const type) type {
             }
             break :Types types;
         };
+        // alternative to todo above
+        // pub const Types = RawTypes;
+
         /// enum that will be used to make typeIds (tid) typed
         /// EVERY tid should be TypeId
         pub const TypeId = initTypeId(Types);

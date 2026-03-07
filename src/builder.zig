@@ -68,7 +68,7 @@ pub const AppContextBuilder = struct {
     pub fn build(self: @This()) type {
         const context: BundleContext = comptime self.bundle_builder.build(self.entity);
         return app.AppContext(.{
-            .Events = EventsFactory(context.EventTypes ++ .{app_events.AppExit}),
+            .Events = EventsFactory(context.EventTypes ++ app_events.appEventsSlice),
             .Resources = ResourcesFactory(context.ResourceTypes),
             .Components = ComponentsFactory(context.ComponentTypes),
             .Bundles = context.Bundles,
@@ -132,52 +132,3 @@ pub const AppBuilder = struct {
         };
     }
 };
-
-test AppContextBuilder {
-    const Transform = @import("bundle/core/transform.zig").Transform;
-    const typeA = struct { a: f32 };
-    const typeB = struct { a: u32 };
-    const entity_config: EntityOptions = .{ .index_bits = 10, .version_bits = 11 };
-    const Context = AppContextBuilder.init()
-        .addComponent(typeA)
-        .addComponents(&.{typeB})
-        .addBundle(Transform)
-        .setEntityConfig(entity_config)
-        .build();
-    try std.testing.expect(Context.Components.isComponent(typeA));
-    try std.testing.expect(Context.Components.isComponent(typeB));
-    try std.testing.expectEqual(EntityTypeFactory(entity_config), Context.Entity);
-}
-
-test AppBuilder {
-    const Position = @import("bundle/core/transform.zig").Position;
-    const Rotation = @import("bundle/core/transform.zig").Rotation;
-    const Transform = @import("bundle/core/transform.zig").Transform;
-    const Hierarchy = @import("bundle/core/hierarchy.zig").Hierarchy;
-    const ChildConstructor = @import("bundle/core/hierarchy.zig").ChildConstructor;
-    const ParentConstructor = @import("bundle/core/hierarchy.zig").ParentConstructor;
-
-    const typeA = struct { a: f32 };
-    const typeB = struct { a: u32 };
-
-    const Context = AppContextBuilder.init()
-        .addBundle(Transform)
-        .addBundle(Hierarchy)
-        .addComponent(typeA)
-        .addComponents(&.{typeB})
-        .build();
-
-    try std.testing.expect(Context.Components.isComponent(Position));
-    try std.testing.expect(Context.Components.isComponent(Rotation));
-    try std.testing.expect(Context.Components.isComponent(ChildConstructor(Context.Entity)));
-    try std.testing.expect(Context.Components.isComponent(ParentConstructor(Context.Entity)));
-
-    const Query = Context.Query;
-
-    var test_app = AppBuilder.init(Context)
-        .addSystem(.Update, struct {
-            pub fn execute(_: Query(.{ .q = &.{ typeA, *typeB } })) void {}
-        }.execute)
-        .build(std.testing.allocator);
-    defer test_app.deinit();
-}

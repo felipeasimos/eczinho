@@ -40,6 +40,7 @@ test "include multiple components individually" {
     try std.testing.expect(Context.Components.isComponent(ComponentA));
     try std.testing.expect(Context.Components.isComponent(ComponentB));
     try std.testing.expect(Context.Components.isComponent(ComponentC));
+    try std.testing.expectEqual(3, Context.Components.Len);
 }
 
 test "include components individually and at once" {

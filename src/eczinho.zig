@@ -10,6 +10,8 @@ pub const StageLabel = @import("stage_label.zig").StageLabel;
 pub const entity = @import("entity.zig");
 pub const AppEvents = @import("app_events.zig");
 pub const CoreBundles = @import("bundle/core/core.zig");
+pub const Bundle = @import("bundle/bundle.zig").Bundle;
+pub const BundleContext = @import("bundle/bundle.zig").BundleContext;
 
 test "eczinho" {
     const std = @import("std");
