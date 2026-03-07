@@ -46,7 +46,7 @@ pub fn TypeHasher(comptime RawTypes: []const type) type {
         /// EVERY tid should be TypeId
         pub const TypeId = initTypeId(Types);
         pub const Len = Types.len;
-        pub const MaxAlignment = std.mem.max(usize, TypeIdAlignmentMap.values[0..]);
+        pub const MaxAlignment = if (Types.len > 0) std.mem.max(usize, TypeIdAlignmentMap.values[0..]) else 1;
 
         pub const Union = Union: {
             @setEvalBranchQuota(10000);
