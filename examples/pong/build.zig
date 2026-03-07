@@ -91,4 +91,12 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_exe_tests.step);
+
+    const check_exe = b.addExecutable(.{
+        .name = "check",
+        .root_module = exe_mod,
+    });
+
+    const check_step = b.step("check", "Check for compile errors");
+    check_step.dependOn(&check_exe.step);
 }
