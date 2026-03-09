@@ -126,12 +126,18 @@ pub fn Components(comptime ComponentTypes: []const type) type {
                 };
             }
             pub fn nextComponent(self: *@This()) ?type {
+                if (comptime Len == 0) {
+                    return null;
+                }
                 if (self.iter.next()) |idx| {
                     return ComponentTypes[idx];
                 }
                 return null;
             }
             pub fn nextComponentNonEmpty(self: *@This()) ?type {
+                if (comptime Len == 0) {
+                    return null;
+                }
                 inline while (self.nextComponent()) |Component| {
                     if (comptime @sizeOf(Component) != 0) {
                         return Component;
@@ -140,12 +146,18 @@ pub fn Components(comptime ComponentTypes: []const type) type {
                 return null;
             }
             pub fn nextTypeId(self: *@This()) ?ComponentTypeId {
+                if (comptime Len == 0) {
+                    return null;
+                }
                 if (self.iter.next()) |idx| {
                     return Hasher.TypeIds[idx];
                 }
                 return null;
             }
             pub fn nextTypeIdNonEmpty(self: *@This()) ?ComponentTypeId {
+                if (comptime Len == 0) {
+                    return null;
+                }
                 while (self.iter.next()) |idx| {
                     const size = Hasher.Sizes[idx];
                     if (size != 0) {
@@ -155,6 +167,9 @@ pub fn Components(comptime ComponentTypes: []const type) type {
                 return null;
             }
             pub fn nextTypeIdZST(self: *@This()) ?ComponentTypeId {
+                if (comptime Len == 0) {
+                    return null;
+                }
                 while (self.iter.next()) |idx| {
                     const size = Hasher.Sizes[idx];
                     if (size == 0) {

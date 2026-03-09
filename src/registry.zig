@@ -268,10 +268,14 @@ pub fn Registry(comptime options: RegistryOptions) type {
                 };
                 context_loop: while (iter.next()) |comm| {
                     switch (comm) {
-                        .add => |a| switch (a) {
-                            inline else => |v| {
-                                try self.add(entt, v);
-                            },
+                        .add => |a| {
+                            if (comptime Components.Len != 0) {
+                                switch (a) {
+                                    inline else => |v| {
+                                        try self.add(entt, v);
+                                    },
+                                }
+                            }
                         },
                         .remove => |type_id| {
                             try self.remove(type_id, entt);

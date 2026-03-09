@@ -243,6 +243,7 @@ pub fn TypeHasher(comptime RawTypes: []const type) type {
         }
 
         pub inline fn getSize(tid_or_type: anytype) usize {
+            if (comptime Len == 0) return 0;
             if (comptime @TypeOf(tid_or_type) == TypeId) {
                 return TypeIdSizeMap.get(tid_or_type);
             } else if (comptime isRegisteredType(tid_or_type)) {
@@ -252,6 +253,7 @@ pub fn TypeHasher(comptime RawTypes: []const type) type {
         }
 
         pub inline fn getAlignment(tid_or_type: anytype) usize {
+            if (comptime Len == 0) return 0;
             if (comptime @TypeOf(tid_or_type) == TypeId) {
                 return TypeIdAlignmentMap.get(tid_or_type);
             } else if (comptime isRegisteredType(tid_or_type)) {
@@ -261,6 +263,7 @@ pub fn TypeHasher(comptime RawTypes: []const type) type {
         }
 
         pub inline fn getIndex(tid_or_type: anytype) usize {
+            if (comptime Len == 0) return 0;
             if (comptime @TypeOf(tid_or_type) == TypeId) {
                 return TypeIdIndexMap.get(tid_or_type);
             } else if (comptime isRegisteredType(tid_or_type)) {
