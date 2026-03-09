@@ -196,6 +196,9 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                 fn getComponent(self: *@This(), comptime Type: type, chunk: *Chunk, slot_index: usize, comptime mark_change: bool) Type {
                     const CanonicalType = comptime Components.getCanonicalType(Type);
                     const access_type = comptime Components.getAccessType(Type);
+                    if (comptime @sizeOf(CanonicalType) == 0) {
+                        @compileError("Cannot get access to zero size component " ++ @typeName(CanonicalType));
+                    }
                     const return_value: Type = switch (comptime access_type) {
                         .Const => chunk.getConst(CanonicalType, slot_index),
                         .PointerConst => @ptrCast(chunk.getConst(CanonicalType, slot_index)),
