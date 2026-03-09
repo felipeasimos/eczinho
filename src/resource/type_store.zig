@@ -1,20 +1,54 @@
 const std = @import("std");
 
 pub const TypeStoreOptions = struct {
-    Resources: type,
+    TypeHasher: type,
 };
+
+fn initTupleType(comptime TypeHasher: type) type {
+    var fields: [TypeHasher.Len]std.builtin.Type.StructField = undefined;
+    var iter = comptime TypeHasher.Iterator.init();
+    var i = 0;
+    inline while (iter.nextType()) |Type| {
+        fields[i] = std.builtin.Type.StructField{
+            .name = std.fmt.comptimePrint("{}", .{i}),
+            .type = ?Type,
+            .alignment = @alignOf(Type),
+            .is_comptime = false,
+            .default_value_ptr = null,
+        };
+        i += 1;
+    }
+    return @Type(.{
+        .@"struct" = .{
+            .backing_integer = null,
+            .layout = .auto,
+            .decls = &.{},
+            .is_tuple = true,
+            .fields = &fields,
+        },
+    });
+}
 
 pub fn TypeStore(comptime options: TypeStoreOptions) type {
     return struct {
         pub const Marker = TypeStore;
-        pub const Resources = options.Resources;
+        pub const TypeHasher = options.TypeHasher;
 
-        allocator: std.mem.Allocator,
-        store: std.AutoHashMap(Resources.ResourceTypeId, *anyopaque),
-        pub fn init(alloc: std.mem.Allocator) @This() {
+        pub const TypesTuple = initTupleType(TypeHasher);
+
+        values: TypesTuple,
+
+        pub fn init() @This() {
+            comptime var iter = TypeHasher.Iterator.init();
+            comptime var i = 0;
+            // SAFETY: immediatly filled in the following lines
+            var values: TypesTuple = undefined;
+            inline while (iter.nextType()) |_| {
+                values[i] = null;
+                i += 1;
+            }
             return .{
-                .allocator = alloc,
-                .store = .init(alloc),
+                .values = values,
             };
         }
         pub inline fn clone(self: *@This(), comptime T: type) T {
@@ -27,55 +61,56 @@ pub fn TypeStore(comptime options: TypeStoreOptions) type {
             return self.optGetConst(T).?;
         }
         pub inline fn optGet(self: *@This(), comptime T: type) ?*T {
-            return @ptrCast(@alignCast(self.store.get(Resources.hash(T))));
+            if (self.values[comptime TypeHasher.getIndex(T)]) |*value| {
+                return value;
+            }
+            return null;
         }
         pub inline fn optGetConst(self: *@This(), comptime T: type) ?*const T {
-            return @ptrCast(@alignCast(self.store.get(Resources.hash(T))));
+            if (self.values[comptime TypeHasher.getIndex(T)]) |*value| {
+                return value;
+            }
+            return null;
         }
-        pub fn insert(self: *@This(), value: anytype) !void {
-            const T = @TypeOf(value);
-            const ptr: *T = try self.allocator.create(T);
-            @memcpy(std.mem.asBytes(ptr), std.mem.asBytes(&value));
-            try self.store.put(Resources.hash(T), ptr);
+        pub fn insert(self: *@This(), value: anytype) void {
+            self.values[comptime TypeHasher.getIndex(@TypeOf(value))] = value;
         }
         pub fn remove(self: *@This(), comptime T: type) void {
-            if (comptime @hasDecl(T, "deinit")) {
-                if (self.optGet(Resources.hash(T))) |ptr| {
-                    ptr.deinit();
-                }
-            }
-            self.store.remove(Resources.hash(T));
+            self.get(T).* = null;
         }
         pub fn deinit(self: *@This()) void {
-            comptime var iter = Resources.Iterator.init();
+            comptime var iter = TypeHasher.Iterator.init();
             inline while (comptime iter.nextType()) |Type| {
                 switch (@typeInfo(Type)) {
                     .@"struct", .@"enum", .@"union", .@"opaque" => {
                         if (comptime @hasDecl(Type, "deinit")) {
-                            if (self.optGet(Type)) |ptr| {
-                                ptr.deinit();
+                            if (self.optGet(Type)) |val| {
+                                val.deinit();
                             }
                         }
                     },
                     else => {},
                 }
-                if (self.optGet(Type)) |ptr| {
-                    self.allocator.destroy(ptr);
-                }
             }
-            self.store.deinit();
         }
         pub fn len(self: *@This()) usize {
-            return self.store.count();
+            comptime var iter = TypeHasher.Iterator.init();
+            var i: usize = 0;
+            inline while (iter.nextType()) |Type| {
+                if (self.optGet(Type) != null) {
+                    i += 1;
+                }
+            }
+            return i;
         }
     };
 }
 
 test TypeStore {
     const Resources = @import("resources.zig").Resources;
-    var store = TypeStore(.{ .Resources = Resources(&.{ u64, u8, u32 }) }).init(std.testing.allocator);
+    var store = TypeStore(.{ .TypeHasher = Resources(&.{ u64, u8, u32 }) }).init();
     defer store.deinit();
-    try store.insert(@as(u64, 8));
+    store.insert(@as(u64, 8));
     try std.testing.expectEqual(1, store.len());
     try std.testing.expectEqual(@as(u64, 8), store.get(u64).*);
 }

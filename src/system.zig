@@ -22,7 +22,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             .Entity = Entity,
         });
         pub const TypeStore = TypeStoreFactory(.{
-            .Resources = Resources,
+            .TypeHasher = Resources,
         });
         pub const EventStore = EventStoreFactory(.{
             .Events = Events,
@@ -146,7 +146,11 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             var args: ArgsTuple = undefined;
             inline for (ParamsSlice, 0..) |param, i| {
                 const ArgType = param.type.?;
-                args[i] = try initArg(ArgType, deps);
+                if (ArgType == *TypeStore) {
+                    args[i] = deps.type_store;
+                } else {
+                    args[i] = try initArg(ArgType, deps);
+                }
             }
             return args;
         }

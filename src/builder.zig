@@ -119,7 +119,7 @@ pub const AppBuilder = struct {
             .Entity = self.options.Context.Entity,
         });
         const TypeStore = TypeStoreFactory(.{
-            .Resources = self.options.Context.Resources,
+            .TypeHasher = self.options.Context.Resources,
         });
         const EventStore = EventStoreFactory(.{
             .Events = self.options.Context.Events,
@@ -127,7 +127,7 @@ pub const AppBuilder = struct {
         return app.App(self.options){
             .allocator = allocator,
             .registry = Registry.init(allocator),
-            .resource_store = TypeStore.init(allocator),
+            .resource_store = TypeStore.init(),
             .event_store = EventStore.init(allocator),
         };
     }

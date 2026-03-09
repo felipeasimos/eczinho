@@ -351,8 +351,8 @@ pub fn main() !void {
         std.crypto.random.bytes(std.mem.asBytes(&seed));
         break :blk seed;
     });
-    try app.insert(prng.random());
-    try app.insert(Score{});
+    app.insertResource(prng.random());
+    app.insertResource(Score{});
 
     try app.run();
 }

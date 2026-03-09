@@ -29,8 +29,13 @@ pub fn AppContext(comptime options: AppContextOptions) type {
         pub const Resources = options.Resources;
         pub const Events = options.Events;
         pub const Bundles = options.Bundles;
-        pub const TypeStore = resource.TypeStore(.{
-            .Resources = Resources,
+
+        /// use in systems to obtain access to the whole resource store
+        /// fn systemExample(store: *ResourceStore(typeA), ...) !void {
+        ///     ...
+        /// }
+        pub const ResourceStore = resource.TypeStore(.{
+            .TypeHasher = Resources,
         });
         /// use in systems to obtain a query. System signature should be like:
         /// fn systemExample(q: Query(.{.q = &.{typeA, *typeB}, .with = &.{typeC}}), ...) !void {
@@ -60,7 +65,7 @@ pub fn AppContext(comptime options: AppContextOptions) type {
         /// returned handle can access resource using get() *T or getConst() *const T
         pub fn Resource(comptime T: type) type {
             return resource.Resource(.{
-                .TypeStore = TypeStore,
+                .TypeStore = ResourceStore,
                 .T = T,
             });
         }
@@ -121,7 +126,7 @@ pub fn App(comptime options: AppOptions) type {
             .Entity = Entity,
         });
         pub const TypeStore = resource.TypeStore(.{
-            .Resources = Resources,
+            .TypeHasher = Resources,
         });
         pub const EventStore = event.EventStore(.{
             .Events = Events,
@@ -148,8 +153,11 @@ pub fn App(comptime options: AppOptions) type {
         pub fn run(self: *@This()) !void {
             try self.startup();
             while (!self.shouldExit()) {
-                try self.scheduler.?.run();
+                try self.runOne();
             }
+        }
+        pub fn runOne(self: *@This()) !void {
+            try self.scheduler.?.run();
         }
 
         pub fn startup(self: *@This()) !void {
@@ -160,8 +168,8 @@ pub fn App(comptime options: AppOptions) type {
             );
         }
 
-        pub fn insert(self: *@This(), value: anytype) !void {
-            try self.resource_store.insert(value);
+        pub fn insertResource(self: *@This(), value: anytype) void {
+            self.resource_store.insert(value);
         }
 
         pub fn deinit(self: *@This()) void {
@@ -223,15 +231,14 @@ test App {
     var app = AppType{
         .allocator = std.testing.allocator,
         .registry = AppType.Registry.init(std.testing.allocator),
-        .resource_store = AppType.TypeStore.init(std.testing.allocator),
+        .resource_store = AppType.TypeStore.init(),
         .event_store = AppType.EventStore.init(std.testing.allocator),
         .scheduler = null,
     };
     defer app.deinit();
 
-    try app.resource_store.insert(@as(u7, 8));
+    app.resource_store.insert(@as(u7, 8));
     try std.testing.expectEqual(0, app.registry.len());
     try app.startup();
-    try app.scheduler.?.run();
     try std.testing.expectEqual(1, app.registry.len());
 }

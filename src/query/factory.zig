@@ -178,6 +178,9 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
                         if (result != null) @panic("optSingle found more than one valid tuple");
                         result = tuple;
                     }
+                    if (inner_arch_iter.next() != null) {
+                        @panic("optSingle found more than one valid tuple");
+                    }
                 }
             }
             return result;
