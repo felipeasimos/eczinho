@@ -40,10 +40,6 @@ const Context = ecs.AppContextBuilder.init()
     .addBundle(ecs.CoreBundles.Visibility)
     .addComponents(&.{
         Velocity,
-        // oops? we added position in addBundle and also through here!
-        // No problem though! The system checks for redundant components
-        // (beware of type aliases btw!)
-        Position,
         Rect,
         Player,
         Enemy,
@@ -355,8 +351,8 @@ pub fn main() !void {
         std.crypto.random.bytes(std.mem.asBytes(&seed));
         break :blk seed;
     });
-    try app.insert(prng.random());
-    try app.insert(Score{});
+    app.insertResource(prng.random());
+    app.insertResource(Score{});
 
     try app.run();
 }

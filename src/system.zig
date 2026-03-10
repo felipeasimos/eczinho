@@ -11,6 +11,9 @@ const SystemData = @import("system_data.zig").SystemData;
 const ParameterData = @import("parameter_data.zig").ParameterData;
 
 pub fn System(comptime function: anytype, comptime Context: type) type {
+    if (@typeInfo(@TypeOf(function)) != .@"fn") {
+        @compileError("a function should be provided to System(), not " ++ @typeName(@TypeOf(function)));
+    }
     return struct {
         pub const Entity = Context.Entity;
         pub const Components = Context.Components;
@@ -22,7 +25,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             .Entity = Entity,
         });
         pub const TypeStore = TypeStoreFactory(.{
-            .Resources = Resources,
+            .TypeHasher = Resources,
         });
         pub const EventStore = EventStoreFactory(.{
             .Events = Events,
@@ -146,7 +149,11 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             var args: ArgsTuple = undefined;
             inline for (ParamsSlice, 0..) |param, i| {
                 const ArgType = param.type.?;
-                args[i] = try initArg(ArgType, deps);
+                if (ArgType == *TypeStore) {
+                    args[i] = deps.type_store;
+                } else {
+                    args[i] = try initArg(ArgType, deps);
+                }
             }
             return args;
         }

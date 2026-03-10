@@ -32,7 +32,10 @@ fn initTypeId(comptime Types: []const type) type {
 
 pub fn TypeHasher(comptime RawTypes: []const type) type {
     return struct {
-        /// remove repeated types
+        // TODO: remove this code? This would cause confusion when dealing with type aliases
+        // but just using raw types leave bundles exposed to use repeated types and breaking component
+        // uniqueness
+        // remove repeated types
         pub const Types = Types: {
             var types: []const type = &.{};
             for (RawTypes) |Type| {
@@ -42,11 +45,14 @@ pub fn TypeHasher(comptime RawTypes: []const type) type {
             }
             break :Types types;
         };
+        // alternative to todo above
+        // pub const Types = RawTypes;
+
         /// enum that will be used to make typeIds (tid) typed
         /// EVERY tid should be TypeId
         pub const TypeId = initTypeId(Types);
         pub const Len = Types.len;
-        pub const MaxAlignment = std.mem.max(usize, TypeIdAlignmentMap.values[0..]);
+        pub const MaxAlignment = if (Types.len > 0) std.mem.max(usize, TypeIdAlignmentMap.values[0..]) else 1;
 
         pub const Union = Union: {
             @setEvalBranchQuota(10000);
@@ -237,6 +243,7 @@ pub fn TypeHasher(comptime RawTypes: []const type) type {
         }
 
         pub inline fn getSize(tid_or_type: anytype) usize {
+            if (comptime Len == 0) return 0;
             if (comptime @TypeOf(tid_or_type) == TypeId) {
                 return TypeIdSizeMap.get(tid_or_type);
             } else if (comptime isRegisteredType(tid_or_type)) {
@@ -246,6 +253,7 @@ pub fn TypeHasher(comptime RawTypes: []const type) type {
         }
 
         pub inline fn getAlignment(tid_or_type: anytype) usize {
+            if (comptime Len == 0) return 0;
             if (comptime @TypeOf(tid_or_type) == TypeId) {
                 return TypeIdAlignmentMap.get(tid_or_type);
             } else if (comptime isRegisteredType(tid_or_type)) {
@@ -255,6 +263,7 @@ pub fn TypeHasher(comptime RawTypes: []const type) type {
         }
 
         pub inline fn getIndex(tid_or_type: anytype) usize {
+            if (comptime Len == 0) return 0;
             if (comptime @TypeOf(tid_or_type) == TypeId) {
                 return TypeIdIndexMap.get(tid_or_type);
             } else if (comptime isRegisteredType(tid_or_type)) {
@@ -262,7 +271,8 @@ pub fn TypeHasher(comptime RawTypes: []const type) type {
                     return idx;
                 }
             }
-            @compileError("invalid type " ++ @typeName(@TypeOf(tid_or_type)) ++ ": must be a TypeId or a type in the registered list");
+            const Type = if (comptime @TypeOf(tid_or_type) == TypeId) TypeId else tid_or_type;
+            @compileError("invalid type " ++ @typeName(Type) ++ ": must be a TypeId or a type in the registered list");
         }
 
         pub inline fn getName(tid_or_type: anytype) [:0]const u8 {

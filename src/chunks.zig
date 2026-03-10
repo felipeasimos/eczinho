@@ -47,16 +47,20 @@ pub fn ChunksFactory(comptime options: ChunkOptions) type {
             var non_empty_map = std.EnumMap(Components.ComponentTypeId, usize){};
             var iter = signature.iterator();
             var i: usize = 0;
-            while (iter.nextTypeIdNonEmpty()) |tid| {
-                non_empty_map.put(tid, i);
-                i += 1;
+            if (comptime Components.Len != 0) {
+                while (iter.nextTypeIdNonEmpty()) |tid| {
+                    non_empty_map.put(tid, i);
+                    i += 1;
+                }
             }
             var zst_map = std.EnumMap(Components.ComponentTypeId, usize){};
             iter = signature.iterator();
             i = 0;
-            while (iter.nextTypeIdZST()) |tid| {
-                zst_map.put(tid, i);
-                i += 1;
+            if (comptime Components.Len != 0) {
+                while (iter.nextTypeIdZST()) |tid| {
+                    zst_map.put(tid, i);
+                    i += 1;
+                }
             }
             const capacity_per_chunk = calculateCapacity(&sig);
             const offsets, const metadata_start, const zst_metadata_start = try calculateOffsets(&sig, capacity_per_chunk, alloc);
@@ -147,10 +151,12 @@ pub fn ChunksFactory(comptime options: ChunkOptions) type {
             return lower;
         }
         pub inline fn getNonEmptyTypeIndex(self: *const @This(), tid_or_component: anytype) ?usize {
+            if (comptime Components.Len == 0) return null;
             const hash: Components.ComponentTypeId = if (comptime @TypeOf(tid_or_component) == type) Components.hash(tid_or_component) else tid_or_component;
             return self.map_non_empty_to_type_index.get(hash);
         }
         pub inline fn getZSTIndex(self: *const @This(), tid_or_component: anytype) ?usize {
+            if (comptime Components.Len == 0) return null;
             const hash: Components.ComponentTypeId = if (comptime @TypeOf(tid_or_component) == type) Components.hash(tid_or_component) else tid_or_component;
             return self.map_zst_to_type_index.get(hash);
         }

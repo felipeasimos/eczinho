@@ -69,6 +69,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
 
             var old_iter_type_id = self.signature.iterator();
             while (old_iter_type_id.nextTypeId()) |tid| {
+                // already existing component types
                 if (new_arch.signature.has(tid)) {
                     if (Components.getSize(tid) != 0) {
                         const old_type_index = location.chunk.getNonEmptyTypeIndex(tid);
@@ -77,6 +78,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                         const new_addr = new_chunk.getElemWithTypeIndex(new_chunk_type_index, new_slot_index);
                         @memcpy(new_addr, old_addr);
                     }
+                    // removed component types
                 } else {
                     try removed_logs.addRemoved(tid, entt, current_tick);
                 }
@@ -84,6 +86,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             var new_iter_type_id = new_arch.signature.iterator();
             while (new_iter_type_id.nextTypeId()) |tid| {
                 const is_zst = Components.getSize(tid) == 0;
+                // already existing component types
                 if (self.signature.has(tid)) {
                     if (is_zst) {
                         const old_type_index = location.chunk.getZSTIndex(tid);
@@ -95,6 +98,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                         new_chunk.getNonEmptyMetadataArray(new_type_index, .Added)[new_slot_index] = location.chunk.getNonEmptyMetadataArray(old_type_index, .Added)[@intCast(location.slot_index)];
                         new_chunk.getNonEmptyMetadataArray(new_type_index, .Changed)[new_slot_index] = location.chunk.getNonEmptyMetadataArray(old_type_index, .Changed)[@intCast(location.slot_index)];
                     }
+                    // newly added components types
                 } else {
                     if (is_zst) {
                         const new_type_index = new_chunk.getZSTIndex(tid);
@@ -196,6 +200,9 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                 fn getComponent(self: *@This(), comptime Type: type, chunk: *Chunk, slot_index: usize, comptime mark_change: bool) Type {
                     const CanonicalType = comptime Components.getCanonicalType(Type);
                     const access_type = comptime Components.getAccessType(Type);
+                    if (comptime @sizeOf(CanonicalType) == 0) {
+                        @compileError("Cannot get access to zero size component " ++ @typeName(CanonicalType));
+                    }
                     const return_value: Type = switch (comptime access_type) {
                         .Const => chunk.getConst(CanonicalType, slot_index),
                         .PointerConst => @ptrCast(chunk.getConst(CanonicalType, slot_index)),

@@ -17,3 +17,6 @@ if ! zig build test; then
     exit 1
 fi
 
+if ! zig build --build-file examples/pong/build.zig check; then
+    exit 1
+fi

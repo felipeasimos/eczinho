@@ -37,22 +37,27 @@ pub fn RemovedComponentsLog(comptime options: RemovedComponentsLogOptions) type 
                 self.logs[i].swap();
             }
         }
-        pub fn getRemovedLog(self: *@This(), tid_or_component: anytype) *RemovedComponentLogType {
+        fn getRemovedLog(self: *@This(), tid_or_component: anytype) *RemovedComponentLogType {
             return &self.logs[Components.getIndex(tid_or_component)];
         }
         pub fn readOne(self: *@This(), comptime T: type, index_ptr: *usize) ?RemovedLogEntryType {
+            if (comptime Components.Len == 0) return null;
             return self.getRemovedLog(T).readOne(index_ptr);
         }
         pub fn remaining(self: *@This(), comptime T: type, index_ptr: *usize) usize {
+            if (comptime Components.Len == 0) return 0;
             return self.getRemovedLog(T).remaining(index_ptr);
         }
         pub fn clear(self: *@This(), comptime T: type, index_ptr: *usize) void {
+            if (comptime Components.Len == 0) return;
             self.getRemovedLog(T).clear(index_ptr);
         }
         pub fn total(self: *@This(), comptime T: type) usize {
+            if (comptime Components.Len == 0) return 0;
             return self.getRemovedLog(T).count;
         }
         pub fn addRemoved(self: *@This(), tid_or_component: anytype, entt: Entity, current_tick: Tick) !void {
+            if (comptime Components.Len == 0) return;
             try self.getRemovedLog(tid_or_component).write(.{
                 .entity = entt,
                 .tick = current_tick,

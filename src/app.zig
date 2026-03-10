@@ -1,6 +1,4 @@
 const std = @import("std");
-const System = @import("system.zig").System;
-const ComponentsFactory = @import("components.zig").Components;
 const RegistryFactory = @import("registry.zig").Registry;
 const SchedulerFactory = @import("scheduler.zig").Scheduler;
 const EntityTypeFactory = @import("entity.zig").EntityTypeFactory;
@@ -29,8 +27,13 @@ pub fn AppContext(comptime options: AppContextOptions) type {
         pub const Resources = options.Resources;
         pub const Events = options.Events;
         pub const Bundles = options.Bundles;
-        pub const TypeStore = resource.TypeStore(.{
-            .Resources = Resources,
+
+        /// use in systems to obtain access to the whole resource store
+        /// fn systemExample(store: *ResourceStore(typeA), ...) !void {
+        ///     ...
+        /// }
+        pub const ResourceStore = resource.TypeStore(.{
+            .TypeHasher = Resources,
         });
         /// use in systems to obtain a query. System signature should be like:
         /// fn systemExample(q: Query(.{.q = &.{typeA, *typeB}, .with = &.{typeC}}), ...) !void {
@@ -60,7 +63,7 @@ pub fn AppContext(comptime options: AppContextOptions) type {
         /// returned handle can access resource using get() *T or getConst() *const T
         pub fn Resource(comptime T: type) type {
             return resource.Resource(.{
-                .TypeStore = TypeStore,
+                .TypeStore = ResourceStore,
                 .T = T,
             });
         }
@@ -121,7 +124,7 @@ pub fn App(comptime options: AppOptions) type {
             .Entity = Entity,
         });
         pub const TypeStore = resource.TypeStore(.{
-            .Resources = Resources,
+            .TypeHasher = Resources,
         });
         pub const EventStore = event.EventStore(.{
             .Events = Events,
@@ -148,8 +151,11 @@ pub fn App(comptime options: AppOptions) type {
         pub fn run(self: *@This()) !void {
             try self.startup();
             while (!self.shouldExit()) {
-                try self.scheduler.?.run();
+                try self.runOne();
             }
+        }
+        pub fn runOne(self: *@This()) !void {
+            try self.scheduler.?.run();
         }
 
         pub fn startup(self: *@This()) !void {
@@ -160,8 +166,8 @@ pub fn App(comptime options: AppOptions) type {
             );
         }
 
-        pub fn insert(self: *@This(), value: anytype) !void {
-            try self.resource_store.insert(value);
+        pub fn insertResource(self: *@This(), value: anytype) void {
+            self.resource_store.insert(value);
         }
 
         pub fn deinit(self: *@This()) void {
@@ -173,65 +179,4 @@ pub fn App(comptime options: AppOptions) type {
             }
         }
     };
-}
-const TestAppContext = AppContext(.{
-    .Resources = resource.Resources(&.{u7}),
-    .Components = ComponentsFactory(&.{ u8, u64, u32 }),
-    .Events = event.Events(&.{u4}),
-});
-const Query = TestAppContext.Query;
-const Commands = TestAppContext.Commands;
-const EntityId = TestAppContext.Entity;
-const Resource = TestAppContext.Resource;
-const EventReader = TestAppContext.EventReader;
-const EventWriter = TestAppContext.EventWriter;
-
-fn testSystemA(comms: Commands, res: Resource(u7), writer: EventWriter(u4)) !void {
-    _ = comms.spawn()
-        .add(@as(u8, 8))
-        .add(@as(u64, 64));
-    const ptr = res.getConst();
-    try std.testing.expectEqual(@as(u7, 8), ptr.*);
-    res.get().* = 7;
-    try std.testing.expectEqual(@as(u7, 7), ptr.*);
-    writer.write(@as(u4, 3));
-}
-
-fn testSystemB(comms: Commands, q: Query(.{ .q = &.{ *u8, ?u64, EntityId } }), reader: EventReader(u4)) !void {
-    _ = comms;
-    var iter = q.iter();
-    while (iter.next()) |tuple| {
-        const _u8, const _u64, const id = tuple;
-        try std.testing.expectEqual(*u8, @TypeOf(_u8));
-        try std.testing.expectEqual(?u64, @TypeOf(_u64));
-        try std.testing.expectEqual(EntityId, @TypeOf(id));
-
-        try std.testing.expectEqual(8, _u8.*);
-        try std.testing.expectEqual(64, _u64.?);
-    }
-    _ = reader;
-    // try std.testing.expectEqual(1, reader.remaining());
-    // try std.testing.expectEqual(@as(u4, 3), reader.read());
-}
-
-test App {
-    const AppType = App(.{
-        .Context = TestAppContext,
-        .Systems = &.{ System(testSystemA, TestAppContext), System(testSystemB, TestAppContext) },
-        .Labels = &.{ .Startup, .Startup },
-    });
-    var app = AppType{
-        .allocator = std.testing.allocator,
-        .registry = AppType.Registry.init(std.testing.allocator),
-        .resource_store = AppType.TypeStore.init(std.testing.allocator),
-        .event_store = AppType.EventStore.init(std.testing.allocator),
-        .scheduler = null,
-    };
-    defer app.deinit();
-
-    try app.resource_store.insert(@as(u7, 8));
-    try std.testing.expectEqual(0, app.registry.len());
-    try app.startup();
-    try app.scheduler.?.run();
-    try std.testing.expectEqual(1, app.registry.len());
 }

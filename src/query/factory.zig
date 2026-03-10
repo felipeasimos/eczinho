@@ -45,7 +45,7 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
     // check if all changed types are not zst
     for (req.changed) |Type| {
         if (@sizeOf(Type) == 0) {
-            @compileError("ZST types don't have Changed metadata");
+            @compileError("zero size components types don't have Changed metadata");
         }
     }
     return struct {
@@ -177,6 +177,9 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
                     if (inner_arch_iter.next()) |tuple| {
                         if (result != null) @panic("optSingle found more than one valid tuple");
                         result = tuple;
+                    }
+                    if (inner_arch_iter.next() != null) {
+                        @panic("optSingle found more than one valid tuple");
                     }
                 }
             }

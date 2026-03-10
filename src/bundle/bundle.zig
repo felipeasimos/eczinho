@@ -31,11 +31,20 @@ pub const Bundle = struct {
         }
     }).default,
 
-    pub fn eq(self: *const @This(), other: *const @This()) bool {
+    pub fn eql(self: @This(), other: @This()) bool {
         if (self.ContextConstructor != other.ContextConstructor) return false;
         if (self.FunctionsConstructor != other.FunctionsConstructor) return false;
         if (self.SystemsConstructor != other.SystemsConstructor) return false;
         return true;
+    }
+
+    pub fn containsBundle(bundles: []const Bundle, bundle: Bundle) bool {
+        inline for (bundles) |b| {
+            if (b.eql(bundle)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     fn getSystemsStructDeclarations(self: @This(), comptime Context: type) []const std.builtin.Type.Declaration {
@@ -153,15 +162,6 @@ pub const BundleContext = struct {
         }
     };
 
-    fn containsBundle(bundles: []const Bundle, bundle: Bundle) bool {
-        for (bundles) |b| {
-            if (b.eq(&bundle)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     /// recursively go through given bundles, to get a complete list of bundles
     /// without duplicates
     /// `current_bundles` should be an empty list initially
@@ -172,7 +172,7 @@ pub const BundleContext = struct {
         var final_bundles: []const Bundle = current_bundles;
         // first attach first-level bundles to this one
         for (additional_bundles) |bundle| {
-            if (!containsBundle(final_bundles, bundle)) {
+            if (!Bundle.containsBundle(final_bundles, bundle)) {
                 final_bundles = final_bundles ++ .{bundle};
                 const bundle_context = bundle.ContextConstructor(Entity);
                 final_bundles = getCompleteListOfBundles(final_bundles, bundle_context.Bundles, Entity);

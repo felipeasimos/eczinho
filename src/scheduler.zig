@@ -40,7 +40,7 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
             .Entity = Entity,
         });
         pub const TypeStore = TypeStoreFactory(.{
-            .Resources = Resources,
+            .TypeHasher = Resources,
         });
         pub const EventStore = EventStoreFactory(.{
             .Events = Events,
