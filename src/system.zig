@@ -11,6 +11,9 @@ const SystemData = @import("system_data.zig").SystemData;
 const ParameterData = @import("parameter_data.zig").ParameterData;
 
 pub fn System(comptime function: anytype, comptime Context: type) type {
+    if (@typeInfo(@TypeOf(function)) != .@"fn") {
+        @compileError("a function should be provided to System(), not " ++ @typeName(@TypeOf(function)));
+    }
     return struct {
         pub const Entity = Context.Entity;
         pub const Components = Context.Components;
