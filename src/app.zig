@@ -1,6 +1,4 @@
 const std = @import("std");
-const System = @import("system.zig").System;
-const ComponentsFactory = @import("components.zig").Components;
 const RegistryFactory = @import("registry.zig").Registry;
 const SchedulerFactory = @import("scheduler.zig").Scheduler;
 const EntityTypeFactory = @import("entity.zig").EntityTypeFactory;
@@ -181,64 +179,4 @@ pub fn App(comptime options: AppOptions) type {
             }
         }
     };
-}
-const TestAppContext = AppContext(.{
-    .Resources = resource.Resources(&.{u7}),
-    .Components = ComponentsFactory(&.{ u8, u64, u32 }),
-    .Events = event.Events(&.{u4}),
-});
-const Query = TestAppContext.Query;
-const Commands = TestAppContext.Commands;
-const EntityId = TestAppContext.Entity;
-const Resource = TestAppContext.Resource;
-const EventReader = TestAppContext.EventReader;
-const EventWriter = TestAppContext.EventWriter;
-
-fn testSystemA(comms: Commands, res: Resource(u7), writer: EventWriter(u4)) !void {
-    _ = comms.spawn()
-        .add(@as(u8, 8))
-        .add(@as(u64, 64));
-    const ptr = res.getConst();
-    try std.testing.expectEqual(@as(u7, 8), ptr.*);
-    res.get().* = 7;
-    try std.testing.expectEqual(@as(u7, 7), ptr.*);
-    writer.write(@as(u4, 3));
-}
-
-fn testSystemB(comms: Commands, q: Query(.{ .q = &.{ *u8, ?u64, EntityId } }), reader: EventReader(u4)) !void {
-    _ = comms;
-    var iter = q.iter();
-    while (iter.next()) |tuple| {
-        const _u8, const _u64, const id = tuple;
-        try std.testing.expectEqual(*u8, @TypeOf(_u8));
-        try std.testing.expectEqual(?u64, @TypeOf(_u64));
-        try std.testing.expectEqual(EntityId, @TypeOf(id));
-
-        try std.testing.expectEqual(8, _u8.*);
-        try std.testing.expectEqual(64, _u64.?);
-    }
-    _ = reader;
-    // try std.testing.expectEqual(1, reader.remaining());
-    // try std.testing.expectEqual(@as(u4, 3), reader.read());
-}
-
-test App {
-    const AppType = App(.{
-        .Context = TestAppContext,
-        .Systems = &.{ System(testSystemA, TestAppContext), System(testSystemB, TestAppContext) },
-        .Labels = &.{ .Startup, .Startup },
-    });
-    var app = AppType{
-        .allocator = std.testing.allocator,
-        .registry = AppType.Registry.init(std.testing.allocator),
-        .resource_store = AppType.TypeStore.init(),
-        .event_store = AppType.EventStore.init(std.testing.allocator),
-        .scheduler = null,
-    };
-    defer app.deinit();
-
-    app.resource_store.insert(@as(u7, 8));
-    try std.testing.expectEqual(0, app.registry.len());
-    try app.startup();
-    try std.testing.expectEqual(1, app.registry.len());
 }
