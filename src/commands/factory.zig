@@ -32,7 +32,7 @@ pub fn CommandsFactory(comptime options: CommandsFactoryOptions) type {
         pub fn deinit(self: @This()) void {
             _ = self;
         }
-        inline fn getQueue(self: @This()) *CommandsQueue {
+        pub inline fn getQueue(self: @This()) *CommandsQueue {
             return self.queue;
         }
         pub fn add(self: @This(), entt: Entity, value: anytype) void {
@@ -66,6 +66,12 @@ pub fn CommandsFactory(comptime options: CommandsFactoryOptions) type {
                 self.commands.getQueue().addCommand(self.entt, .{
                     .add = Components.getAsUnion(value),
                 }) catch @panic("EntityCommands `add` shouldn't error out. This is a bug or a mishandling of the library");
+                return self;
+            }
+            pub fn remove(self: @This(), comptime Component: type) @This() {
+                self.commands.getQueue().addCommand(self.entt, .{
+                    .remove = Components.hash(Component),
+                }) catch @panic("EntityCommands `remove` shouldn't error out. This is a bug or a mishandling of the library");
                 return self;
             }
         };

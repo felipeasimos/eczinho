@@ -271,7 +271,8 @@ pub fn TypeHasher(comptime RawTypes: []const type) type {
                     return idx;
                 }
             }
-            @compileError("invalid type " ++ @typeName(@TypeOf(tid_or_type)) ++ ": must be a TypeId or a type in the registered list");
+            const Type = if (comptime @TypeOf(tid_or_type) == TypeId) TypeId else tid_or_type;
+            @compileError("invalid type " ++ @typeName(Type) ++ ": must be a TypeId or a type in the registered list");
         }
 
         pub inline fn getName(tid_or_type: anytype) [:0]const u8 {

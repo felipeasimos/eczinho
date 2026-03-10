@@ -45,7 +45,7 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
     // check if all changed types are not zst
     for (req.changed) |Type| {
         if (@sizeOf(Type) == 0) {
-            @compileError("ZST types don't have Changed metadata");
+            @compileError("zero size components types don't have Changed metadata");
         }
     }
     return struct {

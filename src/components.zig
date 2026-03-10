@@ -84,6 +84,10 @@ pub fn Components(comptime ComponentTypes: []const type) type {
         }
 
         pub fn format(self: *const @This(), w: *std.Io.Writer) !void {
+            if (comptime Len == 0) {
+                _ = try w.write(".{ }");
+                return;
+            }
             var iter = self.iterator();
             _ = try w.write(".{ ");
             while (iter.nextTypeId()) |tid| {
