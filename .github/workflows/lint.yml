@@ -11,7 +11,7 @@ jobs:
         with:
           submodules: false
       - name: Zlint
-        run: ./.github/workflows/zlint
+        run: ./.github/workflows/zlint --format github
       # - name: ZLint
       #   uses: DonIsaac/zlint-action@v0.0.1
       #   with:
