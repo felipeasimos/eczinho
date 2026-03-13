@@ -1,31 +1,10 @@
 const std = @import("std");
 
 pub fn getGitHash(b: *std.Build) ![]const u8 {
-    var process = std.process.Child.init(&[_][]const u8{ "git", "rev-parse", "HEAD" }, b.allocator);
-    process.stdout_behavior = .Pipe;
-
-    process.spawn() catch {
-        return error.GitNotAvailable;
-    };
-
-    // Get the output
-    const result: []u8 = process.stdout.?.readToEndAlloc(b.allocator, 1024) catch {
-        _ = process.kill() catch @panic("Error getting git hash");
-        return error.ReadFailed;
-    };
-
-    // Wait for process to finish
-    const term = process.wait() catch {
-        return error.WaitFailed;
-    };
-
-    // Check if process succeeded
-    if (term.Exited != 0) {
-        return error.GitCommandFailed;
-    }
+    const result = try std.process.run(b.allocator, b.graph.io, .{ .argv = &[_][]const u8{ "git", "rev-parse", "HEAD" } });
 
     // Trim trailing newline
-    const trimmed = std.mem.trim(u8, result, "\r\n");
+    const trimmed = std.mem.trim(u8, result.stdout, "\r\n");
     if (trimmed.len != 40) {
         return error.InvalidResponse;
     }
@@ -36,6 +15,11 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const tracy_enabled = b.option(
+        bool,
+        "tracy",
+        "Build with Tracy support.",
+    ) orelse false;
     const git_commit_hash = getGitHash(b) catch "unknown git hash";
 
     const options = b.addOptions();
@@ -51,6 +35,10 @@ pub fn build(b: *std.Build) void {
     const raylib_artifact = raylib_dep.artifact("raylib"); // raylib C library
 
     const eczinho = b.dependency("eczinho", .{});
+    const tracy = b.dependency("tracy", .{
+        .target = target,
+        .optimize = optimize,
+    });
 
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -60,15 +48,26 @@ pub fn build(b: *std.Build) void {
             .{ .name = "eczinho", .module = eczinho.module("eczinho") },
             .{ .name = "raylib", .module = raylib },
             .{ .name = "raygui", .module = raygui },
+            .{ .name = "tracy", .module = tracy.module("tracy") },
         },
     });
     exe_mod.addOptions("options", options);
+    exe_mod.linkLibrary(raylib_artifact);
+
+    // Pick an implementation based on the build flags.
+    // Don't build both, we don't want to link with Tracy at all unless we intend to enable it.
+    if (tracy_enabled) {
+        // The user asked to enable Tracy, use the real implementation
+        exe_mod.addImport("tracy_impl", tracy.module("tracy_impl_enabled"));
+    } else {
+        // The user asked to disable Tracy, use the dummy implementation
+        exe_mod.addImport("tracy_impl", tracy.module("tracy_impl_disabled"));
+    }
     const exe = b.addExecutable(.{
         .name = "pong",
         .root_module = exe_mod,
+        .use_llvm = true,
     });
-
-    exe.linkLibrary(raylib_artifact);
 
     b.installArtifact(exe);
 

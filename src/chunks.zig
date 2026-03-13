@@ -42,7 +42,7 @@ pub fn ChunksFactory(comptime options: ChunkOptions) type {
         map_non_empty_to_type_index: std.EnumMap(Components.ComponentTypeId, usize),
         map_zst_to_type_index: std.EnumMap(Components.ComponentTypeId, usize),
 
-        pub fn init(signature: Components, alloc: std.mem.Allocator) !@This() {
+        pub fn init(alloc: std.mem.Allocator, signature: Components) !@This() {
             var sig = signature;
             var non_empty_map = std.EnumMap(Components.ComponentTypeId, usize){};
             var iter = signature.iterator();
@@ -63,13 +63,17 @@ pub fn ChunksFactory(comptime options: ChunkOptions) type {
                 }
             }
             const capacity_per_chunk = calculateCapacity(&sig);
-            const offsets, const metadata_start, const zst_metadata_start = try calculateOffsets(&sig, capacity_per_chunk, alloc);
+            const offsets, const metadata_start, const zst_metadata_start = try calculateOffsets(
+                alloc,
+                &sig,
+                capacity_per_chunk,
+            );
             return .{
                 .capacity_per_chunk = capacity_per_chunk,
                 .component_arrays_offsets = offsets,
                 .metadata_start = metadata_start,
                 .zst_metadata_start = zst_metadata_start,
-                .component_sizes = try getSizes(&sig, alloc),
+                .component_sizes = try getSizes(alloc, &sig),
                 .signature = signature,
                 .allocator = alloc,
                 .map_non_empty_to_type_index = non_empty_map,
@@ -89,7 +93,7 @@ pub fn ChunksFactory(comptime options: ChunkOptions) type {
             const type_index = self.getNonEmptyTypeIndex(tid_or_component);
             return self.component_sizes[type_index];
         }
-        inline fn getSizes(signature: *Components, alloc: std.mem.Allocator) ![]usize {
+        inline fn getSizes(alloc: std.mem.Allocator, signature: *Components) ![]usize {
             const sizes = try alloc.alloc(usize, signature.lenNonEmpty());
             var iter = signature.iterator();
             var i: usize = 0;
@@ -99,7 +103,11 @@ pub fn ChunksFactory(comptime options: ChunkOptions) type {
             }
             return sizes;
         }
-        inline fn calculateOffsets(signature: *Components, capacity: usize, alloc: std.mem.Allocator) !struct { []usize, usize, usize } {
+        inline fn calculateOffsets(
+            alloc: std.mem.Allocator,
+            signature: *Components,
+            capacity: usize,
+        ) !struct { []usize, usize, usize } {
             // + 1 for metadata_start at the end
             const offsets = try alloc.alloc(usize, signature.lenNonEmpty());
             var iter = signature.iterator();
@@ -152,12 +160,18 @@ pub fn ChunksFactory(comptime options: ChunkOptions) type {
         }
         pub inline fn getNonEmptyTypeIndex(self: *const @This(), tid_or_component: anytype) ?usize {
             if (comptime Components.Len == 0) return null;
-            const hash: Components.ComponentTypeId = if (comptime @TypeOf(tid_or_component) == type) Components.hash(tid_or_component) else tid_or_component;
+            const hash: Components.ComponentTypeId = if (comptime @TypeOf(tid_or_component) == type)
+                Components.hash(tid_or_component)
+            else
+                tid_or_component;
             return self.map_non_empty_to_type_index.get(hash);
         }
         pub inline fn getZSTIndex(self: *const @This(), tid_or_component: anytype) ?usize {
             if (comptime Components.Len == 0) return null;
-            const hash: Components.ComponentTypeId = if (comptime @TypeOf(tid_or_component) == type) Components.hash(tid_or_component) else tid_or_component;
+            const hash: Components.ComponentTypeId = if (comptime @TypeOf(tid_or_component) == type)
+                Components.hash(tid_or_component)
+            else
+                tid_or_component;
             return self.map_zst_to_type_index.get(hash);
         }
         inline fn getInsertionChunk(self: *@This()) !*Chunk {
@@ -338,7 +352,11 @@ pub fn ChunkFactory(comptime options: ChunkOptions) type {
             const end = start + @sizeOf(types.Tick) * capacity;
             return @alignCast(std.mem.bytesAsSlice(types.Tick, self.memory[start..end]));
         }
-        pub fn getNonEmptyMetadataArray(self: *@This(), type_index: usize, comptime metadata_type: ComponentMetadata) []types.Tick {
+        pub fn getNonEmptyMetadataArray(
+            self: *@This(),
+            type_index: usize,
+            comptime metadata_type: ComponentMetadata,
+        ) []types.Tick {
             const metadata_start = self.chunks.metadata_start;
             const capacity = self.chunks.capacity_per_chunk;
             switch (metadata_type) {
@@ -348,8 +366,12 @@ pub fn ChunkFactory(comptime options: ChunkOptions) type {
                     return @alignCast(std.mem.bytesAsSlice(types.Tick, self.memory[start..end]));
                 },
                 .Changed => {
-                    const start = metadata_start + (self.chunks.component_sizes.len + type_index) * @sizeOf(types.Tick) * capacity;
-                    const end = start + @sizeOf(types.Tick) * capacity;
+                    const start = metadata_start +
+                        (self.chunks.component_sizes.len + type_index) *
+                            @sizeOf(types.Tick) *
+                            capacity;
+                    const end = start + @sizeOf(types.Tick) *
+                        capacity;
                     return @alignCast(std.mem.bytesAsSlice(types.Tick, self.memory[start..end]));
                 },
             }
@@ -402,6 +424,9 @@ test ChunksFactory {
     const Entity = @import("entity.zig").EntityTypeFactory(.medium);
     const Components = @import("components.zig").Components(&.{ u64, u32, bool, u16 });
     const signature: Components = Components.init(&.{ u64, bool });
-    var chunks = try ChunksFactory(.{ .Entity = Entity, .Components = Components }).init(signature, std.testing.allocator);
+    var chunks = try ChunksFactory(.{
+        .Entity = Entity,
+        .Components = Components,
+    }).init(signature, std.testing.allocator);
     defer chunks.deinit();
 }

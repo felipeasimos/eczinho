@@ -46,6 +46,6 @@ test "AppBuilder" {
         .addSystem(.Update, struct {
             pub fn execute(_: Query(.{ .q = &.{ typeA, *typeB } })) void {}
         }.execute)
-        .build(std.testing.allocator);
+        .build(std.testing.allocator, std.testing.io);
     defer test_app.deinit();
 }

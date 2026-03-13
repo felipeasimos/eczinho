@@ -8,8 +8,12 @@
             .path = "../..",
         },
         .raylib_zig = .{
-            .url = "git+https://github.com/raylib-zig/raylib-zig?ref=devel#7d4761b878f43671024ce197f721827b5355a67e",
-            .hash = "raylib_zig-5.6.0-dev-KE8REGlNBQDR7NML06VBtT7gP3VZNY70E5WohAxzqrNn",
+            .url = "https://github.com/felipeasimos/raylib-zig/archive/83ba0c439794ee908ec4f6c4c99d41310d19eb90.tar.gz",
+            .hash = "raylib_zig-5.6.0-dev-KE8REP9NBQDbChyfk0OAcjT024NyJWe81JvaAZ7Acpfy",
+        },
+        .tracy = .{
+            .url = "git+https://codeberg.org/Games-by-Mason/tracy_zig.git#80076ca9d13b3f30c0713cc190c7f2b0c843ca7b",
+            .hash = "tracy-0.0.0-R7l8Bc1KAQCku_dIjU3jVW4kqLcJQrYrNHXrKCSwJx1x",
         },
     },
     .paths = .{

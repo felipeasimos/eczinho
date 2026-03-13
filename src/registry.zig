@@ -252,7 +252,9 @@ pub fn Registry(comptime options: RegistryOptions) type {
         }
 
         fn syncQueue(self: *@This(), queue: *CommandsQueue) !void {
-            std.debug.assert(queue.commands.items.len == 0 or queue.commands.items[0] == .context or queue.commands.items[0] == .despawn);
+            std.debug.assert(queue.commands.items.len == 0 or
+                queue.commands.items[0] == .context or
+                queue.commands.items[0] == .despawn);
 
             // deal with despawn case
             if (queue.commands.items.len == 1 and queue.commands.items[0] == .despawn) {
@@ -264,7 +266,7 @@ pub fn Registry(comptime options: RegistryOptions) type {
             while (iter.next()) |ctx| {
                 const entt = switch (ctx.context.id) {
                     .entity => |e| e,
-                    .placeholder => |_| try self.create(),
+                    .placeholder => try self.create(),
                 };
                 context_loop: while (iter.next()) |comm| {
                     switch (comm) {
@@ -284,7 +286,7 @@ pub fn Registry(comptime options: RegistryOptions) type {
                             try self.destroy(d.entt);
                             break :context_loop;
                         },
-                        .context => |_| {
+                        .context => {
                             // rollback so the outer loop iteration catches
                             // and use this context
                             iter.rollback();
@@ -298,7 +300,6 @@ pub fn Registry(comptime options: RegistryOptions) type {
 }
 
 test "all" {
-    _ = @import("sparse_set.zig");
     _ = @import("archetype.zig");
     _ = @import("array.zig");
     _ = @import("components.zig");

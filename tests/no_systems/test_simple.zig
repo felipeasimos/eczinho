@@ -6,6 +6,6 @@ test "simple" {
         .build();
     var app = eczinho.AppBuilder
         .init(Context)
-        .build(std.testing.allocator);
+        .build(std.testing.allocator, std.testing.io);
     defer app.deinit();
 }

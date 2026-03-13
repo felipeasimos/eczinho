@@ -2,6 +2,21 @@ const std = @import("std");
 const rl = @import("raylib");
 const options = @import("options");
 const ecs = @import("eczinho");
+pub const tracy_impl = @import("tracy_impl");
+const tracy = @import("tracy");
+
+pub const tracy_options: tracy.Options = .{
+    .on_demand = true,
+    .no_broadcast = false,
+    .only_localhost = true,
+    .only_ipv4 = false,
+    .delayed_init = false,
+    .manual_lifetime = false,
+    .verbose = false,
+    .data_port = null,
+    .broadcast_port = null,
+    .default_callstack_depth = 0,
+};
 
 const SCREEN_WIDTH = 800;
 const SCREEN_HEIGHT = 400;
@@ -65,7 +80,12 @@ fn updatePositions(q: Query(.{ .q = &.{ *Position, Velocity } })) void {
     }
 }
 
-fn reactGoalCollision(commands: Commands, res: Resource(Score), q: Query(.{ .q = &.{Entity}, .with = &.{Ball} }), reader: EventReader(GoalCollision)) !void {
+fn reactGoalCollision(
+    commands: Commands,
+    res: Resource(Score),
+    q: Query(.{ .q = &.{Entity}, .with = &.{Ball} }),
+    reader: EventReader(GoalCollision),
+) !void {
     const single = q.optSingle() orelse return;
     if (reader.readOne()) |goal| {
         reader.clear();
@@ -160,7 +180,10 @@ fn checkTopBottomCollision(q: Query(.{ .q = &.{ Rect, *Position, *Velocity }, .w
     }
 }
 
-fn handleControls(q: Query(.{ .q = &.{ *Position, Rect }, .with = &.{Player} }), writer: EventWriter(ecs.AppEvents.AppExit)) void {
+fn handleControls(
+    q: Query(.{ .q = &.{ *Position, Rect }, .with = &.{Player} }),
+    writer: EventWriter(ecs.AppEvents.AppExit),
+) void {
     const pos_ptr, const rect = q.single();
     if (rl.isKeyDown(rl.KeyboardKey.s)) {
         if (pos_ptr.y + rect.height < @as(f32, @floatFromInt(rl.getScreenHeight()))) {
@@ -285,10 +308,16 @@ fn createEnemyPaddle(commands: Commands) void {
     //     .add(Velocity{ .y = PADDLE_SPEED, .x = 0 });
 }
 
-fn renderRectangles(q: Query(.{ .q = &.{ Position, Rect, Visible } })) void {
+fn startRender() void {
     rl.beginDrawing();
     rl.clearBackground(rl.Color.black);
+}
 
+fn endRender() void {
+    rl.endDrawing();
+}
+
+fn renderRectangles(q: Query(.{ .q = &.{ Position, Rect, Visible } })) void {
     var iter = q.iter();
     while (iter.next()) |data| {
         const pos, const rect, const vis = data;
@@ -302,8 +331,6 @@ fn renderRectangles(q: Query(.{ .q = &.{ Position, Rect, Visible } })) void {
 }
 
 fn renderScore(score: Resource(Score)) !void {
-    defer rl.endDrawing();
-
     const enemy_score = score.clone().enemy;
     const player_score = score.clone().player;
     var buf: [1024]u8 = undefined;
@@ -315,16 +342,19 @@ fn renderScore(score: Resource(Score)) !void {
 }
 
 pub fn main() !void {
+    var debug_allocator = std.heap.DebugAllocator(.{ .safety = true }).init;
+    defer _ = debug_allocator.deinit();
+    const allocator = debug_allocator.allocator();
+
+    var threaded = std.Io.Threaded.init(allocator, .{});
+    const io = threaded.io();
+
     rl.setConfigFlags(.{
         .fullscreen_mode = false,
     });
     rl.initWindow(SCREEN_WIDTH, SCREEN_HEIGHT, std.fmt.comptimePrint("Pong with eczinho - {s}", .{options.git_commit_hash}));
     defer rl.closeWindow();
     rl.setTargetFPS(60);
-
-    var debug_allocator = std.heap.DebugAllocator(.{ .safety = true }).init;
-    defer _ = debug_allocator.deinit();
-    const allocator = debug_allocator.allocator();
 
     var app = ecs.AppBuilder.init(Context)
         .addSystem(.Startup, createPlayerPaddle)
@@ -341,14 +371,16 @@ pub fn main() !void {
         .addSystem(.Update, checkGoalCollision)
         .addSystem(.Update, updatePositions)
         .addSystem(.Update, moveEnemy)
+        .addSystem(.Render, startRender)
         .addSystem(.Render, renderRectangles)
         .addSystem(.Render, renderScore)
-        .build(allocator);
+        .addSystem(.Render, endRender)
+        .build(allocator, io);
     defer app.deinit();
     var prng = std.Random.DefaultPrng.init(blk: {
         // SAFETY: defined immediatly after
         var seed: u64 = undefined;
-        std.crypto.random.bytes(std.mem.asBytes(&seed));
+        io.random(std.mem.asBytes(&seed));
         break :blk seed;
     });
     app.insertResource(prng.random());

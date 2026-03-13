@@ -40,7 +40,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
 
         pub fn init(alloc: std.mem.Allocator, sig: Components) !@This() {
             return .{
-                .chunks = try Chunks.init(sig, alloc),
+                .chunks = try Chunks.init(alloc, sig),
                 .signature = sig,
             };
         }
@@ -64,7 +64,14 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
         /// move entity to new archetype.
         /// this function only copies the values from component that exist in both archetypes.
         /// components only present in 'new_arch' must be set after this call.
-        pub fn moveTo(self: *@This(), entt: Entity, location: *EntityLocation, new_arch: *@This(), current_tick: Tick, removed_logs: anytype) !?struct { Entity, usize } {
+        pub fn moveTo(
+            self: *@This(),
+            entt: Entity,
+            location: *EntityLocation,
+            new_arch: *@This(),
+            current_tick: Tick,
+            removed_logs: anytype,
+        ) !?struct { Entity, usize } {
             const new_chunk, const new_slot_index = try new_arch.reserve(entt);
 
             var old_iter_type_id = self.signature.iterator();
@@ -91,12 +98,21 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                     if (is_zst) {
                         const old_type_index = location.chunk.getZSTIndex(tid);
                         const new_type_index = new_chunk.getZSTIndex(tid);
-                        new_chunk.getZSTMetadataArray(new_type_index)[new_slot_index] = location.chunk.getZSTMetadataArray(old_type_index)[@intCast(location.slot_index)];
+                        new_chunk
+                            .getZSTMetadataArray(new_type_index)[new_slot_index] = location
+                            .chunk
+                            .getZSTMetadataArray(old_type_index)[@intCast(location.slot_index)];
                     } else {
                         const old_type_index = location.chunk.getNonEmptyTypeIndex(tid);
                         const new_type_index = new_chunk.getNonEmptyTypeIndex(tid);
-                        new_chunk.getNonEmptyMetadataArray(new_type_index, .Added)[new_slot_index] = location.chunk.getNonEmptyMetadataArray(old_type_index, .Added)[@intCast(location.slot_index)];
-                        new_chunk.getNonEmptyMetadataArray(new_type_index, .Changed)[new_slot_index] = location.chunk.getNonEmptyMetadataArray(old_type_index, .Changed)[@intCast(location.slot_index)];
+                        new_chunk
+                            .getNonEmptyMetadataArray(new_type_index, .Added)[new_slot_index] = location
+                            .chunk
+                            .getNonEmptyMetadataArray(old_type_index, .Added)[@intCast(location.slot_index)];
+                        new_chunk
+                            .getNonEmptyMetadataArray(new_type_index, .Changed)[new_slot_index] = location
+                            .chunk
+                            .getNonEmptyMetadataArray(old_type_index, .Changed)[@intCast(location.slot_index)];
                     }
                     // newly added components types
                 } else {
@@ -117,11 +133,22 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             return removed_result;
         }
 
-        pub fn iterator(self: *@This(), comptime ReturnTypes: []const type, comptime Added: []const type, comptime Changed: []const type, last_run: Tick, current_run: Tick) Iterator(ReturnTypes, Added, Changed) {
+        pub fn iterator(
+            self: *@This(),
+            comptime ReturnTypes: []const type,
+            comptime Added: []const type,
+            comptime Changed: []const type,
+            last_run: Tick,
+            current_run: Tick,
+        ) Iterator(ReturnTypes, Added, Changed) {
             return Iterator(ReturnTypes, Added, Changed).init(self, last_run, current_run);
         }
 
-        pub fn Iterator(comptime ReturnTypes: []const type, comptime Added: []const type, comptime Changed: []const type) type {
+        pub fn Iterator(
+            comptime ReturnTypes: []const type,
+            comptime Added: []const type,
+            comptime Changed: []const type,
+        ) type {
             for (ReturnTypes) |Type| {
                 if (@sizeOf(Type) == 0) {
                     @compileError("Can't iterate over zero sized component array");
@@ -197,7 +224,13 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                     }
                     return true;
                 }
-                fn getComponent(self: *@This(), comptime Type: type, chunk: *Chunk, slot_index: usize, comptime mark_change: bool) Type {
+                fn getComponent(
+                    self: *@This(),
+                    comptime Type: type,
+                    chunk: *Chunk,
+                    slot_index: usize,
+                    comptime mark_change: bool,
+                ) Type {
                     const CanonicalType = comptime Components.getCanonicalType(Type);
                     const access_type = comptime Components.getAccessType(Type);
                     if (comptime @sizeOf(CanonicalType) == 0) {

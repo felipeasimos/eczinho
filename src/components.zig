@@ -1,3 +1,4 @@
+// zlint-disable case-convention
 const std = @import("std");
 const TypeHasher = @import("type_hasher.zig").TypeHasher;
 

@@ -12,7 +12,10 @@ pub const SchedulerOptions = struct {
     Labels: []const StageLabel,
 };
 
-fn initSchedulerStages(comptime systems: []const type, comptime labels: []const StageLabel) std.EnumArray(StageLabel, []const type) {
+fn initSchedulerStages(
+    comptime systems: []const type,
+    comptime labels: []const StageLabel,
+) std.EnumArray(StageLabel, []const type) {
     var stages = std.EnumArray(StageLabel, []const type).initFill(&.{});
     for (std.enums.values(StageLabel)) |label| {
         var stage_systems: []const type = &.{};
@@ -98,7 +101,7 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
             try self.registry.sync();
         }
         fn runStage(self: *@This(), comptime label: StageLabel) !void {
-            inline for (SchedulerStages.get(label)) |system| {
+            inline for (comptime SchedulerStages.get(label)) |system| {
                 const system_data_ptr = self.getSystemData(system);
                 try system.call(.{
                     .registry = self.registry,

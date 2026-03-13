@@ -1,3 +1,4 @@
+// zlint-disable case-convention
 const std = @import("std");
 const TypeIdInt = @import("types.zig").TypeIdInt;
 
@@ -6,7 +7,12 @@ fn checkForNameCollision(comptime Types: []const type) void {
         inline for (Types[i + 1 ..]) |U| {
             if (std.mem.eql(u8, @typeName(T), @typeName(U))) {
                 @compileError("Type name collision detected between '" ++
-                    @typeName(T) ++ "' and '" ++ @typeName(U) ++ "'. Mind changing one of the types name? @typeName is the only way to generate unique hashes at comptime. If you don't get it, what about a read? https://ziggit.dev/t/type-id-comptime-generation/10956/8");
+                    @typeName(T) ++
+                    "' and '" ++
+                    @typeName(U) ++
+                    "'. Mind changing one of the types name?" ++
+                    "@typeName is the only way to generate unique hashes at comptime." ++
+                    "For further explanations: https://ziggit.dev/t/type-id-comptime-generation/10956/8");
             }
         }
     }
@@ -14,20 +20,18 @@ fn checkForNameCollision(comptime Types: []const type) void {
 
 fn initTypeId(comptime Types: []const type) type {
     checkForNameCollision(Types);
-    var fields: [Types.len]std.builtin.Type.EnumField = undefined;
+    var field_names: [Types.len][]const u8 = undefined;
+    var field_attributes: [Types.len]TypeIdInt = undefined;
     for (Types, 0..) |Type, i| {
-        fields[i] = .{
-            .name = @typeName(Type),
-            // yup, this is the hash
-            .value = i,
-        };
+        field_names[i] = @typeName(Type);
+        field_attributes[i] = i;
     }
-    return @Type(.{ .@"enum" = .{
-        .is_exhaustive = true,
-        .tag_type = TypeIdInt,
-        .decls = &.{},
-        .fields = &fields,
-    } });
+    return @Enum(
+        TypeIdInt,
+        .exhaustive,
+        &field_names,
+        &field_attributes,
+    );
 }
 
 pub fn TypeHasher(comptime RawTypes: []const type) type {
@@ -56,22 +60,23 @@ pub fn TypeHasher(comptime RawTypes: []const type) type {
 
         pub const Union = Union: {
             @setEvalBranchQuota(10000);
-            var fields: [Len]std.builtin.Type.UnionField = undefined;
+            var field_names: [Len][]const u8 = undefined;
+            var field_types: [Len]type = undefined;
+            var field_attributes: [Len]std.builtin.Type.UnionField.Attributes = undefined;
             for (Types, 0..) |Type, i| {
-                fields[i] = std.builtin.Type.UnionField{
-                    .alignment = @alignOf(Type),
-                    .name = @typeName(Type),
-                    .type = Type,
+                field_names[i] = @typeName(Type);
+                field_types[i] = Type;
+                field_attributes[i] = std.builtin.Type.UnionField.Attributes{
+                    .@"align" = @alignOf(Type),
                 };
             }
-            break :Union @Type(.{
-                .@"union" = .{
-                    .decls = &.{},
-                    .fields = &fields,
-                    .tag_type = TypeId,
-                    .layout = .auto,
-                },
-            });
+            break :Union @Union(
+                .auto,
+                TypeId,
+                &field_names,
+                &field_types,
+                &field_attributes,
+            );
         };
 
         /// for functions receiving a tid, use a static enum map to return info in O(1)
@@ -249,7 +254,9 @@ pub fn TypeHasher(comptime RawTypes: []const type) type {
             } else if (comptime isRegisteredType(tid_or_type)) {
                 return @sizeOf(tid_or_type);
             }
-            @compileError("invalid type " ++ @typeName(@TypeOf(tid_or_type)) ++ ": must be a TypeId or a type in the registered list");
+            @compileError("invalid type " ++
+                @typeName(@TypeOf(tid_or_type)) ++
+                ": must be a TypeId or a type in the registered list");
         }
 
         pub inline fn getAlignment(tid_or_type: anytype) usize {
@@ -259,7 +266,9 @@ pub fn TypeHasher(comptime RawTypes: []const type) type {
             } else if (comptime isRegisteredType(tid_or_type)) {
                 return @alignOf(tid_or_type);
             }
-            @compileError("invalid type " ++ @typeName(@TypeOf(tid_or_type)) ++ ": must be a TypeId or a type in the registered list");
+            @compileError("invalid type " ++
+                @typeName(@TypeOf(tid_or_type)) ++
+                ": must be a TypeId or a type in the registered list");
         }
 
         pub inline fn getIndex(tid_or_type: anytype) usize {
@@ -281,7 +290,9 @@ pub fn TypeHasher(comptime RawTypes: []const type) type {
             } else if (comptime isRegisteredType(tid_or_type)) {
                 return @typeName(tid_or_type);
             }
-            @compileError("invalid type " ++ @typeName(@TypeOf(tid_or_type)) ++ ": must be a TypeId or a type in the registered list");
+            @compileError("invalid type " ++
+                @typeName(@TypeOf(tid_or_type)) ++
+                ": must be a TypeId or a type in the registered list");
         }
 
         pub const Iterator = struct {

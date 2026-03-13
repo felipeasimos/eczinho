@@ -1,3 +1,4 @@
+// zlint-disable case-convention
 const std = @import("std");
 const System = @import("system.zig").System;
 const StageLabel = @import("stage_label.zig").StageLabel;
@@ -113,7 +114,7 @@ pub const AppBuilder = struct {
         }
         return new;
     }
-    pub fn build(comptime self: @This(), allocator: std.mem.Allocator) app.App(self.options) {
+    pub fn build(comptime self: @This(), allocator: std.mem.Allocator, io: std.Io) app.App(self.options) {
         const Registry = RegistryFactory(.{
             .Components = self.options.Context.Components,
             .Entity = self.options.Context.Entity,
@@ -129,6 +130,8 @@ pub const AppBuilder = struct {
             .registry = Registry.init(allocator),
             .resource_store = TypeStore.init(),
             .event_store = EventStore.init(allocator),
+            .scheduler = null,
+            .io = io,
         };
     }
 };

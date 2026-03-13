@@ -13,7 +13,7 @@ test "spawn deferred without component" {
                 _ = commands.spawn();
             }
         }).spawnEntity)
-        .build(std.testing.allocator);
+        .build(std.testing.allocator, std.testing.io);
     defer app.deinit();
 
     try std.testing.expectEqual(0, app.registry.len());
