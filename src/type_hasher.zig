@@ -14,20 +14,18 @@ fn checkForNameCollision(comptime Types: []const type) void {
 
 fn initTypeId(comptime Types: []const type) type {
     checkForNameCollision(Types);
-    var fields: [Types.len]std.builtin.Type.EnumField = undefined;
+    var field_names: [Types.len][]const u8 = undefined;
+    var field_attributes: [Types.len]TypeIdInt = undefined;
     for (Types, 0..) |Type, i| {
-        fields[i] = .{
-            .name = @typeName(Type),
-            // yup, this is the hash
-            .value = i,
-        };
+        field_names[i] = @typeName(Type);
+        field_attributes[i] = i;
     }
-    return @Type(.{ .@"enum" = .{
-        .is_exhaustive = true,
-        .tag_type = TypeIdInt,
-        .decls = &.{},
-        .fields = &fields,
-    } });
+    return @Enum(
+        TypeIdInt,
+        .exhaustive,
+        &field_names,
+        &field_attributes,
+    );
 }
 
 pub fn TypeHasher(comptime RawTypes: []const type) type {
@@ -56,22 +54,23 @@ pub fn TypeHasher(comptime RawTypes: []const type) type {
 
         pub const Union = Union: {
             @setEvalBranchQuota(10000);
-            var fields: [Len]std.builtin.Type.UnionField = undefined;
+            var field_names: [Len][]const u8 = undefined;
+            var field_types: [Len]type = undefined;
+            var field_attributes: [Len]std.builtin.Type.UnionField.Attributes = undefined;
             for (Types, 0..) |Type, i| {
-                fields[i] = std.builtin.Type.UnionField{
-                    .alignment = @alignOf(Type),
-                    .name = @typeName(Type),
-                    .type = Type,
+                field_names[i] = @typeName(Type);
+                field_types[i] = Type;
+                field_attributes[i] = std.builtin.Type.UnionField.Attributes{
+                    .@"align" = @alignOf(Type),
                 };
             }
-            break :Union @Type(.{
-                .@"union" = .{
-                    .decls = &.{},
-                    .fields = &fields,
-                    .tag_type = TypeId,
-                    .layout = .auto,
-                },
-            });
+            break :Union @Union(
+                .auto,
+                TypeId,
+                &field_names,
+                &field_types,
+                &field_attributes,
+            );
         };
 
         /// for functions receiving a tid, use a static enum map to return info in O(1)

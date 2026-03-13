@@ -20,28 +20,15 @@ pub const QueryFactoryOptions = struct {
 /// checkout QueryRequest for more information
 pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
     const req = options.request;
-    var fields: [req.q.len]std.builtin.Type.StructField = undefined;
+    var field_types: [req.q.len]type = undefined;
     for (req.q, 0..) |AccessibleType, i| {
         if (comptime AccessibleType != options.Entity) {
             const T = options.Components.getCanonicalType(AccessibleType);
             options.Components.checkSize(T);
         }
-        fields[i] = std.builtin.Type.StructField{
-            .name = std.fmt.comptimePrint("{}", .{i}),
-            .type = AccessibleType,
-            .is_comptime = false,
-            .default_value_ptr = null,
-            .alignment = @alignOf(AccessibleType),
-        };
+        field_types[i] = AccessibleType;
     }
-    const ResultTuple = @Type(std.builtin.Type{
-        .@"struct" = .{
-            .layout = .auto,
-            .is_tuple = true,
-            .fields = &fields,
-            .decls = &.{},
-        },
-    });
+    const ResultTuple = @Tuple(&field_types);
     // check if all changed types are not zst
     for (req.changed) |Type| {
         if (@sizeOf(Type) == 0) {

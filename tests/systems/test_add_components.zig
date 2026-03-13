@@ -26,7 +26,7 @@ test "add components in system" {
                 }
             }
         }).testSystemB)
-        .build(std.testing.allocator);
+        .build(std.testing.allocator, std.testing.io);
     defer app.deinit();
 
     try std.testing.expectEqual(0, app.registry.len());

@@ -5,28 +5,14 @@ pub const TypeStoreOptions = struct {
 };
 
 fn initTupleType(comptime TypeHasher: type) type {
-    var fields: [TypeHasher.Len]std.builtin.Type.StructField = undefined;
+    var field_types: [TypeHasher.Len]type = undefined;
     var iter = comptime TypeHasher.Iterator.init();
     var i = 0;
     inline while (iter.nextType()) |Type| {
-        fields[i] = std.builtin.Type.StructField{
-            .name = std.fmt.comptimePrint("{}", .{i}),
-            .type = ?Type,
-            .alignment = @alignOf(Type),
-            .is_comptime = false,
-            .default_value_ptr = null,
-        };
+        field_types[i] = ?Type;
         i += 1;
     }
-    return @Type(.{
-        .@"struct" = .{
-            .backing_integer = null,
-            .layout = .auto,
-            .decls = &.{},
-            .is_tuple = true,
-            .fields = &fields,
-        },
-    });
+    return @Tuple(&field_types);
 }
 
 pub fn TypeStore(comptime options: TypeStoreOptions) type {

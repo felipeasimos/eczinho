@@ -56,7 +56,7 @@ test "check if component was just removed" {
                 }
             }
         }).removeIfPresent)
-        .build(std.testing.allocator);
+        .build(std.testing.allocator, std.testing.io);
     defer app.deinit();
 
     // spawn entity with component

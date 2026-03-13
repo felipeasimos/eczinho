@@ -6,29 +6,15 @@ pub const EventStoreOptions = struct {
 };
 
 fn initBuffersTuple(comptime Events: type) type {
-    var fields: [Events.Len]std.builtin.Type.StructField = undefined;
+    var field_types: [Events.Len]type = undefined;
     var iter = comptime Events.Iterator.init();
     var i = 0;
     inline while (iter.nextType()) |Type| {
         const BufferType = EventBuffer(Type);
-        fields[i] = std.builtin.Type.StructField{
-            .name = std.fmt.comptimePrint("{}", .{i}),
-            .type = BufferType,
-            .alignment = @alignOf(BufferType),
-            .is_comptime = false,
-            .default_value_ptr = null,
-        };
+        field_types[i] = BufferType;
         i += 1;
     }
-    return @Type(.{
-        .@"struct" = .{
-            .backing_integer = null,
-            .layout = .auto,
-            .decls = &.{},
-            .is_tuple = true,
-            .fields = &fields,
-        },
-    });
+    return @Tuple(&field_types);
 }
 
 pub fn EventStore(comptime options: EventStoreOptions) type {

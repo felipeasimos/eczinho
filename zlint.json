@@ -1,0 +1,16 @@
+{
+	"ignore": [
+		"examples/pong/zig-pkg/",
+		"zig-pkg/"
+	],
+	"rules": {
+		"unused-decls": "error",
+		"no-catch-return": "error",
+		"unsafe-undefined": "error",
+		"line-length": [
+			"error", {
+				"max_length": 90
+			}
+		]
+	}
+}

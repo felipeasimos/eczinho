@@ -4,15 +4,15 @@ const std = @import("std");
 test "without non included components" {
     const ComponentA = struct { a: f32 };
     const Entity = eczinho.entity.EntityTypeFactory(.medium);
-    const Context = eczinho.BundleContext.Builder.init()
+    const Context = comptime eczinho.BundleContext.Builder.init()
         .build(Entity);
-    try std.testing.expect(std.mem.indexOfScalar(type, Context.ComponentTypes, ComponentA) == null);
+    try std.testing.expect(comptime std.mem.indexOfScalar(type, Context.ComponentTypes, ComponentA) == null);
 }
 
 test "with given components" {
     const ComponentA = struct { a: f32 };
     const Entity = eczinho.entity.EntityTypeFactory(.medium);
-    const Context = eczinho.BundleContext.Builder.init()
+    const Context = comptime eczinho.BundleContext.Builder.init()
         .addComponent(ComponentA)
         .build(Entity);
     try std.testing.expect(comptime std.mem.indexOfScalar(type, Context.ComponentTypes, ComponentA) != null);
@@ -24,7 +24,7 @@ test "include multiple components at once" {
     const ComponentC = struct { a: u30 };
 
     const Entity = eczinho.entity.EntityTypeFactory(.medium);
-    const Context = eczinho.BundleContext.Builder.init()
+    const Context = comptime eczinho.BundleContext.Builder.init()
         .addComponents(&.{ ComponentA, ComponentB, ComponentC })
         .build(Entity);
 
@@ -39,7 +39,7 @@ test "include multiple components individually" {
     const ComponentC = struct { a: u30 };
 
     const Entity = eczinho.entity.EntityTypeFactory(.medium);
-    const Context = eczinho.BundleContext.Builder.init()
+    const Context = comptime eczinho.BundleContext.Builder.init()
         .addComponent(ComponentA)
         .addComponent(ComponentB)
         .addComponent(ComponentC)
@@ -56,7 +56,7 @@ test "include components individually and at once" {
     const ComponentC = struct { a: u30 };
 
     const Entity = eczinho.entity.EntityTypeFactory(.medium);
-    const Context = eczinho.BundleContext.Builder.init()
+    const Context = comptime eczinho.BundleContext.Builder.init()
         .addComponents(&.{ ComponentA, ComponentB })
         .addComponent(ComponentC)
         .build(Entity);
@@ -65,4 +65,3 @@ test "include components individually and at once" {
     try std.testing.expect(comptime std.mem.indexOfScalar(type, Context.ComponentTypes, ComponentB) != null);
     try std.testing.expect(comptime std.mem.indexOfScalar(type, Context.ComponentTypes, ComponentC) != null);
 }
-

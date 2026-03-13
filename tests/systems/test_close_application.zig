@@ -13,7 +13,7 @@ test "close application" {
                 writer.write(eczinho.AppEvents.AppExit{});
             }
         }).spawnEntity)
-        .build(std.testing.allocator);
+        .build(std.testing.allocator, std.testing.io);
     defer app.deinit();
 
     try app.startup();

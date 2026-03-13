@@ -1,5 +1,5 @@
 const std = @import("std");
-const types = @import("types.zig");
+const types = @import("../../types.zig");
 
 pub const ChunkOptions = struct {
     Entity: type,
@@ -10,6 +10,7 @@ pub const ChunkOptions = struct {
 pub fn ChunksFactory(comptime options: ChunkOptions) type {
     return struct {
         const Chunks = @This();
+
         pub const Components = options.Components;
         pub const Entity = options.Entity;
         pub const ChunkSize = options.ChunkSize;
@@ -251,6 +252,7 @@ pub fn ChunksFactory(comptime options: ChunkOptions) type {
 
 pub fn ChunkFactory(comptime options: ChunkOptions) type {
     return struct {
+        const Self = @This();
         pub const Components = options.Components;
         pub const Entity = options.Entity;
         pub const CountInt = std.math.IntFittingRange(0, options.ChunkSize);
@@ -399,12 +401,9 @@ pub fn ChunkFactory(comptime options: ChunkOptions) type {
 }
 
 test ChunksFactory {
-    const Entity = @import("entity.zig").EntityTypeFactory(.medium);
-    const Components = @import("components.zig").Components(&.{ u64, u32, bool, u16 });
+    const Entity = @import("../../entity.zig").EntityTypeFactory(.medium);
+    const Components = @import("../../components.zig").Components(&.{ u64, u32, bool, u16 });
     const signature: Components = Components.init(&.{ u64, bool });
-    var chunks = try ChunksFactory(.{
-        .Entity = Entity,
-        .Components = Components,
-    }).init(signature, std.testing.allocator);
+    var chunks = try ChunksFactory(.{ .Entity = Entity, .Components = Components }).init(signature, std.testing.allocator);
     defer chunks.deinit();
 }

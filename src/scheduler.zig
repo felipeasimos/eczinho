@@ -98,7 +98,7 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
             try self.registry.sync();
         }
         fn runStage(self: *@This(), comptime label: StageLabel) !void {
-            inline for (SchedulerStages.get(label)) |system| {
+            inline for (comptime SchedulerStages.get(label)) |system| {
                 const system_data_ptr = self.getSystemData(system);
                 try system.call(.{
                     .registry = self.registry,

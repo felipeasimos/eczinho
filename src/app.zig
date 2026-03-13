@@ -144,6 +144,7 @@ pub fn App(comptime options: AppOptions) type {
         resource_store: TypeStore,
         event_store: EventStore,
         scheduler: ?Scheduler = null,
+        io: std.Io,
 
         fn shouldExit(self: *@This()) bool {
             return self.event_store.total(app_events.AppExit) != 0;

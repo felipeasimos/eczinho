@@ -38,8 +38,8 @@ pub const Bundle = struct {
         return true;
     }
 
-    pub fn containsBundle(bundles: []const Bundle, bundle: Bundle) bool {
-        inline for (bundles) |b| {
+    pub fn containsBundle(comptime bundles: []const Bundle, bundle: Bundle) bool {
+        inline for (comptime bundles) |b| {
             if (b.eql(bundle)) {
                 return true;
             }
