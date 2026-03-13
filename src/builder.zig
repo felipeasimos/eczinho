@@ -1,3 +1,4 @@
+// zlint-disable case-convention
 const std = @import("std");
 const System = @import("system.zig").System;
 const StageLabel = @import("stage_label.zig").StageLabel;

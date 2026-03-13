@@ -1,3 +1,4 @@
+// zlint-disable case-convention
 const std = @import("std");
 const StageLabel = @import("../stage_label.zig").StageLabel;
 
@@ -165,7 +166,11 @@ pub const BundleContext = struct {
     /// recursively go through given bundles, to get a complete list of bundles
     /// without duplicates
     /// `current_bundles` should be an empty list initially
-    fn getCompleteListOfBundles(current_bundles: []const Bundle, additional_bundles: []const Bundle, comptime Entity: type) []const Bundle {
+    fn getCompleteListOfBundles(
+        current_bundles: []const Bundle,
+        additional_bundles: []const Bundle,
+        comptime Entity: type,
+    ) []const Bundle {
         if (current_bundles.len == 0 and additional_bundles.len == 0) {
             return &.{};
         }

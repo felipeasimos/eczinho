@@ -32,21 +32,30 @@ test "check if component was just changed" {
             }
         }).spawnEntity)
         .addSystem(.Update, (struct {
-            pub fn checkIfNotChanged(res: Resource(NotChangedTicks), q: Query(.{ .q = &.{ComponentA}, .changed = &.{ComponentB} })) void {
+            pub fn checkIfNotChanged(
+                res: Resource(NotChangedTicks),
+                q: Query(.{ .q = &.{ComponentA}, .changed = &.{ComponentB} }),
+            ) void {
                 if (q.len() == 0) {
                     res.get().* += 1;
                 }
             }
         }).checkIfNotChanged)
         .addSystem(.Update, (struct {
-            pub fn checkIfChanged(res: Resource(ChangedTicks), q: Query(.{ .q = &.{ComponentA}, .changed = &.{ComponentB} })) void {
+            pub fn checkIfChanged(
+                res: Resource(ChangedTicks),
+                q: Query(.{ .q = &.{ComponentA}, .changed = &.{ComponentB} }),
+            ) void {
                 if (q.len() > 0) {
                     res.get().* += 1;
                 }
             }
         }).checkIfChanged)
         .addSystem(.Update, (struct {
-            pub fn changeIfNotChanged(q_write: Query(.{ .q = &.{*ComponentB}, .with = &.{ComponentA} }), q_read: Query(.{ .q = &.{Entity}, .with = &.{ ComponentB, ComponentA }, .changed = &.{ComponentB} })) void {
+            pub fn changeIfNotChanged(
+                q_write: Query(.{ .q = &.{*ComponentB}, .with = &.{ComponentA} }),
+                q_read: Query(.{ .q = &.{Entity}, .with = &.{ ComponentB, ComponentA }, .changed = &.{ComponentB} }),
+            ) void {
                 if (q_read.peek() == null) {
                     const comp_b = q_write.single();
                     _ = comp_b;

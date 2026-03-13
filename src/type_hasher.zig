@@ -1,3 +1,4 @@
+// zlint-disable case-convention
 const std = @import("std");
 const TypeIdInt = @import("types.zig").TypeIdInt;
 
@@ -6,7 +7,12 @@ fn checkForNameCollision(comptime Types: []const type) void {
         inline for (Types[i + 1 ..]) |U| {
             if (std.mem.eql(u8, @typeName(T), @typeName(U))) {
                 @compileError("Type name collision detected between '" ++
-                    @typeName(T) ++ "' and '" ++ @typeName(U) ++ "'. Mind changing one of the types name? @typeName is the only way to generate unique hashes at comptime. If you don't get it, what about a read? https://ziggit.dev/t/type-id-comptime-generation/10956/8");
+                    @typeName(T) ++
+                    "' and '" ++
+                    @typeName(U) ++
+                    "'. Mind changing one of the types name?" ++
+                    "@typeName is the only way to generate unique hashes at comptime." ++
+                    "For further explanations: https://ziggit.dev/t/type-id-comptime-generation/10956/8");
             }
         }
     }
@@ -248,7 +254,9 @@ pub fn TypeHasher(comptime RawTypes: []const type) type {
             } else if (comptime isRegisteredType(tid_or_type)) {
                 return @sizeOf(tid_or_type);
             }
-            @compileError("invalid type " ++ @typeName(@TypeOf(tid_or_type)) ++ ": must be a TypeId or a type in the registered list");
+            @compileError("invalid type " ++
+                @typeName(@TypeOf(tid_or_type)) ++
+                ": must be a TypeId or a type in the registered list");
         }
 
         pub inline fn getAlignment(tid_or_type: anytype) usize {
@@ -258,7 +266,9 @@ pub fn TypeHasher(comptime RawTypes: []const type) type {
             } else if (comptime isRegisteredType(tid_or_type)) {
                 return @alignOf(tid_or_type);
             }
-            @compileError("invalid type " ++ @typeName(@TypeOf(tid_or_type)) ++ ": must be a TypeId or a type in the registered list");
+            @compileError("invalid type " ++
+                @typeName(@TypeOf(tid_or_type)) ++
+                ": must be a TypeId or a type in the registered list");
         }
 
         pub inline fn getIndex(tid_or_type: anytype) usize {
@@ -280,7 +290,9 @@ pub fn TypeHasher(comptime RawTypes: []const type) type {
             } else if (comptime isRegisteredType(tid_or_type)) {
                 return @typeName(tid_or_type);
             }
-            @compileError("invalid type " ++ @typeName(@TypeOf(tid_or_type)) ++ ": must be a TypeId or a type in the registered list");
+            @compileError("invalid type " ++
+                @typeName(@TypeOf(tid_or_type)) ++
+                ": must be a TypeId or a type in the registered list");
         }
 
         pub const Iterator = struct {

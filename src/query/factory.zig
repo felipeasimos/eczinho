@@ -121,7 +121,13 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
                 if (comptime req.added.len == 0 and req.changed.len == 0) {
                     count += arch.len();
                 } else {
-                    var arch_iter = arch.iterator(req.q, req.added, req.changed, self.system_data.last_run, self.registry.getTick());
+                    var arch_iter = arch.iterator(
+                        req.q,
+                        req.added,
+                        req.changed,
+                        self.system_data.last_run,
+                        self.registry.getTick(),
+                    );
                     while (arch_iter.nextWithoutMarkingChange()) |_| {
                         count += 1;
                     }
@@ -135,7 +141,13 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
                 if (comptime req.added.len == 0 and req.changed.len == 0) {
                     if (arch.len() != 0) return false;
                 } else if (arch.len() != 0) {
-                    var arch_iter = arch.iterator(req.q, req.added, req.changed, self.system_data.last_run, self.registry.getTick());
+                    var arch_iter = arch.iterator(
+                        req.q,
+                        req.added,
+                        req.changed,
+                        self.system_data.last_run,
+                        self.registry.getTick(),
+                    );
                     const arch_is_empty = arch_iter.nextWithoutMarkingChange() == null;
                     if (!arch_is_empty) return false;
                 }
@@ -147,7 +159,13 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
             for (self.archetypes.items) |sig| {
                 var arch = self.registry.getArchetypeFromSignature(sig);
                 if (arch.len() != 0) {
-                    var inner_arch_iter = arch.iterator(req.q, req.added, req.changed, self.system_data.last_run, self.registry.getTick());
+                    var inner_arch_iter = arch.iterator(
+                        req.q,
+                        req.added,
+                        req.changed,
+                        self.system_data.last_run,
+                        self.registry.getTick(),
+                    );
                     return inner_arch_iter.peek();
                 }
             }
@@ -160,7 +178,13 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
             for (self.archetypes.items) |sig| {
                 var arch = self.registry.getArchetypeFromSignature(sig);
                 if (arch.len() != 0) {
-                    var inner_arch_iter = arch.iterator(req.q, req.added, req.changed, self.system_data.last_run, self.registry.getTick());
+                    var inner_arch_iter = arch.iterator(
+                        req.q,
+                        req.added,
+                        req.changed,
+                        self.system_data.last_run,
+                        self.registry.getTick(),
+                    );
                     if (inner_arch_iter.next()) |tuple| {
                         if (result != null) @panic("optSingle found more than one valid tuple");
                         result = tuple;
@@ -178,7 +202,13 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
             for (self.archetypes.items) |sig| {
                 var arch = self.registry.getArchetypeFromSignature(sig);
                 if (arch.len() != 0) {
-                    var inner_arch_iter = arch.iterator(req.q, req.added, req.changed, self.system_data.last_run, self.registry.getTick());
+                    var inner_arch_iter = arch.iterator(
+                        req.q,
+                        req.added,
+                        req.changed,
+                        self.system_data.last_run,
+                        self.registry.getTick(),
+                    );
                     return inner_arch_iter.next().?;
                 }
             }

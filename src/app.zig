@@ -85,7 +85,8 @@ pub fn AppContext(comptime options: AppContextOptions) type {
             });
         }
 
-        /// use in systems to return entities which had components recently removed (in the last schedule run). System signature should be like:
+        /// use in systems to return entities which had components recently removed (in the last schedule run).
+        /// System signature should be like:
         /// fn systemExample(r: Removed(u64), ...) !void {
         ///     ...
         /// }

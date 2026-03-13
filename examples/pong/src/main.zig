@@ -80,7 +80,12 @@ fn updatePositions(q: Query(.{ .q = &.{ *Position, Velocity } })) void {
     }
 }
 
-fn reactGoalCollision(commands: Commands, res: Resource(Score), q: Query(.{ .q = &.{Entity}, .with = &.{Ball} }), reader: EventReader(GoalCollision)) !void {
+fn reactGoalCollision(
+    commands: Commands,
+    res: Resource(Score),
+    q: Query(.{ .q = &.{Entity}, .with = &.{Ball} }),
+    reader: EventReader(GoalCollision),
+) !void {
     const single = q.optSingle() orelse return;
     if (reader.readOne()) |goal| {
         reader.clear();
@@ -175,7 +180,10 @@ fn checkTopBottomCollision(q: Query(.{ .q = &.{ Rect, *Position, *Velocity }, .w
     }
 }
 
-fn handleControls(q: Query(.{ .q = &.{ *Position, Rect }, .with = &.{Player} }), writer: EventWriter(ecs.AppEvents.AppExit)) void {
+fn handleControls(
+    q: Query(.{ .q = &.{ *Position, Rect }, .with = &.{Player} }),
+    writer: EventWriter(ecs.AppEvents.AppExit),
+) void {
     const pos_ptr, const rect = q.single();
     if (rl.isKeyDown(rl.KeyboardKey.s)) {
         if (pos_ptr.y + rect.height < @as(f32, @floatFromInt(rl.getScreenHeight()))) {

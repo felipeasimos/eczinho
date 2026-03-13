@@ -57,7 +57,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             return SystemData.init(alloc, NumEventReaders, NumRemovedReaders);
         }
 
-        fn getBaseType(comptime T: type) type {
+        fn GetBaseType(comptime T: type) type {
             return switch (@typeInfo(T)) {
                 .pointer => |p| p.child,
                 .error_set, .error_union => |e| e.child,
@@ -66,8 +66,8 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
         }
 
         fn sameType(comptime T1: type, comptime T2: type) bool {
-            const t1 = getBaseType(T1);
-            const t2 = getBaseType(T2);
+            const t1 = GetBaseType(T1);
+            const t2 = GetBaseType(T2);
             if (@hasDecl(t1, "Marker") != @hasDecl(t2, "Marker")) return false;
             if (!@hasDecl(t1, "Marker")) {
                 return t1 == t2;
@@ -78,7 +78,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
         }
 
         fn matchMarker(comptime T: type, comptime Marker: anytype) bool {
-            const t = getBaseType(T);
+            const t = GetBaseType(T);
             if (!@hasDecl(t, "Marker")) return false;
             if (@TypeOf(t.Marker) != @TypeOf(Marker)) return false;
             if (t.Marker != Marker) return false;
@@ -136,7 +136,10 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
                         .global_index = i,
                         .type_index = numOfType(InitParams[0..i], param.type.?),
                     },
-                    else => @compileError(std.fmt.comptimePrint("Invalid argument type {s} for method 'init' in system requirement {s}", .{ @typeName(param.type.?), @typeName(ArgType) })),
+                    else => @compileError("Invalid argument type " ++
+                        @typeName(param.type.?) ++
+                        " for method 'init' in system requirement " ++
+                        @typeName(ArgType)),
                 };
             }
             return switch (@typeInfo(InitReturnType)) {

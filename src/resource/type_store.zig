@@ -4,7 +4,7 @@ pub const TypeStoreOptions = struct {
     TypeHasher: type,
 };
 
-fn initTupleType(comptime TypeHasher: type) type {
+fn CreateTupleType(comptime TypeHasher: type) type {
     var field_types: [TypeHasher.Len]type = undefined;
     var iter = comptime TypeHasher.Iterator.init();
     var i = 0;
@@ -20,7 +20,7 @@ pub fn TypeStore(comptime options: TypeStoreOptions) type {
         pub const Marker = TypeStore;
         pub const TypeHasher = options.TypeHasher;
 
-        pub const TypesTuple = initTupleType(TypeHasher);
+        pub const TypesTuple = CreateTupleType(TypeHasher);
 
         values: TypesTuple,
 

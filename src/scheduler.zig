@@ -12,7 +12,10 @@ pub const SchedulerOptions = struct {
     Labels: []const StageLabel,
 };
 
-fn initSchedulerStages(comptime systems: []const type, comptime labels: []const StageLabel) std.EnumArray(StageLabel, []const type) {
+fn initSchedulerStages(
+    comptime systems: []const type,
+    comptime labels: []const StageLabel,
+) std.EnumArray(StageLabel, []const type) {
     var stages = std.EnumArray(StageLabel, []const type).initFill(&.{});
     for (std.enums.values(StageLabel)) |label| {
         var stage_systems: []const type = &.{};

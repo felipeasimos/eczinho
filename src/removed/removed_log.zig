@@ -80,5 +80,8 @@ test RemovedComponentsLog {
     try std.testing.expectEqual(0, removed.remaining(u64, &cursor));
     removed.swap();
     try std.testing.expectEqual(1, removed.remaining(u64, &cursor));
-    try std.testing.expectEqual(@TypeOf(removed).RemovedLogEntryType{ .entity = Entity.fromInt(0), .tick = 0 }, removed.readOne(u64, &cursor));
+    try std.testing.expectEqual(
+        @TypeOf(removed).RemovedLogEntryType{ .entity = Entity.fromInt(0), .tick = 0 },
+        removed.readOne(u64, &cursor),
+    );
 }

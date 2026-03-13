@@ -84,7 +84,9 @@ pub fn SparseSet(comptime options: SparseSetOptions) type {
         pub fn contains(self: *@This(), data: options.T) bool {
             std.debug.assert(data != Null);
             const p = self.page(data);
-            return p < self.sparse.items.len and self.sparse.items[p] != null and self.sparse.items[p].?.data[self.offset(data)] != Null;
+            return p < self.sparse.items.len and
+                self.sparse.items[p] != null and
+                self.sparse.items[p].?.data[self.offset(data)] != Null;
         }
 
         /// create page if it doesn't exists

@@ -32,21 +32,30 @@ test "check if component was just added" {
             }
         }).spawnEntity)
         .addSystem(.Update, (struct {
-            pub fn checkIfNotAdded(res: Resource(NotAddedTicks), q: Query(.{ .q = &.{ComponentA}, .added = &.{ComponentB} })) void {
+            pub fn checkIfNotAdded(
+                res: Resource(NotAddedTicks),
+                q: Query(.{ .q = &.{ComponentA}, .added = &.{ComponentB} }),
+            ) void {
                 if (q.len() == 0) {
                     res.get().* += 1;
                 }
             }
         }).checkIfNotAdded)
         .addSystem(.Update, (struct {
-            pub fn checkIfAdded(res: Resource(AddedTicks), q: Query(.{ .q = &.{ComponentA}, .added = &.{ComponentB} })) void {
+            pub fn checkIfAdded(
+                res: Resource(AddedTicks),
+                q: Query(.{ .q = &.{ComponentA}, .added = &.{ComponentB} }),
+            ) void {
                 if (q.len() > 0) {
                     res.get().* += 1;
                 }
             }
         }).checkIfAdded)
         .addSystem(.Update, (struct {
-            pub fn addIfNotPresent(comms: Commands, q: Query(.{ .q = &.{Entity}, .without = &.{ComponentB}, .with = &.{ComponentA} })) void {
+            pub fn addIfNotPresent(
+                comms: Commands,
+                q: Query(.{ .q = &.{Entity}, .without = &.{ComponentB}, .with = &.{ComponentA} }),
+            ) void {
                 if (q.peek()) |tuple| {
                     const entt = tuple[0];
                     _ = comms.entity(entt).add(@as(ComponentB, 123));

@@ -5,7 +5,7 @@ pub const EventStoreOptions = struct {
     Events: type,
 };
 
-fn initBuffersTuple(comptime Events: type) type {
+fn CreateBuffersTupleType(comptime Events: type) type {
     var field_types: [Events.Len]type = undefined;
     var iter = comptime Events.Iterator.init();
     var i = 0;
@@ -24,7 +24,7 @@ pub fn EventStore(comptime options: EventStoreOptions) type {
         pub const EventReaderData = struct {
             next_index_to_read: usize = 0,
         };
-        pub const BuffersTuple = initBuffersTuple(Events);
+        pub const BuffersTuple = CreateBuffersTupleType(Events);
 
         buffers: BuffersTuple,
 

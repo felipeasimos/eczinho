@@ -35,21 +35,30 @@ test "check if component was just removed" {
             }
         }).spawnEntity)
         .addSystem(.Update, (struct {
-            pub fn checkIfNotRemoved(res: Resource(NotRemovedTicks), removed: Removed(ComponentB)) void {
+            pub fn checkIfNotRemoved(
+                res: Resource(NotRemovedTicks),
+                removed: Removed(ComponentB),
+            ) void {
                 if (removed.readOne() == null) {
                     res.get().* += 1;
                 }
             }
         }).checkIfNotRemoved)
         .addSystem(.Update, (struct {
-            pub fn checkIfRemoved(res: Resource(RemovedTicks), removed: Removed(ComponentB)) void {
+            pub fn checkIfRemoved(
+                res: Resource(RemovedTicks),
+                removed: Removed(ComponentB),
+            ) void {
                 if (removed.readOne() != null) {
                     res.get().* += 1;
                 }
             }
         }).checkIfRemoved)
         .addSystem(.Update, (struct {
-            pub fn removeIfPresent(comms: Commands, q: Query(.{ .q = &.{Entity}, .with = &.{ ComponentB, ComponentA } })) void {
+            pub fn removeIfPresent(
+                comms: Commands,
+                q: Query(.{ .q = &.{Entity}, .with = &.{ ComponentB, ComponentA } }),
+            ) void {
                 if (q.peek()) |tuple| {
                     const entt = tuple[0];
                     _ = comms.entity(entt).remove(ComponentB);

@@ -1,15 +1,26 @@
 {
 	"ignore": [
-		"examples/pong/zig-pkg/",
-		"zig-pkg/"
+		"examples/pong/zig-pkg/**",
+		"zig-pkg/",
+		"src/bundle/core/**"
 	],
 	"rules": {
-		"unused-decls": "error",
+		"allocator-first-param": "error",
+		"case-convention": "error",
+		"empty-file": "error",
+		"homeless-try": "error",
+		"must-return-ref": "error",
 		"no-catch-return": "error",
+		"no-print": "error",
+		"no-return-try": "error",
+		"no-unresolved": "error",
+		"suppressed-errors": "error",
 		"unsafe-undefined": "error",
+		"unused-decls": "error",
+		"useless-error-return": "error",
 		"line-length": [
 			"error", {
-				"max_length": 90
+				"max_length": 127
 			}
 		]
 	}
