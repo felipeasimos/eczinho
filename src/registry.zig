@@ -1,5 +1,5 @@
 const std = @import("std");
-const entity = @import("entity.zig");
+const entity = @import("entity/entity.zig");
 const archetype = @import("archetype.zig");
 const commands = @import("commands/commands.zig");
 const removed = @import("removed/removed.zig");
@@ -18,6 +18,10 @@ pub fn Registry(comptime options: RegistryOptions) type {
             .Entity = Entity,
             .Components = Components,
         });
+        pub const EntityLocation = entity.EntityLocation(.{
+            .Archetype = Archetype,
+            .Entity = Entity,
+        });
         pub const Chunk = Archetype.Chunk;
         pub const CommandsQueue = commands.CommandsQueue(.{
             .Entity = Entity,
@@ -27,17 +31,6 @@ pub fn Registry(comptime options: RegistryOptions) type {
             .Components = Components,
             .Entity = Entity,
         });
-
-        pub const EntityLocation = struct {
-            // pointer to archetype
-            arch: *Archetype,
-            // if entity is alive, this points to its chunk
-            chunk: *Chunk,
-            // index inside the chunk
-            slot_index: u16,
-            // current (if alive) or next (if dead) generation of an entity index.
-            version: options.Entity.Version = 0,
-        };
 
         allocator: std.mem.Allocator,
         archetypes: std.AutoHashMap(Components, *Archetype),
@@ -87,23 +80,6 @@ pub fn Registry(comptime options: RegistryOptions) type {
             return count;
         }
 
-        fn getEntityArchetype(self: *@This(), entt: Entity) *Archetype {
-            std.debug.assert(self.valid(entt));
-            return self.entities_to_locations.items[entt.index].arch;
-        }
-
-        fn getEntitySignature(self: *@This(), entt: Entity) Components {
-            std.debug.assert(self.valid(entt));
-            return self.entities_to_locations.items[entt.index].arch.signature;
-        }
-        fn optGetEntitySignature(self: *@This(), entt: Entity) ?Components {
-            std.debug.assert(self.valid(entt));
-            if (self.entities_to_locations.items[entt.index].signature) |sig| {
-                return sig;
-            }
-            return null;
-        }
-
         pub fn getArchetypeFromSignature(self: *@This(), signature: Components) *Archetype {
             return self.archetypes.get(signature).?;
         }
@@ -117,11 +93,6 @@ pub fn Registry(comptime options: RegistryOptions) type {
             arch_ptr.* = try Archetype.init(self.allocator, signature);
             entry.value_ptr.* = arch_ptr;
             return arch_ptr;
-        }
-
-        pub fn valid(self: *@This(), id: Entity) bool {
-            if (id.index >= self.entities_to_locations.items.len) return false;
-            return self.entities_to_locations.items[id.index].version == id.version;
         }
 
         /// Create a new entity and return it
@@ -152,20 +123,28 @@ pub fn Registry(comptime options: RegistryOptions) type {
                 .arch = empty_arch,
                 .version = entity_id.version,
                 .chunk = chunk,
-                .slot_index = @intCast(slot_index),
+                .chunk_slot_index = @intCast(slot_index),
             };
 
             return entity_id;
         }
 
         inline fn correctEntityIndex(self: *@This(), entt: Entity, slot_index: usize) void {
-            self.entities_to_locations.items[entt.index].slot_index = @intCast(slot_index);
+            self.entities_to_locations.items[entt.index].chunk_slot_index = @intCast(slot_index);
+        }
+
+        inline fn valid(self: *@This(), entt: Entity) bool {
+            return EntityLocation.valid(&self.entities_to_locations, entt);
+        }
+
+        inline fn getEntitySignature(self: *@This(), entt: Entity) Components {
+            return EntityLocation.getEntitySignature(&self.entities_to_locations, entt);
         }
 
         pub fn destroy(self: *@This(), entt: Entity) !void {
             std.debug.assert(self.valid(entt));
             const location = &self.entities_to_locations.items[entt.index];
-            if (try location.chunk.remove(@intCast(location.slot_index))) |removal_result| {
+            if (try location.chunk.remove(@intCast(location.chunk_slot_index))) |removal_result| {
                 const swapped_entt, const new_slot_index = removal_result;
                 self.correctEntityIndex(swapped_entt, new_slot_index);
             }
@@ -218,13 +197,13 @@ pub fn Registry(comptime options: RegistryOptions) type {
         pub fn get(self: *@This(), comptime Component: type, entt: Entity) *Component {
             std.debug.assert(self.valid(entt));
             const location = self.entities_to_locations.items[entt.index];
-            return location.chunk.get(Component, location.slot_index);
+            return location.chunk.get(Component, location.chunk_slot_index);
         }
 
         pub fn getConst(self: *@This(), comptime Component: type, entt: Entity) Component {
             std.debug.assert(self.valid(entt));
             const location = self.entities_to_locations.items[entt.index];
-            return location.chunk.getConst(Component, location.slot_index);
+            return location.chunk.getConst(Component, location.chunk_slot_index);
         }
 
         pub fn createQueue(self: *@This()) !*CommandsQueue {
@@ -303,7 +282,7 @@ test "all" {
     _ = @import("archetype.zig");
     _ = @import("array.zig");
     _ = @import("components.zig");
-    _ = @import("entity.zig");
+    _ = @import("entity/entity.zig");
 }
 
 test Registry {

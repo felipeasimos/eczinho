@@ -1,8 +1,8 @@
 const std = @import("std");
-const entity = @import("entity.zig");
+const entity = @import("entity/entity.zig");
 const components = @import("components.zig");
 const Tick = @import("types.zig").Tick;
-const chunks = @import("chunks.zig");
+const chunks = @import("storage/chunks.zig");
 const RegistryFactory = @import("registry.zig").Registry;
 
 pub const ArchetypeOptions = struct {
@@ -14,9 +14,9 @@ pub const ArchetypeOptions = struct {
 pub fn Archetype(comptime options: ArchetypeOptions) type {
     return struct {
         const Self = @This();
-        const ComponentTypeId = options.Components.ComponentTypeId;
-        const Components = options.Components;
-        const Entity = options.Entity;
+        pub const ComponentTypeId = options.Components.ComponentTypeId;
+        pub const Components = options.Components;
+        pub const Entity = options.Entity;
         pub const Registry = RegistryFactory(.{
             .Components = Components,
             .Entity = Entity,
@@ -80,7 +80,9 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                 if (new_arch.signature.has(tid)) {
                     if (Components.getSize(tid) != 0) {
                         const old_type_index = location.chunk.getNonEmptyTypeIndex(tid);
-                        const old_addr = location.chunk.getElemWithTypeIndex(old_type_index, @intCast(location.slot_index));
+                        const old_addr = location
+                            .chunk
+                            .getElemWithTypeIndex(old_type_index, @intCast(location.chunk_slot_index));
                         const new_chunk_type_index = new_chunk.getNonEmptyTypeIndex(tid);
                         const new_addr = new_chunk.getElemWithTypeIndex(new_chunk_type_index, new_slot_index);
                         @memcpy(new_addr, old_addr);
@@ -101,18 +103,18 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                         new_chunk
                             .getZSTMetadataArray(new_type_index)[new_slot_index] = location
                             .chunk
-                            .getZSTMetadataArray(old_type_index)[@intCast(location.slot_index)];
+                            .getZSTMetadataArray(old_type_index)[@intCast(location.chunk_slot_index)];
                     } else {
                         const old_type_index = location.chunk.getNonEmptyTypeIndex(tid);
                         const new_type_index = new_chunk.getNonEmptyTypeIndex(tid);
                         new_chunk
                             .getNonEmptyMetadataArray(new_type_index, .Added)[new_slot_index] = location
                             .chunk
-                            .getNonEmptyMetadataArray(old_type_index, .Added)[@intCast(location.slot_index)];
+                            .getNonEmptyMetadataArray(old_type_index, .Added)[@intCast(location.chunk_slot_index)];
                         new_chunk
                             .getNonEmptyMetadataArray(new_type_index, .Changed)[new_slot_index] = location
                             .chunk
-                            .getNonEmptyMetadataArray(old_type_index, .Changed)[@intCast(location.slot_index)];
+                            .getNonEmptyMetadataArray(old_type_index, .Changed)[@intCast(location.chunk_slot_index)];
                     }
                     // newly added components types
                 } else {
@@ -126,8 +128,8 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                     }
                 }
             }
-            const removed_result = location.chunk.remove(@intCast(location.slot_index));
-            location.slot_index = @intCast(new_slot_index);
+            const removed_result = location.chunk.remove(@intCast(location.chunk_slot_index));
+            location.chunk_slot_index = @intCast(new_slot_index);
             location.chunk = new_chunk;
             location.arch = new_arch;
             return removed_result;

@@ -140,7 +140,7 @@ pub fn CommandsQueueFactory(comptime options: CommandsQueueOptions) type {
 }
 
 test CommandsQueueFactory {
-    const Entity = @import("../entity.zig").EntityTypeFactory(.small);
+    const Entity = @import("../entity/entity.zig").EntityTypeFactory(.small);
     const Components = @import("../components.zig").Components(&.{ u64, u32 });
     const CommandsQueueType = CommandsQueueFactory(.{
         .Components = Components,

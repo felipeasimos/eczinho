@@ -1,5 +1,5 @@
 const std = @import("std");
-const types = @import("types.zig");
+const types = @import("../types.zig");
 
 pub const ChunkOptions = struct {
     Entity: type,
@@ -421,8 +421,8 @@ pub fn ChunkFactory(comptime options: ChunkOptions) type {
 }
 
 test ChunksFactory {
-    const Entity = @import("entity.zig").EntityTypeFactory(.medium);
-    const Components = @import("components.zig").Components(&.{ u64, u32, bool, u16 });
+    const Entity = @import("../entity/entity.zig").EntityTypeFactory(.medium);
+    const Components = @import("../components.zig").Components(&.{ u64, u32, bool, u16 });
     const signature: Components = Components.init(&.{ u64, bool });
     var chunks = try ChunksFactory(.{
         .Entity = Entity,

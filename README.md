@@ -11,29 +11,13 @@ zig build --build-file examples/pong/build.zig
 
 # TODO
 
-- [ ] add test scenarios to tests/
-- [ ] choose storage options per-component type:
-   - [ ] sparse sets (like EnTT/Bevy)
-   - [ ] archetype
-- [ ] choose dense storage option per archetype:
-   - [ ] archetype table (like Bevy)
-   - [ ] archetype chunks (like DOTS)
+- [ ] let components choose between archetype and sparseset
+- [ ] tables storage type
+- [ ] determine specific archetypes to be stored as chunks or tables
+- [ ] expose storage options to app creation (chunk size, table growth rate)
+- [ ] multithreading
 - [ ] bulk operations
-- [ ] tracy
-- [ ] move more code to comptime
-   - [ ] scheduler
-   - [ ] event store
-   - [ ] app builder
-- [ ] cache queries
-- [ ] 0.16 std.Io multithreading
-- [ ] core bundles
-   - [ ] hierarchy
-   - [ ] reflection bundle
-   - [ ] spatial bundle
-      - [ ] transform -> translation, rotation, scale
-   - [ ] debug gui bundle
-   - [ ] camera 2d bundle
-   - [ ] camera 3d bundle
+- [ ] better core bundles
 
 ## Different Storage Options (not implemented yet)
 
