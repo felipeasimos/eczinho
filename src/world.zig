@@ -22,6 +22,10 @@ pub fn World(comptime options: WorldOptions) type {
             .Archetype = Archetype,
             .Entity = Entity,
         });
+        pub const EntityRegistry = entity.EntityRegistry(.{
+            .Archetype = Archetype,
+            .EntityLocation = EntityLocation,
+        });
         pub const Chunk = Archetype.Chunk;
         pub const CommandsQueue = commands.CommandsQueue(.{
             .Entity = Entity,
@@ -33,10 +37,8 @@ pub fn World(comptime options: WorldOptions) type {
         });
 
         allocator: std.mem.Allocator,
+        entity_registry: EntityRegistry,
         archetypes: std.AutoHashMap(Components, *Archetype),
-        /// entity index to -> generations + archetype
-        entities_to_locations: std.ArrayList(EntityLocation) = .empty,
-        free_entity_list: std.ArrayList(Entity.Index) = .empty,
         queues: std.ArrayList(CommandsQueue) = .empty,
         removed: RemovedLog,
         global_tick: Tick = 0,
@@ -45,6 +47,7 @@ pub fn World(comptime options: WorldOptions) type {
             return .{
                 .allocator = allocator,
                 .archetypes = @FieldType(@This(), "archetypes").init(allocator),
+                .entity_registry = EntityRegistry.init(),
                 .removed = RemovedLog.init(allocator),
             };
         }
@@ -57,10 +60,17 @@ pub fn World(comptime options: WorldOptions) type {
                 self.allocator.destroy(arch_ptr);
             }
             self.archetypes.deinit();
-            self.entities_to_locations.deinit(self.allocator);
-            self.free_entity_list.deinit(self.allocator);
+            self.entity_registry.deinit(self.allocator);
             self.deinitQueues();
             self.removed.deinit();
+        }
+
+        fn deinitQueues(self: *@This()) void {
+            for (self.queues.items) |*queue| {
+                queue.deinit();
+            }
+            self.queues.deinit(self.allocator);
+            self.queues = .empty;
         }
 
         pub fn tick(self: *@This()) void {
@@ -97,67 +107,31 @@ pub fn World(comptime options: WorldOptions) type {
 
         /// Create a new entity and return it
         pub fn create(self: *@This()) !Entity {
-            const entity_id = new_entity: {
-                // use previously deleted entity index (if there is any)
-                if (self.free_entity_list.pop()) |old_index| {
-                    const version = self.entities_to_locations.items[@intCast(old_index)].version;
-                    break :new_entity Entity{
-                        .index = old_index,
-                        .version = version,
-                    };
-                }
-                // create brand new entity index
-                const new_index: Entity.Index = @intCast(self.entities_to_locations.items.len);
-                // SAFETY: will be set afterwards using the entity index
-                try self.entities_to_locations.append(self.allocator, undefined);
-                break :new_entity Entity{
-                    .index = new_index,
-                    .version = 0,
-                };
-            };
-            // update entity_to_locations with new id
             const empty_arch = try self.tryGetArchetypeFromSignature(Components.init(&.{}));
-
-            const chunk, const slot_index = try empty_arch.reserve(entity_id);
-            self.entities_to_locations.items[@intCast(entity_id.index)] = EntityLocation{
-                .arch = empty_arch,
-                .version = entity_id.version,
-                .chunk = chunk,
-                .chunk_slot_index = @intCast(slot_index),
-            };
-
-            return entity_id;
+            return self.entity_registry.create(self.allocator, empty_arch);
         }
 
-        inline fn correctEntityIndex(self: *@This(), entt: Entity, slot_index: usize) void {
-            self.entities_to_locations.items[entt.index].chunk_slot_index = @intCast(slot_index);
-        }
-
-        inline fn valid(self: *@This(), entt: Entity) bool {
-            return EntityLocation.valid(&self.entities_to_locations, entt);
-        }
-
-        inline fn getEntitySignature(self: *@This(), entt: Entity) Components {
-            return EntityLocation.getEntitySignature(&self.entities_to_locations, entt);
+        pub inline fn valid(self: *@This(), entt: Entity) bool {
+            return self.entity_registry.valid(entt);
         }
 
         pub fn destroy(self: *@This(), entt: Entity) !void {
             std.debug.assert(self.valid(entt));
-            const location = &self.entities_to_locations.items[entt.index];
+            const location = self.entity_registry.getEntityLocation(entt);
             if (try location.chunk.remove(@intCast(location.chunk_slot_index))) |removal_result| {
                 const swapped_entt, const new_slot_index = removal_result;
-                self.correctEntityIndex(swapped_entt, new_slot_index);
+                self.entity_registry.setEntityIndex(swapped_entt, new_slot_index, .Chunks);
             }
-            try self.free_entity_list.append(self.allocator, entt.index);
+            try self.entity_registry.destroy(self.allocator, entt);
             location.version += 1;
         }
 
         fn moveTo(self: *@This(), entt: Entity, from: *Archetype, to: *Archetype) !void {
             std.debug.assert(self.valid(entt));
-            const location_ptr = &self.entities_to_locations.items[entt.index];
+            const location_ptr = self.entity_registry.getEntityLocation(entt);
             if (try from.moveTo(entt, location_ptr, to, self.getTick(), &self.removed)) |removal_result| {
                 const swapped_entt, const new_slot_index = removal_result;
-                self.correctEntityIndex(swapped_entt, new_slot_index);
+                self.entity_registry.setEntityIndex(swapped_entt, new_slot_index, .Chunks);
             }
         }
 
@@ -168,7 +142,7 @@ pub fn World(comptime options: WorldOptions) type {
 
         pub fn remove(self: *@This(), tid_or_component: anytype, entt: Entity) !void {
             std.debug.assert(self.valid(entt));
-            const old_arch_sig = self.getEntitySignature(entt);
+            const old_arch_sig = self.entity_registry.getEntitySignature(entt);
             var new_signature = old_arch_sig;
             new_signature.remove(tid_or_component);
             const new_arch = self.getArchetypeFromSignature(new_signature);
@@ -180,7 +154,7 @@ pub fn World(comptime options: WorldOptions) type {
             std.debug.assert(self.valid(entt));
             const Component = @TypeOf(value);
 
-            const old_arch_sig = self.getEntitySignature(entt);
+            const old_arch_sig = self.entity_registry.getEntitySignature(entt);
 
             var new_signature = old_arch_sig;
             new_signature.add(Component);
@@ -196,7 +170,7 @@ pub fn World(comptime options: WorldOptions) type {
 
         pub fn get(self: *@This(), comptime Component: type, entt: Entity) *Component {
             std.debug.assert(self.valid(entt));
-            const location = self.entities_to_locations.items[entt.index];
+            const location = self.entity_registry.getEntityLocation(entt);
             return location.chunk.get(Component, location.chunk_slot_index);
         }
 
@@ -209,14 +183,6 @@ pub fn World(comptime options: WorldOptions) type {
         pub fn createQueue(self: *@This()) !*CommandsQueue {
             try self.queues.append(self.allocator, CommandsQueue.init(self.allocator));
             return &self.queues.items[self.queues.items.len - 1];
-        }
-
-        fn deinitQueues(self: *@This()) void {
-            for (self.queues.items) |*queue| {
-                queue.deinit();
-            }
-            self.queues.deinit(self.allocator);
-            self.queues = .empty;
         }
 
         pub fn sync(self: *@This()) !void {

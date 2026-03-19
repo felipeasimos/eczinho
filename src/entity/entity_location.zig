@@ -1,5 +1,3 @@
-const std = @import("std");
-
 pub const EntityLocationOptions = struct {
     Archetype: type,
     Entity: type,
@@ -25,18 +23,5 @@ pub fn EntityLocation(comptime options: EntityLocationOptions) type {
         dense_index: usize = 0,
         // current (if alive) or next (if dead) generation of an entity index.
         version: options.Entity.Version = 0,
-
-        pub inline fn valid(arr: *std.ArrayList(@This()), id: Entity) bool {
-            if (id.index >= arr.items.len) return false;
-            return arr.items[id.index].version == id.version;
-        }
-        pub inline fn getEntityArchetype(arr: *std.ArrayList(@This()), entt: Entity) *Archetype {
-            std.debug.assert(@This().valid(arr, entt));
-            return arr.items[entt.index].arch;
-        }
-
-        pub inline fn getEntitySignature(arr: *std.ArrayList(@This()), entt: Entity) Components {
-            return getEntityArchetype(arr, entt).signature;
-        }
     };
 }

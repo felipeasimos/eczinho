@@ -21,7 +21,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             .Components = Components,
             .Entity = Entity,
         });
-        const EntityLocation = World.EntityLocation;
+        pub const EntityLocation = World.EntityLocation;
         pub const Chunks = chunks.ChunksFactory(.{
             .Entity = Entity,
             .EntityLocation = EntityLocation,
