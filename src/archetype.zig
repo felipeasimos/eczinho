@@ -3,7 +3,7 @@ const entity = @import("entity/entity.zig");
 const components = @import("components.zig");
 const Tick = @import("types.zig").Tick;
 const chunks = @import("storage/chunks.zig");
-const RegistryFactory = @import("registry.zig").Registry;
+const WorldFactory = @import("world.zig").World;
 
 pub const ArchetypeOptions = struct {
     Components: type,
@@ -17,13 +17,14 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
         pub const ComponentTypeId = options.Components.ComponentTypeId;
         pub const Components = options.Components;
         pub const Entity = options.Entity;
-        pub const Registry = RegistryFactory(.{
+        pub const World = WorldFactory(.{
             .Components = Components,
             .Entity = Entity,
         });
-        const EntityLocation = Registry.EntityLocation;
+        const EntityLocation = World.EntityLocation;
         pub const Chunks = chunks.ChunksFactory(.{
             .Entity = Entity,
+            .EntityLocation = EntityLocation,
             .Components = Components,
         });
         pub const Chunk = Chunks.Chunk;

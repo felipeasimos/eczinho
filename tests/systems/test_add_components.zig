@@ -29,21 +29,21 @@ test "add components in system" {
         .build(std.testing.allocator, std.testing.io);
     defer app.deinit();
 
-    try std.testing.expectEqual(0, app.registry.len());
+    try std.testing.expectEqual(0, app.world.len());
 
     try app.startup();
 
     // running schedule once won't change anything because
     // the syncing only happens at the beginning
     try app.runOne();
-    try std.testing.expectEqual(0, app.registry.len());
+    try std.testing.expectEqual(0, app.world.len());
 
     // syncs last run's changes and apply new deferred changes
     try app.runOne();
-    try std.testing.expectEqual(1, app.registry.len());
+    try std.testing.expectEqual(1, app.world.len());
 
     // uncommenting this would panic, since 'optSingle' would find more than one entity that
     // matches the query
     // try app.runOne();
-    // try std.testing.expectEqual(2, app.registry.len());
+    // try std.testing.expectEqual(2, app.world.len());
 }

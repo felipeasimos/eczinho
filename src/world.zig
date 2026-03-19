@@ -5,12 +5,12 @@ const commands = @import("commands/commands.zig");
 const removed = @import("removed/removed.zig");
 const Tick = @import("types.zig").Tick;
 
-pub const RegistryOptions = struct {
+pub const WorldOptions = struct {
     Components: type,
     Entity: type = entity.EntityTypeFactory(.medium),
 };
 
-pub fn Registry(comptime options: RegistryOptions) type {
+pub fn World(comptime options: WorldOptions) type {
     return struct {
         pub const Entity = options.Entity;
         pub const Components = options.Components;
@@ -285,7 +285,7 @@ test "all" {
     _ = @import("entity/entity.zig");
 }
 
-test Registry {
+test World {
     const ComponentsFactory = @import("components.zig").Components;
     const typeA = u64;
     const typeB = u32;
@@ -293,47 +293,47 @@ test Registry {
     const typeD = struct { a: u43 };
     const typeE = struct { a: u32, b: u54 };
 
-    var registry = Registry(.{
+    var world = World(.{
         .Components = ComponentsFactory(&.{ typeA, typeB, typeC, typeD, typeE }),
         .Entity = entity.EntityTypeFactory(.medium),
     }).init(std.testing.allocator);
-    defer registry.deinit();
+    defer world.deinit();
 
-    const entt_id = try registry.create();
-    try registry.add(entt_id, typeE{ .a = 1, .b = 2 });
+    const entt_id = try world.create();
+    try world.add(entt_id, typeE{ .a = 1, .b = 2 });
 
-    try std.testing.expect(registry.has(typeE, entt_id));
-    try std.testing.expect(!registry.has(typeD, entt_id));
+    try std.testing.expect(world.has(typeE, entt_id));
+    try std.testing.expect(!world.has(typeD, entt_id));
 
-    try std.testing.expectEqual(1, registry.get(typeE, entt_id).a);
-    try std.testing.expectEqual(2, registry.get(typeE, entt_id).b);
+    try std.testing.expectEqual(1, world.get(typeE, entt_id).a);
+    try std.testing.expectEqual(2, world.get(typeE, entt_id).b);
 
-    try std.testing.expectEqual(1, registry.getConst(typeE, entt_id).a);
-    try std.testing.expectEqual(2, registry.getConst(typeE, entt_id).b);
+    try std.testing.expectEqual(1, world.getConst(typeE, entt_id).a);
+    try std.testing.expectEqual(2, world.getConst(typeE, entt_id).b);
 }
 
-test "registry initialization test" {
+test "world initialization test" {
     const ComponentsFactory = @import("components.zig").Components;
-    var registry = Registry(.{
+    var world = World(.{
         .Components = ComponentsFactory(&.{ u64, bool, struct {} }),
         .Entity = entity.EntityTypeFactory(.small),
     }).init(std.testing.allocator);
-    defer registry.deinit();
+    defer world.deinit();
 }
 
-test "registry remove test" {
+test "world remove test" {
     const ComponentsFactory = @import("components.zig").Components;
-    var registry = Registry(.{
+    var world = World(.{
         .Components = ComponentsFactory(&.{ u64, bool, struct {} }),
         .Entity = entity.EntityTypeFactory(.small),
     }).init(std.testing.allocator);
-    defer registry.deinit();
+    defer world.deinit();
 
-    const entt_id = try registry.create();
-    try registry.add(entt_id, @as(u64, 7));
-    try registry.remove(u64, entt_id);
-    try std.testing.expectEqual(1, registry.len());
-    const another_id = try registry.create();
-    try std.testing.expectEqual(2, registry.len());
-    try registry.add(another_id, true);
+    const entt_id = try world.create();
+    try world.add(entt_id, @as(u64, 7));
+    try world.remove(u64, entt_id);
+    try std.testing.expectEqual(1, world.len());
+    const another_id = try world.create();
+    try std.testing.expectEqual(2, world.len());
+    try world.add(another_id, true);
 }

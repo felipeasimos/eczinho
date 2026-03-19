@@ -1,6 +1,7 @@
 // zlint-disable case-convention
 const std = @import("std");
 const StageLabel = @import("../stage_label.zig").StageLabel;
+const ComponentConfig = @import("../components.zig").ComponentConfig;
 
 pub const Bundle = struct {
     ContextConstructor: fn (comptime Entity: type) BundleContext = (struct {
@@ -92,12 +93,18 @@ pub const Bundle = struct {
 
 pub const BundleContext = struct {
     ComponentTypes: []const type = &.{},
+    ComponentConfigs: []const ComponentConfig = &.{},
     ResourceTypes: []const type = &.{},
     EventTypes: []const type = &.{},
     Bundles: []const Bundle = &.{},
 
+    const DefaultComponentConfig: ComponentConfig = .{
+        .storage_type = .Chunks,
+    };
+
     pub const Builder = struct {
         components: []const type = &.{},
+        component_configs: []const ComponentConfig = &.{},
         resources: []const type = &.{},
         events: []const type = &.{},
         bundles: []const Bundle = &.{},
@@ -116,9 +123,16 @@ pub const BundleContext = struct {
             }
             return new;
         }
-        pub fn addComponent(self: @This(), Component: type) @This() {
+        pub fn addComponent(self: @This(), comptime Component: type) @This() {
             var new = self;
             new.components = new.components ++ .{Component};
+            new.component_configs = new.component_configs ++ .{DefaultComponentConfig};
+            return new;
+        }
+        pub fn addComponentWithConfig(self: @This(), comptime Component: type, comptime config: ComponentConfig) @This() {
+            var new = self;
+            new.components = new.components ++ .{Component};
+            new.component_configs = new.component_configs ++ .{config};
             return new;
         }
         pub fn addComponents(self: @This(), ComponentTypes: []const type) @This() {
@@ -153,8 +167,17 @@ pub const BundleContext = struct {
             return new;
         }
         pub fn build(self: @This(), comptime Entity: type) BundleContext {
+            var final_components: []const type = &.{};
+            var final_configs: []const ComponentConfig = &.{};
+            for (self.components, self.component_configs) |component, config| {
+                if (std.mem.indexOfScalar(type, final_components, component) == null) {
+                    final_components = final_components ++ .{component};
+                    final_configs = final_configs ++ .{config};
+                }
+            }
             var context = BundleContext{
-                .ComponentTypes = self.components,
+                .ComponentTypes = final_components,
+                .ComponentConfigs = final_configs,
                 .ResourceTypes = self.resources,
                 .EventTypes = self.events,
                 .Bundles = self.bundles,
@@ -188,16 +211,19 @@ pub const BundleContext = struct {
     fn mergeWithBundles(self: @This(), comptime Entity: type) @This() {
         const bundles = getCompleteListOfBundles(&.{}, self.Bundles, Entity);
         var final_components: []const type = self.ComponentTypes;
+        var final_component_configs: []const ComponentConfig = self.ComponentConfigs;
         var final_resources: []const type = self.ResourceTypes;
         var final_events: []const type = self.EventTypes;
         for (bundles) |bundle| {
             const bundle_context = bundle.ContextConstructor(Entity);
             final_components = final_components ++ bundle_context.ComponentTypes;
+            final_component_configs = final_component_configs ++ bundle_context.ComponentConfigs;
             final_resources = final_resources ++ bundle_context.ResourceTypes;
             final_events = final_events ++ bundle_context.EventTypes;
         }
         return .{
             .ComponentTypes = final_components,
+            .ComponentConfigs = final_component_configs,
             .ResourceTypes = final_resources,
             .EventTypes = final_events,
             .Bundles = bundles,

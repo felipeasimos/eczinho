@@ -3,6 +3,7 @@ const types = @import("../types.zig");
 
 pub const ChunkOptions = struct {
     Entity: type,
+    EntityLocation: type,
     Components: type,
     ChunkSize: usize = 1024 * 16, // 16 KB
 };
@@ -12,10 +13,12 @@ pub fn ChunksFactory(comptime options: ChunkOptions) type {
         const Chunks = @This();
         pub const Components = options.Components;
         pub const Entity = options.Entity;
+        pub const EntityLocation = options.EntityLocation;
         pub const ChunkSize = options.ChunkSize;
         pub const Chunk = ChunkFactory(options);
         pub const MaxAlignment = @max(Components.MaxAlignment, @alignOf(Entity));
         pub const MaxCapacity = @divFloor(ChunkSize, @sizeOf(Entity));
+        pub const ReserveResult = struct { *Chunk, usize };
 
         allocator: std.mem.Allocator,
 
@@ -88,6 +91,12 @@ pub fn ChunksFactory(comptime options: ChunkOptions) type {
             self.chunks.deinit(self.allocator);
             self.allocator.free(self.component_arrays_offsets);
             self.allocator.free(self.component_sizes);
+        }
+        pub inline fn get(_: *const @This(), comptime Component: type, _: Entity, location: *EntityLocation) *Component {
+            return location.chunk.get(Component, location.chunk_slot_index);
+        }
+        pub inline fn getConst(_: *const @This(), comptime Component: type, _: Entity, location: *EntityLocation) Component {
+            return location.chunk.getConst(Component, location.chunk_slot_index);
         }
         pub inline fn getSize(self: *const @This(), tid_or_component: anytype) ?usize {
             const type_index = self.getNonEmptyTypeIndex(tid_or_component);
@@ -190,7 +199,7 @@ pub fn ChunksFactory(comptime options: ChunkOptions) type {
             try self.chunks.append(self.allocator, chunk_ptr);
             return self.chunks.items[self.chunks.items.len - 1];
         }
-        pub fn reserve(self: *@This(), entt: Entity) !struct { *Chunk, usize } {
+        pub fn reserve(self: *@This(), entt: Entity) !ReserveResult {
             const chunk = try self.getInsertionChunk();
             const index = chunk.reserve(entt);
             return .{ chunk, index };

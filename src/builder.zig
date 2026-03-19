@@ -6,7 +6,7 @@ const EntityOptions = @import("entity/entity.zig").EntityOptions;
 const EntityTypeFactory = @import("entity/entity.zig").EntityTypeFactory;
 const ComponentsFactory = @import("components.zig").Components;
 const ResourcesFactory = @import("resource/resources.zig").Resources;
-const RegistryFactory = @import("registry.zig").Registry;
+const WorldFactory = @import("world.zig").World;
 const TypeStoreFactory = @import("resource/type_store.zig").TypeStore;
 const EventStoreFactory = @import("event/event_store.zig").EventStore;
 const EventsFactory = @import("event/events.zig").Events;
@@ -14,6 +14,7 @@ const BundleContext = @import("bundle/bundle.zig").BundleContext;
 const Bundle = @import("bundle/bundle.zig").Bundle;
 const app = @import("app.zig");
 const app_events = @import("app_events.zig");
+const ComponentConfig = @import("components.zig").ComponentConfig;
 
 pub const AppContextBuilder = struct {
     bundle_builder: BundleContext.Builder = BundleContext.Builder.init(),
@@ -34,6 +35,11 @@ pub const AppContextBuilder = struct {
     pub fn addComponent(self: @This(), Component: type) @This() {
         var new = self;
         new.bundle_builder = new.bundle_builder.addComponent(Component);
+        return new;
+    }
+    pub fn addComponentWithConfig(self: @This(), Component: type, config: ComponentConfig) @This() {
+        var new = self;
+        new.bundle_builder = new.bundle_builder.addComponentWithConfig(Component, config);
         return new;
     }
     pub fn addComponents(self: @This(), Components: []const type) @This() {
@@ -71,7 +77,7 @@ pub const AppContextBuilder = struct {
         return app.AppContext(.{
             .Events = EventsFactory(context.EventTypes ++ app_events.appEventsSlice),
             .Resources = ResourcesFactory(context.ResourceTypes),
-            .Components = ComponentsFactory(context.ComponentTypes),
+            .Components = ComponentsFactory(context.ComponentTypes, context.ComponentConfigs),
             .Bundles = context.Bundles,
             .Entity = self.entity,
         });
@@ -115,7 +121,7 @@ pub const AppBuilder = struct {
         return new;
     }
     pub fn build(comptime self: @This(), allocator: std.mem.Allocator, io: std.Io) app.App(self.options) {
-        const Registry = RegistryFactory(.{
+        const World = WorldFactory(.{
             .Components = self.options.Context.Components,
             .Entity = self.options.Context.Entity,
         });
@@ -127,7 +133,7 @@ pub const AppBuilder = struct {
         });
         return app.App(self.options){
             .allocator = allocator,
-            .registry = Registry.init(allocator),
+            .world = World.init(allocator),
             .resource_store = TypeStore.init(),
             .event_store = EventStore.init(allocator),
             .scheduler = null,

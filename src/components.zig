@@ -1,10 +1,19 @@
 // zlint-disable case-convention
 const std = @import("std");
 const TypeHasher = @import("type_hasher.zig").TypeHasher;
+const StorageType = @import("storage/storage.zig").StorageType;
 
-pub fn Components(comptime ComponentTypes: []const type) type {
+pub const ComponentConfig = struct {
+    storage_type: StorageType,
+};
+
+pub fn Components(comptime ComponentTypes: []const type, comptime Configs: []const ComponentConfig) type {
+    if (ComponentTypes.len != ComponentTypes.len) {
+        @compileError("ComponentTypes and Configs should have the same length");
+    }
     return struct {
         const Hasher = TypeHasher(ComponentTypes);
+        pub const ComponentConfigs = Configs;
         pub const ComponentTypeId = Hasher.TypeId;
         pub const Len = Hasher.Len;
         pub const Union = Hasher.Union;

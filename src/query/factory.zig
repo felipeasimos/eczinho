@@ -3,7 +3,7 @@ const Request = @import("request.zig").QueryRequest;
 const ComponentsFactory = @import("../components.zig").Components;
 const EntityFactory = @import("../entity/entity.zig").EntityTypeFactory;
 const archetype = @import("../archetype.zig");
-const registry = @import("../registry.zig");
+const world = @import("../world.zig");
 const SystemData = @import("../system_data.zig").SystemData;
 const Tick = @import("../types.zig").Tick;
 
@@ -70,7 +70,7 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
         pub const CannotHave = CannotHave: {
             break :CannotHave req.without;
         };
-        pub const Registry = registry.Registry(.{
+        pub const World = world.World(.{
             .Entity = Entity,
             .Components = Components,
         });
@@ -80,7 +80,7 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
         });
 
         archetypes: std.ArrayList(Components) = .empty,
-        registry: *Registry,
+        world: *World,
         system_data: *SystemData,
 
         inline fn checkSignature(sig: Components) bool {
@@ -90,34 +90,34 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
         }
 
         fn updateArchetypeSignatureList(self: *@This()) !std.ArrayList(Components) {
-            var key_iter = self.registry.archetypes.keyIterator();
+            var key_iter = self.world.archetypes.keyIterator();
             var arr: std.ArrayList(Components) = .empty;
             while (key_iter.next()) |key| {
                 const sig = key.*;
                 if (checkSignature(sig)) {
-                    try arr.append(self.registry.allocator, key.*);
+                    try arr.append(self.world.allocator, key.*);
                 }
             }
             return arr;
         }
-        pub fn init(reg: *Registry, system_data: *SystemData) !@This() {
+        pub fn init(reg: *World, system_data: *SystemData) !@This() {
             var new: @This() = .{
-                .registry = reg,
+                .world = reg,
                 .system_data = system_data,
             };
             new.archetypes = try new.updateArchetypeSignatureList();
             return new;
         }
         pub fn deinit(self: *@This()) void {
-            self.archetypes.deinit(self.registry.allocator);
+            self.archetypes.deinit(self.world.allocator);
         }
         pub fn iter(self: @This()) Iterator {
-            return Iterator.init(self.registry, self.archetypes, self.system_data.last_run);
+            return Iterator.init(self.world, self.archetypes, self.system_data.last_run);
         }
         pub fn len(self: @This()) usize {
             var count: usize = 0;
             for (self.archetypes.items) |sig| {
-                const arch = self.registry.getArchetypeFromSignature(sig);
+                const arch = self.world.getArchetypeFromSignature(sig);
                 if (comptime req.added.len == 0 and req.changed.len == 0) {
                     count += arch.len();
                 } else {
@@ -126,7 +126,7 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
                         req.added,
                         req.changed,
                         self.system_data.last_run,
-                        self.registry.getTick(),
+                        self.world.getTick(),
                     );
                     while (arch_iter.nextWithoutMarkingChange()) |_| {
                         count += 1;
@@ -137,7 +137,7 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
         }
         pub fn empty(self: @This()) bool {
             for (self.archetypes.items) |sig| {
-                var arch = self.registry.getArchetypeFromSignature(sig);
+                var arch = self.world.getArchetypeFromSignature(sig);
                 if (comptime req.added.len == 0 and req.changed.len == 0) {
                     if (arch.len() != 0) return false;
                 } else if (arch.len() != 0) {
@@ -146,7 +146,7 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
                         req.added,
                         req.changed,
                         self.system_data.last_run,
-                        self.registry.getTick(),
+                        self.world.getTick(),
                     );
                     const arch_is_empty = arch_iter.nextWithoutMarkingChange() == null;
                     if (!arch_is_empty) return false;
@@ -157,14 +157,14 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
         /// get next tuple, returning null if query is empty
         pub fn peek(self: @This()) ?Tuple {
             for (self.archetypes.items) |sig| {
-                var arch = self.registry.getArchetypeFromSignature(sig);
+                var arch = self.world.getArchetypeFromSignature(sig);
                 if (arch.len() != 0) {
                     var inner_arch_iter = arch.iterator(
                         req.q,
                         req.added,
                         req.changed,
                         self.system_data.last_run,
-                        self.registry.getTick(),
+                        self.world.getTick(),
                     );
                     return inner_arch_iter.peek();
                 }
@@ -176,14 +176,14 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
             if (self.empty()) return null;
             var result: ?Tuple = null;
             for (self.archetypes.items) |sig| {
-                var arch = self.registry.getArchetypeFromSignature(sig);
+                var arch = self.world.getArchetypeFromSignature(sig);
                 if (arch.len() != 0) {
                     var inner_arch_iter = arch.iterator(
                         req.q,
                         req.added,
                         req.changed,
                         self.system_data.last_run,
-                        self.registry.getTick(),
+                        self.world.getTick(),
                     );
                     if (inner_arch_iter.next()) |tuple| {
                         if (result != null) @panic("optSingle found more than one valid tuple");
@@ -200,14 +200,14 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
         pub fn single(self: @This()) Tuple {
             std.debug.assert(!self.empty() and self.len() == 1);
             for (self.archetypes.items) |sig| {
-                var arch = self.registry.getArchetypeFromSignature(sig);
+                var arch = self.world.getArchetypeFromSignature(sig);
                 if (arch.len() != 0) {
                     var inner_arch_iter = arch.iterator(
                         req.q,
                         req.added,
                         req.changed,
                         self.system_data.last_run,
-                        self.registry.getTick(),
+                        self.world.getTick(),
                     );
                     return inner_arch_iter.next().?;
                 }
@@ -216,13 +216,13 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
         }
 
         pub const Iterator = struct {
-            registry: *Registry,
+            world: *World,
             archetypes: std.ArrayList(Components),
             last_system_run: Tick,
             current_iter: ?Archetype.Iterator(req.q, req.added, req.changed),
-            pub fn init(reg: *Registry, archs: std.ArrayList(Components), last_system_run: Tick) @This() {
+            pub fn init(reg: *World, archs: std.ArrayList(Components), last_system_run: Tick) @This() {
                 var new: @This() = .{
-                    .registry = reg,
+                    .world = reg,
                     .archetypes = archs,
                     .last_system_run = last_system_run,
                     .current_iter = null,
@@ -232,13 +232,13 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
             }
             inline fn nextArchetypeIterator(self: *@This()) ?Archetype.Iterator(req.q, req.added, req.changed) {
                 while (self.archetypes.pop()) |sig| {
-                    const arch = self.registry.getArchetypeFromSignature(sig);
+                    const arch = self.world.getArchetypeFromSignature(sig);
                     var iterator = arch.iterator(
                         req.q,
                         req.added,
                         req.changed,
                         self.last_system_run,
-                        self.registry.getTick(),
+                        self.world.getTick(),
                     );
                     if (iterator.peek()) |_| {
                         return iterator;
