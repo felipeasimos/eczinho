@@ -31,10 +31,32 @@ pub fn Components(comptime ComponentTypes: []const type, comptime Configs: []con
         pub const hash = Hasher.hash;
         pub const TypeIterator = Hasher.Iterator;
 
+        const ComponentConfigMap = ComponentConfigMap: {
+            @setEvalBranchQuota(10000);
+            var map = std.EnumArray(ComponentTypeId, ComponentConfig).initUndefined();
+            for (ComponentTypes) |Type| {
+                const type_id = std.meta.stringToEnum(ComponentTypeId, @typeName(Type)).?;
+                map.set(type_id, @sizeOf(Type));
+            }
+            break :ComponentConfigMap map;
+        };
+
         const BitSet = std.bit_set.StaticBitSet(ComponentTypes.len);
         /// this is where archetype signatures are stored. Comptime static maps and arrays
         /// store the info given a tid
         bitset: BitSet,
+
+        pub inline fn getConfig(tid_or_type: anytype) usize {
+            if (comptime Len == 0) return 0;
+            if (comptime @TypeOf(tid_or_type) == ComponentTypeId) {
+                return ComponentConfigMap.get(tid_or_type);
+            } else if (comptime isComponent(tid_or_type)) {
+                return @sizeOf(tid_or_type);
+            }
+            @compileError("invalid type " ++
+                @typeName(@TypeOf(tid_or_type)) ++
+                ": must be a ComponentTypeId or a registered component");
+        }
 
         pub fn init(comptime Types: []const type) @This() {
             const bitset = comptime bitset: {

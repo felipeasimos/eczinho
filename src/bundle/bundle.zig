@@ -99,7 +99,7 @@ pub const BundleContext = struct {
     Bundles: []const Bundle = &.{},
 
     const DefaultComponentConfig: ComponentConfig = .{
-        .storage_type = .Chunks,
+        .storage_type = .Dense,
     };
 
     pub const Builder = struct {

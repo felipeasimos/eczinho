@@ -20,8 +20,6 @@ pub fn ChunksFactory(comptime options: ChunkOptions) type {
         pub const MaxCapacity = @divFloor(ChunkSize, @sizeOf(Entity));
         pub const ReserveResult = struct { *Chunk, usize };
 
-        allocator: std.mem.Allocator,
-
         entity_count: usize = 0,
 
         chunks: std.ArrayList(*Chunk) = .empty,
@@ -78,19 +76,18 @@ pub fn ChunksFactory(comptime options: ChunkOptions) type {
                 .zst_metadata_start = zst_metadata_start,
                 .component_sizes = try getSizes(alloc, &sig),
                 .signature = signature,
-                .allocator = alloc,
                 .map_non_empty_to_type_index = non_empty_map,
                 .map_zst_to_type_index = zst_map,
             };
         }
-        pub fn deinit(self: *@This()) void {
+        pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
             for (self.chunks.items) |chunk| {
-                self.allocator.destroy(chunk);
+                allocator.destroy(chunk);
             }
-            self.free_list.deinit(self.allocator);
-            self.chunks.deinit(self.allocator);
-            self.allocator.free(self.component_arrays_offsets);
-            self.allocator.free(self.component_sizes);
+            self.free_list.deinit(allocator);
+            self.chunks.deinit(allocator);
+            allocator.free(self.component_arrays_offsets);
+            allocator.free(self.component_sizes);
         }
         pub inline fn get(_: *const @This(), comptime Component: type, _: Entity, location: *EntityLocation) *Component {
             return location.chunk.get(Component, location.chunk_slot_index);
@@ -183,7 +180,7 @@ pub fn ChunksFactory(comptime options: ChunkOptions) type {
                 tid_or_component;
             return self.map_zst_to_type_index.get(hash);
         }
-        inline fn getInsertionChunk(self: *@This()) !*Chunk {
+        inline fn getInsertionChunk(self: *@This(), allocator: std.mem.Allocator) !*Chunk {
             if (self.insertion_chunk) |chunk| {
                 if (!chunk.full()) {
                     return chunk;
@@ -193,14 +190,14 @@ pub fn ChunksFactory(comptime options: ChunkOptions) type {
                 self.insertion_chunk = free_chunk;
                 return free_chunk;
             }
-            const chunk_ptr = try self.allocator.create(Chunk);
+            const chunk_ptr = try allocator.create(Chunk);
             chunk_ptr.* = Chunk.init(self);
             self.insertion_chunk = chunk_ptr;
-            try self.chunks.append(self.allocator, chunk_ptr);
+            try self.chunks.append(allocator, chunk_ptr);
             return self.chunks.items[self.chunks.items.len - 1];
         }
-        pub fn reserve(self: *@This(), entt: Entity) !ReserveResult {
-            const chunk = try self.getInsertionChunk();
+        pub fn reserve(self: *@This(), allocator: std.mem.Allocator, entt: Entity) !ReserveResult {
+            const chunk = try self.getInsertionChunk(allocator);
             const index = chunk.reserve(entt);
             return .{ chunk, index };
         }
@@ -386,7 +383,7 @@ pub fn ChunkFactory(comptime options: ChunkOptions) type {
             }
         }
         /// Return swapped entity and its new index
-        pub fn remove(self: *@This(), index: usize) !?struct { Entity, usize } {
+        pub fn remove(self: *@This(), allocator: std.mem.Allocator, index: usize) !?struct { Entity, usize } {
             std.debug.assert(index < self.len());
             defer self.count -= 1;
             defer self.chunks.entity_count -= 1;
@@ -422,7 +419,7 @@ pub fn ChunkFactory(comptime options: ChunkOptions) type {
             }
 
             if (self.empty()) {
-                try self.chunks.free_list.append(self.chunks.allocator, self);
+                try self.chunks.free_list.append(allocator, self);
             }
             return null;
         }

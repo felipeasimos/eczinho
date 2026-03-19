@@ -31,8 +31,8 @@ pub fn EntityRegistry(comptime options: EntityRegistryOptions) type {
 
         pub inline fn setEntityIndex(self: *@This(), entt: Entity, index: usize, comptime storage: StorageType) void {
             switch (comptime storage) {
-                .Chunks => self.entities_to_locations.items[entt.index].chunk_slot_index = @intCast(index),
-                .SparseSet => self.entities_to_locations.items[entt.index].dense_index = index,
+                .Dense => self.entities_to_locations.items[entt.index].chunk_slot_index = @intCast(index),
+                .Sparse => self.entities_to_locations.items[entt.index].dense_index = index,
             }
         }
 
@@ -51,7 +51,7 @@ pub fn EntityRegistry(comptime options: EntityRegistryOptions) type {
         }
 
         /// Create a new entity and return it
-        pub fn create(self: *@This(), alloc: std.mem.Allocator, empty_arch: *Archetype) !Entity {
+        pub fn create(self: *@This(), allocator: std.mem.Allocator, empty_arch: *Archetype) !Entity {
             const entity_id = new_entity: {
                 // use previously deleted entity index (if there is any)
                 if (self.free_entity_list.pop()) |old_index| {
@@ -64,13 +64,13 @@ pub fn EntityRegistry(comptime options: EntityRegistryOptions) type {
                 // create brand new entity index
                 const new_index: Entity.Index = @intCast(self.entities_to_locations.items.len);
                 // SAFETY: will be set afterwards using the entity index
-                try self.entities_to_locations.append(alloc, undefined);
+                try self.entities_to_locations.append(allocator, undefined);
                 break :new_entity Entity{
                     .index = new_index,
                     .version = 0,
                 };
             };
-            const chunk, const slot_index = try empty_arch.reserve(entity_id);
+            const chunk, const slot_index = try empty_arch.reserve(allocator, entity_id);
             self.entities_to_locations.items[@intCast(entity_id.index)] = EntityLocation{
                 .arch = empty_arch,
                 .version = entity_id.version,

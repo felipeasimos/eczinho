@@ -3,13 +3,13 @@ pub const sparseset = @import("sparseset.zig");
 const std = @import("std");
 
 pub const StorageType = enum {
-    Chunks,
-    SparseSet,
+    Dense,
+    Sparse,
 };
 
 pub const StorageConfig = union(StorageType) {
-    chunks: chunks.ChunkOptions,
-    sparseset: sparseset.SparseSetOptions,
+    Dense: chunks.ChunkOptions,
+    Sparse: sparseset.SparseSetOptions,
 };
 
 pub const StorageOptions = struct {
@@ -25,29 +25,35 @@ pub fn Storage(options: StorageOptions) type {
         pub const Components = options.World.Components;
         pub const ReserveResult = @FieldType(@This(), "storage").ReserveResult;
 
-        world: *World,
+        // world: *World,
         storage: switch (options.Config) {
-            .chunks => |c| chunks.ChunksFactory(c),
-            .sparseset => |s| sparseset.SparseSet(s),
+            .Dense => |c| chunks.ChunksFactory(c),
+            .Sparse => |s| sparseset.SparseSet(s),
         },
 
-        pub fn init(alloc: std.mem.Allocator, world: *World, signature: Components) !@This() {
+        pub fn init(alloc: std.mem.Allocator, signature: Components) !@This() {
             return .{
-                .world = world,
-                .storage = @FieldType(@This(), "storage").init(alloc, signature),
+                // .world = world,
+                .storage = try @FieldType(@This(), "storage").init(alloc, signature),
             };
         }
+        pub fn deinit(self: *@This(), alloc: std.mem.Allocator) void {
+            self.storage.deinit(alloc);
+        }
         pub fn get(self: *@This(), comptime Component: type, entt: Entity, location: *EntityLocation) *Component {
-            return self.data.get(Component, entt, location);
+            return self.storage.get(Component, entt, location);
         }
         pub fn getConst(self: *const @This(), comptime Component: type, entt: Entity, location: *EntityLocation) Component {
-            return self.data.getConst(Component, entt, location);
+            return self.storage.getConst(Component, entt, location);
         }
-        pub fn reserve(self: *@This(), entt: Entity) !ReserveResult {
-            return self.data.reserve(entt);
+        pub fn reserve(self: *@This(), allocator: std.mem.Allocator, entt: Entity) !ReserveResult {
+            return self.storage.reserve(allocator, entt);
         }
         pub fn remove(self: *@This(), entt: Entity) !?struct { Entity, usize } {
-            return self.data.remove(entt);
+            return self.storage.remove(entt);
+        }
+        pub fn len(self: *@This()) usize {
+            return self.storage.len();
         }
     };
 }

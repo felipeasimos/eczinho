@@ -19,6 +19,7 @@ const ComponentConfig = @import("components.zig").ComponentConfig;
 pub const AppContextBuilder = struct {
     bundle_builder: BundleContext.Builder = BundleContext.Builder.init(),
     entity: type = EntityTypeFactory(.medium),
+    config_overrides: []const struct { type, ComponentConfig } = &.{},
     pub fn init() @This() {
         return .{};
     }
@@ -40,6 +41,15 @@ pub const AppContextBuilder = struct {
     pub fn addComponentWithConfig(self: @This(), Component: type, config: ComponentConfig) @This() {
         var new = self;
         new.bundle_builder = new.bundle_builder.addComponentWithConfig(Component, config);
+        return new;
+    }
+    /// Override a component's config.
+    /// This is available only when building AppContext, not BundleContext intentionally, to avoid bundles
+    /// overriding each other.
+    /// results in a compile error if the component was never added.
+    pub fn overrideComponentConfig(self: @This(), comptime Component: type, comptime config: ComponentConfig) @This() {
+        var new = self;
+        new.config_overrides = new.config_overrides ++ .{.{ Component, config }};
         return new;
     }
     pub fn addComponents(self: @This(), Components: []const type) @This() {
@@ -73,7 +83,17 @@ pub const AppContextBuilder = struct {
         return new;
     }
     pub fn build(self: @This()) type {
-        const context: BundleContext = comptime self.bundle_builder.build(self.entity);
+        var context: BundleContext = comptime self.bundle_builder.build(self.entity);
+        for (self.config_overrides) |override| {
+            const Component, const config = override;
+            if (std.mem.indexOfScalar(type, context.ComponentTypes, Component)) |idx| {
+                context.ComponentConfigs[idx] = config;
+            } else {
+                @compileError("Component config override not possible:" ++
+                    "component was never added!" ++
+                    "Use `addComponentWithConfig` instead of `overrideComponentConfig`");
+            }
+        }
         return app.AppContext(.{
             .Events = EventsFactory(context.EventTypes ++ app_events.appEventsSlice),
             .Resources = ResourcesFactory(context.ResourceTypes),

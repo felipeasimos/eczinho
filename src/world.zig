@@ -56,7 +56,7 @@ pub fn World(comptime options: WorldOptions) type {
             var iter = self.archetypes.valueIterator();
             while (iter.next()) |arch| {
                 const arch_ptr = arch.*;
-                arch_ptr.deinit();
+                arch_ptr.deinit(self.allocator);
                 self.allocator.destroy(arch_ptr);
             }
             self.archetypes.deinit();
@@ -118,9 +118,9 @@ pub fn World(comptime options: WorldOptions) type {
         pub fn destroy(self: *@This(), entt: Entity) !void {
             std.debug.assert(self.valid(entt));
             const location = self.entity_registry.getEntityLocation(entt);
-            if (try location.chunk.remove(@intCast(location.chunk_slot_index))) |removal_result| {
+            if (try location.chunk.remove(self.allocator, @intCast(location.chunk_slot_index))) |removal_result| {
                 const swapped_entt, const new_slot_index = removal_result;
-                self.entity_registry.setEntityIndex(swapped_entt, new_slot_index, .Chunks);
+                self.entity_registry.setEntityIndex(swapped_entt, new_slot_index, .Dense);
             }
             try self.entity_registry.destroy(self.allocator, entt);
             location.version += 1;
@@ -129,9 +129,9 @@ pub fn World(comptime options: WorldOptions) type {
         fn moveTo(self: *@This(), entt: Entity, from: *Archetype, to: *Archetype) !void {
             std.debug.assert(self.valid(entt));
             const location_ptr = self.entity_registry.getEntityLocation(entt);
-            if (try from.moveTo(entt, location_ptr, to, self.getTick(), &self.removed)) |removal_result| {
+            if (try from.moveTo(self.allocator, entt, location_ptr, to, self.getTick(), &self.removed)) |removal_result| {
                 const swapped_entt, const new_slot_index = removal_result;
-                self.entity_registry.setEntityIndex(swapped_entt, new_slot_index, .Chunks);
+                self.entity_registry.setEntityIndex(swapped_entt, new_slot_index, .Dense);
             }
         }
 
@@ -176,7 +176,7 @@ pub fn World(comptime options: WorldOptions) type {
 
         pub fn getConst(self: *@This(), comptime Component: type, entt: Entity) Component {
             std.debug.assert(self.valid(entt));
-            const location = self.entities_to_locations.items[entt.index];
+            const location = self.entity_registry.getEntityLocation(entt);
             return location.chunk.getConst(Component, location.chunk_slot_index);
         }
 

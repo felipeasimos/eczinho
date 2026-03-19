@@ -4,6 +4,7 @@ const components = @import("components.zig");
 const Tick = @import("types.zig").Tick;
 const chunks = @import("storage/chunks.zig");
 const WorldFactory = @import("world.zig").World;
+const storage = @import("storage/storage.zig");
 
 pub const ArchetypeOptions = struct {
     Components: type,
@@ -28,9 +29,19 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             .Components = Components,
         });
         pub const Chunk = Chunks.Chunk;
-        signature: Components,
-        chunks: Chunks,
+        pub const Storage = storage.Storage(.{
+            .World = World,
+            .Config = storage.StorageConfig{
+                .Dense = storage.chunks.ChunkOptions{
+                    .Entity = Entity,
+                    .EntityLocation = EntityLocation,
+                    .Components = Components,
+                },
+            },
+        });
 
+        signature: Components,
+        storage: Storage,
         inline fn hash(tid_or_component: anytype) ComponentTypeId {
             if (comptime @TypeOf(tid_or_component) == ComponentTypeId) {
                 return tid_or_component;
@@ -41,25 +52,26 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
 
         pub fn init(alloc: std.mem.Allocator, sig: Components) !@This() {
             return .{
-                .chunks = try Chunks.init(alloc, sig),
+                .storage = try Storage.init(alloc, sig),
                 .signature = sig,
             };
         }
 
-        pub fn deinit(self: *@This()) void {
-            self.chunks.deinit();
+        pub fn deinit(self: *@This(), alloc: std.mem.Allocator) void {
+            self.storage.deinit(alloc);
         }
 
+        /// return the number of entities in the archetype
         pub inline fn len(self: *@This()) usize {
-            return self.chunks.len();
+            return self.storage.len();
         }
 
         pub inline fn has(self: *@This(), tid_or_component: anytype) bool {
             return self.signature.has(tid_or_component);
         }
 
-        pub fn reserve(self: *@This(), entt: Entity) !struct { *Chunk, usize } {
-            return self.chunks.reserve(entt);
+        pub fn reserve(self: *@This(), allocator: std.mem.Allocator, entt: Entity) !struct { *Chunk, usize } {
+            return self.storage.reserve(allocator, entt);
         }
 
         /// move entity to new archetype.
@@ -67,13 +79,14 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
         /// components only present in 'new_arch' must be set after this call.
         pub fn moveTo(
             self: *@This(),
+            allocator: std.mem.Allocator,
             entt: Entity,
             location: *EntityLocation,
             new_arch: *@This(),
             current_tick: Tick,
             removed_logs: anytype,
         ) !?struct { Entity, usize } {
-            const new_chunk, const new_slot_index = try new_arch.reserve(entt);
+            const new_chunk, const new_slot_index = try new_arch.reserve(allocator, entt);
 
             var old_iter_type_id = self.signature.iterator();
             while (old_iter_type_id.nextTypeId()) |tid| {
@@ -129,7 +142,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                     }
                 }
             }
-            const removed_result = location.chunk.remove(@intCast(location.chunk_slot_index));
+            const removed_result = location.chunk.remove(allocator, @intCast(location.chunk_slot_index));
             location.chunk_slot_index = @intCast(new_slot_index);
             location.chunk = new_chunk;
             location.arch = new_arch;
@@ -162,9 +175,9 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                 last_run: Tick,
                 current_run: Tick,
                 iter: Chunks.Iterator,
-                pub fn init(archtype: *Self, last_run: Tick, current_run: Tick) @This() {
+                pub fn init(archetype: *Self, last_run: Tick, current_run: Tick) @This() {
                     return .{
-                        .iter = Chunks.Iterator.init(&archtype.chunks),
+                        .iter = Chunks.Iterator.init(&archetype.storage.storage),
                         .last_run = last_run,
                         .current_run = current_run,
                     };

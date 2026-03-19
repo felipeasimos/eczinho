@@ -12,7 +12,8 @@ zig build --build-file examples/pong/build.zig
 # TODO
 
 - [ ] let components choose between archetype and sparseset
-- [ ] tables storage type
+- [ ] tables storage type (default)
+- [ ] opt-in metadata (off by default, compile error when using in queries)
 - [ ] determine specific archetypes to be stored as chunks or tables
 - [ ] expose storage options to app creation (chunk size, table growth rate)
 - [ ] multithreading
