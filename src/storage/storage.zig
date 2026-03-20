@@ -23,18 +23,21 @@ pub fn Storage(options: StorageOptions) type {
         pub const Entity = options.World.Entity;
         pub const EntityLocation = options.World.EntityLocation;
         pub const Components = options.World.Components;
-        pub const ReserveResult = @FieldType(@This(), "storage").ReserveResult;
-
-        // world: *World,
-        storage: switch (options.Config) {
+        pub const StorageTypeSelected = switch (options.Config) {
             .Dense => |c| chunks.ChunksFactory(c),
             .Sparse => |s| sparseset.SparseSet(s),
-        },
+        };
+        pub const ReserveResult = StorageTypeSelected.ReserveResult;
+        pub const Chunk = StorageTypeSelected.Chunk;
+        pub const Iterator = StorageTypeSelected.Iterator;
+
+        // world: *World,
+        storage: StorageTypeSelected,
 
         pub fn init(alloc: std.mem.Allocator, signature: Components) !@This() {
             return .{
                 // .world = world,
-                .storage = try @FieldType(@This(), "storage").init(alloc, signature),
+                .storage = try StorageTypeSelected.init(alloc, signature),
             };
         }
         pub fn deinit(self: *@This(), alloc: std.mem.Allocator) void {

@@ -2,7 +2,6 @@ const std = @import("std");
 const entity = @import("entity/entity.zig");
 const components = @import("components.zig");
 const Tick = @import("types.zig").Tick;
-const chunks = @import("storage/chunks.zig");
 const WorldFactory = @import("world.zig").World;
 const storage = @import("storage/storage.zig");
 
@@ -23,12 +22,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             .Entity = Entity,
         });
         pub const EntityLocation = World.EntityLocation;
-        pub const Chunks = chunks.ChunksFactory(.{
-            .Entity = Entity,
-            .EntityLocation = EntityLocation,
-            .Components = Components,
-        });
-        pub const Chunk = Chunks.Chunk;
+        pub const Chunk = Storage.Chunk;
         pub const Storage = storage.Storage(.{
             .World = World,
             .Config = storage.StorageConfig{
@@ -70,7 +64,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             return self.signature.has(tid_or_component);
         }
 
-        pub fn reserve(self: *@This(), allocator: std.mem.Allocator, entt: Entity) !struct { *Chunk, usize } {
+        pub fn reserve(self: *@This(), allocator: std.mem.Allocator, entt: Entity) !Storage.ReserveResult {
             return self.storage.reserve(allocator, entt);
         }
 
@@ -174,10 +168,10 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             return struct {
                 last_run: Tick,
                 current_run: Tick,
-                iter: Chunks.Iterator,
+                iter: Storage.Iterator,
                 pub fn init(archetype: *Self, last_run: Tick, current_run: Tick) @This() {
                     return .{
-                        .iter = Chunks.Iterator.init(&archetype.storage.storage),
+                        .iter = Storage.Iterator.init(&archetype.storage.storage),
                         .last_run = last_run,
                         .current_run = current_run,
                     };

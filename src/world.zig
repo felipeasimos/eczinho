@@ -18,15 +18,14 @@ pub fn World(comptime options: WorldOptions) type {
             .Entity = Entity,
             .Components = Components,
         });
+        pub const Storage = Archetype.Storage;
         pub const EntityLocation = entity.EntityLocation(.{
             .Archetype = Archetype,
-            .Entity = Entity,
         });
         pub const EntityRegistry = entity.EntityRegistry(.{
             .Archetype = Archetype,
             .EntityLocation = EntityLocation,
         });
-        pub const Chunk = Archetype.Chunk;
         pub const CommandsQueue = commands.CommandsQueue(.{
             .Entity = Entity,
             .Components = Components,
