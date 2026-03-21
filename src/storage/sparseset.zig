@@ -1,13 +1,11 @@
 const std = @import("std");
 
-var os_page_size: usize = std.heap.pageSize();
-
 pub const SparseSetOptions = struct {
     T: type,
     /// mask to get the page number from the data
-    PageMask: usize = 4096,
+    PageMask: usize = 4095,
     /// if null, OS page size will be used
-    PageSize: ?usize = null,
+    PageSize: usize = 4096,
 };
 
 pub fn SparseSet(comptime options: SparseSetOptions) type {
@@ -27,14 +25,7 @@ pub fn SparseSet(comptime options: SparseSetOptions) type {
         page_size: usize,
 
         pub fn init(alloc: std.mem.Allocator) @This() {
-            const psize = page_size: {
-                if (comptime options.PageSize) |p| {
-                    break :page_size p;
-                }
-                break :page_size os_page_size;
-            };
             return .{
-                .page_size = psize,
                 .allocator = alloc,
             };
         }
@@ -58,12 +49,12 @@ pub fn SparseSet(comptime options: SparseSetOptions) type {
             return self.getPage(self.page(data)).data[self.offset(data)];
         }
 
-        fn page(self: *@This(), data: options.T) usize {
-            return (toUsize(data) & options.PageMask) / self.page_size;
+        fn page(data: options.T) usize {
+            return (toUsize(data) & options.PageMask) / options.PageSize;
         }
 
-        fn offset(self: *@This(), data: options.T) usize {
-            return toUsize(data) & (self.page_size - 1);
+        fn offset(data: options.T) usize {
+            return toUsize(data) & (options.Mask);
         }
 
         fn toUsize(data: options.T) usize {

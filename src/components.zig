@@ -3,8 +3,19 @@ const std = @import("std");
 const TypeHasher = @import("type_hasher.zig").TypeHasher;
 const StorageType = @import("storage/storage.zig").StorageType;
 
+pub const ComponentMetadata = enum {
+    Added,
+    Changed,
+};
+
 pub const ComponentConfig = struct {
-    storage_type: StorageType,
+    storage_type: StorageType = .Sparse,
+    track_metadata: struct {
+        added: bool = true,
+        // setting this to true for ZSTs will result in a compile error
+        // the context builders set this to false for ZSTs
+        changed: bool = true,
+    } = .{},
 };
 
 pub fn Components(comptime ComponentTypes: []const type, comptime Configs: []const ComponentConfig) type {
@@ -34,29 +45,64 @@ pub fn Components(comptime ComponentTypes: []const type, comptime Configs: []con
         const ComponentConfigMap = ComponentConfigMap: {
             @setEvalBranchQuota(10000);
             var map = std.EnumArray(ComponentTypeId, ComponentConfig).initUndefined();
-            for (ComponentTypes) |Type| {
+            for (ComponentTypes, 0..) |Type, i| {
                 const type_id = std.meta.stringToEnum(ComponentTypeId, @typeName(Type)).?;
-                map.set(type_id, @sizeOf(Type));
+                map.set(type_id, ComponentConfigs[i]);
             }
             break :ComponentConfigMap map;
+        };
+        pub const EmptyMask = EmptyMask: {
+            var sig: @This() = .{
+                .bitset = BitSet.initEmpty(),
+            };
+            for (ComponentTypes) |Type| {
+                if (@sizeOf(Type) == 0) {
+                    sig.add(Type);
+                }
+            }
+            break :EmptyMask sig;
+        };
+        pub const DenseStorageMask = DenseStorageMask: {
+            var sig: @This() = .{
+                .bitset = BitSet.initEmpty(),
+            };
+            for (ComponentTypes) |Type| {
+                if (getConfig(Type).storage_type == .Dense) {
+                    sig.add(Type);
+                }
+            }
+            break :DenseStorageMask sig;
+        };
+        pub const AddedMetadataMask = AddedMetadataMask: {
+            var sig: @This() = .{
+                .bitset = BitSet.initEmpty(),
+            };
+            for (ComponentTypes) |Type| {
+                if (getConfig(Type).track_metadata.added) {
+                    sig.add(Type);
+                }
+            }
+            break :AddedMetadataMask sig;
+        };
+        pub const ChangedMetadataMask = ChangedMetadataMask: {
+            var sig: @This() = .{
+                .bitset = BitSet.initEmpty(),
+            };
+            for (ComponentTypes) |Type| {
+                if (getConfig(Type).track_metadata.changed) {
+                    if (@sizeOf(Type) == 0) {
+                        @compileError("ZST components can't have changed metadata");
+                    }
+                    sig.add(Type);
+                }
+            }
+            break :ChangedMetadataMask sig;
         };
 
         const BitSet = std.bit_set.StaticBitSet(ComponentTypes.len);
         /// this is where archetype signatures are stored. Comptime static maps and arrays
         /// store the info given a tid
         bitset: BitSet,
-
-        pub inline fn getConfig(tid_or_type: anytype) usize {
-            if (comptime Len == 0) return 0;
-            if (comptime @TypeOf(tid_or_type) == ComponentTypeId) {
-                return ComponentConfigMap.get(tid_or_type);
-            } else if (comptime isComponent(tid_or_type)) {
-                return @sizeOf(tid_or_type);
-            }
-            @compileError("invalid type " ++
-                @typeName(@TypeOf(tid_or_type)) ++
-                ": must be a ComponentTypeId or a registered component");
-        }
 
         pub fn init(comptime Types: []const type) @This() {
             const bitset = comptime bitset: {
@@ -89,6 +135,30 @@ pub fn Components(comptime ComponentTypes: []const type, comptime Configs: []con
         /// return a bitset with the intersection of two bitsets (&)
         pub fn intersection(self: @This(), other: @This()) @This() {
             return @This(){ .bitset = self.bitset.intersectWith(other.bitset) };
+        }
+        /// get bitset complement
+        pub fn complement(self: @This()) @This() {
+            return @This(){ .bitset = self.bitset.complement() };
+        }
+        /// return bits are set if they are set in the first bitset but not in the second
+        pub fn difference(self: @This(), other: @This()) @This() {
+            return @This(){
+                .bitset = self.bitset.differenceWith(other.bitset),
+            };
+        }
+        /// return only empty components in bitset
+        pub fn applyEmptyMask(self: @This()) @This() {
+            return self.intersection(comptime EmptyMask);
+        }
+        /// return only non empty components in bitset
+        pub fn applyNonEmptyMask(self: @This()) @This() {
+            return self.intersection(comptime EmptyMask.complement());
+        }
+        pub fn applyAddedMask(self: @This()) @This() {
+            return self.intersection(comptime AddedMetadataMask);
+        }
+        pub fn applyChangedMask(self: @This()) @This() {
+            return self.intersection(comptime ChangedMetadataMask);
         }
         /// check if a bitset as an intersection with another
         pub fn hasIntersection(self: @This(), other: @This()) bool {
@@ -143,6 +213,29 @@ pub fn Components(comptime ComponentTypes: []const type, comptime Configs: []con
             return self.bitset.isSet(Hasher.getIndex(tid_or_component));
         }
 
+        pub inline fn getConfig(tid_or_type: anytype) ComponentConfig {
+            if (comptime Len == 0) return 0;
+            if (comptime @TypeOf(tid_or_type) == ComponentTypeId) {
+                return ComponentConfigMap.get(tid_or_type);
+            } else if (comptime isComponent(tid_or_type)) {
+                return comptime ComponentConfigMap.get(Hasher.TypeIds[getIndex(tid_or_type)]);
+            }
+            @compileError("invalid type " ++
+                @typeName(@TypeOf(tid_or_type)) ++
+                ": must be a ComponentTypeId or a registered component");
+        }
+
+        pub inline fn getStorageType(tid_or_type: anytype) StorageType {
+            return getConfig(tid_or_type).storage_type;
+        }
+
+        pub inline fn applyStorageTypeMask(self: *@This(), storage_type: StorageType) @This() {
+            return switch (storage_type) {
+                .Dense => self.intersection(comptime DenseStorageMask),
+                .Sparse => self.intersection(comptime DenseStorageMask.complement()),
+            };
+        }
+
         pub fn getIndexInSet(self: *@This(), tid_or_component: anytype) usize {
             const index = getIndex(tid_or_component);
             var only_left = self.bitset;
@@ -161,22 +254,27 @@ pub fn Components(comptime ComponentTypes: []const type, comptime Configs: []con
                     .iter = set.iterator(.{ .kind = .set, .direction = .forward }),
                 };
             }
-            pub fn nextComponent(self: *@This()) ?type {
+            pub fn nextTypeIdNonEmptyWithStorageType(self: *@This(), storage_type: StorageType) ?ComponentTypeId {
                 if (comptime Len == 0) {
                     return null;
                 }
-                if (self.iter.next()) |idx| {
-                    return ComponentTypes[idx];
+                while (self.iter.next()) |idx| {
+                    const type_id = Hasher.TypeId[idx];
+                    const size = Hasher.Sizes[type_id];
+                    if (size != 0 and getConfig(type_id) == storage_type) {
+                        return type_id;
+                    }
                 }
                 return null;
             }
-            pub fn nextComponentNonEmpty(self: *@This()) ?type {
+            pub fn nextTypeIdWithStorageType(self: *@This(), storage_type: StorageType) ?ComponentTypeId {
                 if (comptime Len == 0) {
                     return null;
                 }
-                inline while (self.nextComponent()) |Component| {
-                    if (comptime @sizeOf(Component) != 0) {
-                        return Component;
+                while (self.iter.next()) |idx| {
+                    const type_id = Hasher.TypeId[idx];
+                    if (getConfig(type_id) == storage_type) {
+                        return type_id;
                     }
                 }
                 return null;

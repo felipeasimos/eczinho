@@ -1,5 +1,6 @@
 const std = @import("std");
 const types = @import("../types.zig");
+const ComponentMetadata = @import("../components.zig").ComponentMetadata;
 
 pub const ChunkOptions = struct {
     Entity: type,
@@ -347,10 +348,7 @@ pub fn ChunkFactory(comptime options: ChunkOptions) type {
         pub inline fn len(self: *@This()) usize {
             return self.count;
         }
-        const ComponentMetadata = enum {
-            Added,
-            Changed,
-        };
+
         pub fn getZSTMetadataArray(self: *@This(), type_index: usize) []types.Tick {
             const capacity = self.chunks.capacity_per_chunk;
             const zst_metadata_start = self.chunks.zst_metadata_start;

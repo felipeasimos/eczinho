@@ -98,10 +98,6 @@ pub const BundleContext = struct {
     EventTypes: []const type = &.{},
     Bundles: []const Bundle = &.{},
 
-    const DefaultComponentConfig: ComponentConfig = .{
-        .storage_type = .Dense,
-    };
-
     pub const Builder = struct {
         components: []const type = &.{},
         component_configs: []const ComponentConfig = &.{},
@@ -126,7 +122,11 @@ pub const BundleContext = struct {
         pub fn addComponent(self: @This(), comptime Component: type) @This() {
             var new = self;
             new.components = new.components ++ .{Component};
-            new.component_configs = new.component_configs ++ .{DefaultComponentConfig};
+            var default_config = ComponentConfig{};
+            if (@sizeOf(Component) == 0) {
+                default_config.track_metadata.changed = false;
+            }
+            new.component_configs = new.component_configs ++ .{default_config};
             return new;
         }
         pub fn addComponentWithConfig(self: @This(), comptime Component: type, comptime config: ComponentConfig) @This() {

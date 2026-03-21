@@ -36,6 +36,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
 
         signature: Components,
         storage: Storage,
+
         inline fn hash(tid_or_component: anytype) ComponentTypeId {
             if (comptime @TypeOf(tid_or_component) == ComponentTypeId) {
                 return tid_or_component;
@@ -82,58 +83,113 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
         ) !?struct { Entity, usize } {
             const new_chunk, const new_slot_index = try new_arch.reserve(allocator, entt);
 
-            var old_iter_type_id = self.signature.iterator();
-            while (old_iter_type_id.nextTypeId()) |tid| {
-                // already existing component types
-                if (new_arch.signature.has(tid)) {
-                    if (Components.getSize(tid) != 0) {
-                        const old_type_index = location.chunk.getNonEmptyTypeIndex(tid);
-                        const old_addr = location
-                            .chunk
-                            .getElemWithTypeIndex(old_type_index, @intCast(location.chunk_slot_index));
-                        const new_chunk_type_index = new_chunk.getNonEmptyTypeIndex(tid);
-                        const new_addr = new_chunk.getElemWithTypeIndex(new_chunk_type_index, new_slot_index);
-                        @memcpy(new_addr, old_addr);
-                    }
-                    // removed component types
-                } else {
+            // both archetypes have the non empty component -> just copy it
+            {
+                var intersection = self.signature
+                    .intersection(new_arch.signature)
+                    .applyNonEmptyMask();
+                var iter_intersection = intersection.iterator();
+                while (iter_intersection.nextTypeId()) |tid| {
+                    const old_type_index = location.chunk.getNonEmptyTypeIndex(tid);
+                    const old_addr = location
+                        .chunk
+                        .getElemWithTypeIndex(old_type_index, @intCast(location.chunk_slot_index));
+                    const new_chunk_type_index = new_chunk.getNonEmptyTypeIndex(tid);
+                    const new_addr = new_chunk.getElemWithTypeIndex(new_chunk_type_index, new_slot_index);
+                    @memcpy(new_addr, old_addr);
+                }
+            }
+            // removed components -> add to removed logs
+            {
+                var removed = self.signature
+                    .difference(new_arch.signature);
+                var iter_removed = removed.iterator();
+                while (iter_removed.nextTypeId()) |tid| {
                     try removed_logs.addRemoved(tid, entt, current_tick);
                 }
             }
-            var new_iter_type_id = new_arch.signature.iterator();
-            while (new_iter_type_id.nextTypeId()) |tid| {
-                const is_zst = Components.getSize(tid) == 0;
-                // already existing component types
-                if (self.signature.has(tid)) {
-                    if (is_zst) {
-                        const old_type_index = location.chunk.getZSTIndex(tid);
-                        const new_type_index = new_chunk.getZSTIndex(tid);
-                        new_chunk
-                            .getZSTMetadataArray(new_type_index)[new_slot_index] = location
-                            .chunk
-                            .getZSTMetadataArray(old_type_index)[@intCast(location.chunk_slot_index)];
-                    } else {
-                        const old_type_index = location.chunk.getNonEmptyTypeIndex(tid);
-                        const new_type_index = new_chunk.getNonEmptyTypeIndex(tid);
-                        new_chunk
-                            .getNonEmptyMetadataArray(new_type_index, .Added)[new_slot_index] = location
-                            .chunk
-                            .getNonEmptyMetadataArray(old_type_index, .Added)[@intCast(location.chunk_slot_index)];
-                        new_chunk
-                            .getNonEmptyMetadataArray(new_type_index, .Changed)[new_slot_index] = location
-                            .chunk
-                            .getNonEmptyMetadataArray(old_type_index, .Changed)[@intCast(location.chunk_slot_index)];
-                    }
-                    // newly added components types
-                } else {
-                    if (is_zst) {
-                        const new_type_index = new_chunk.getZSTIndex(tid);
-                        new_chunk.getZSTMetadataArray(new_type_index)[new_slot_index] = current_tick;
-                    } else {
-                        const new_type_index = new_chunk.getNonEmptyTypeIndex(tid);
-                        new_chunk.getNonEmptyMetadataArray(new_type_index, .Added)[new_slot_index] = current_tick;
-                        new_chunk.getNonEmptyMetadataArray(new_type_index, .Changed)[new_slot_index] = current_tick;
-                    }
+            // already existing zst components with added metadata -> copy metadta
+            {
+                var existing_zst_with_added = self.signature
+                    .intersection(new_arch.signature)
+                    .applyEmptyMask()
+                    .applyAddedMask();
+                var iter = existing_zst_with_added.iterator();
+                while (iter.nextTypeId()) |tid| {
+                    const old_type_index = location.chunk.getZSTIndex(tid);
+                    const new_type_index = new_chunk.getZSTIndex(tid);
+                    new_chunk
+                        .getZSTMetadataArray(new_type_index)[new_slot_index] = location
+                        .chunk
+                        .getZSTMetadataArray(old_type_index)[@intCast(location.chunk_slot_index)];
+                }
+            }
+            // already existing non empty components with added metadata -> copy metadata
+            {
+                var existing_with_added = self.signature
+                    .intersection(new_arch.signature)
+                    .applyNonEmptyMask()
+                    .applyAddedMask();
+                var iter = existing_with_added.iterator();
+                while (iter.nextTypeId()) |tid| {
+                    const old_type_index = location.chunk.getNonEmptyTypeIndex(tid);
+                    const new_type_index = new_chunk.getNonEmptyTypeIndex(tid);
+                    new_chunk
+                        .getNonEmptyMetadataArray(new_type_index, .Added)[new_slot_index] = location
+                        .chunk
+                        .getNonEmptyMetadataArray(old_type_index, .Added)[@intCast(location.chunk_slot_index)];
+                }
+            }
+            // already existing non empty components with changed metadata -> copy metadata
+            {
+                var existing_with_changed = self.signature
+                    .intersection(new_arch.signature)
+                    .applyNonEmptyMask()
+                    .applyAddedMask();
+                var iter = existing_with_changed.iterator();
+                while (iter.nextTypeId()) |tid| {
+                    const old_type_index = location.chunk.getNonEmptyTypeIndex(tid);
+                    const new_type_index = new_chunk.getNonEmptyTypeIndex(tid);
+                    new_chunk
+                        .getNonEmptyMetadataArray(new_type_index, .Changed)[new_slot_index] = location
+                        .chunk
+                        .getNonEmptyMetadataArray(old_type_index, .Changed)[@intCast(location.chunk_slot_index)];
+                }
+            }
+            // newly added zst component with added metadata -> update metadata
+            {
+                var newly_added_zst = new_arch.signature
+                    .difference(self.signature)
+                    .applyEmptyMask()
+                    .applyAddedMask();
+                var iter = newly_added_zst.iterator();
+                while (iter.nextTypeId()) |tid| {
+                    const new_type_index = new_chunk.getZSTIndex(tid);
+                    new_chunk.getZSTMetadataArray(new_type_index)[new_slot_index] = current_tick;
+                }
+            }
+            // newly added non-empty component with added metadata -> update metadata
+            {
+                var newly_added_non_empty = new_arch.signature
+                    .difference(self.signature)
+                    .applyNonEmptyMask()
+                    .applyAddedMask();
+                var iter = newly_added_non_empty.iterator();
+                while (iter.nextTypeId()) |tid| {
+                    const new_type_index = new_chunk.getNonEmptyTypeIndex(tid);
+                    new_chunk.getNonEmptyMetadataArray(new_type_index, .Added)[new_slot_index] = current_tick;
+                }
+            }
+            // newly added non-empty component with changed metadata -> update metadata
+            {
+                var newly_added_non_empty = new_arch.signature
+                    .difference(self.signature)
+                    .applyNonEmptyMask()
+                    .applyChangedMask();
+                var iter = newly_added_non_empty.iterator();
+                while (iter.nextTypeId()) |tid| {
+                    const new_type_index = new_chunk.getNonEmptyTypeIndex(tid);
+                    new_chunk.getNonEmptyMetadataArray(new_type_index, .Changed)[new_slot_index] = current_tick;
                 }
             }
             const removed_result = location.chunk.remove(allocator, @intCast(location.chunk_slot_index));
