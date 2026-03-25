@@ -125,7 +125,7 @@ pub fn World(comptime options: WorldOptions) type {
         pub fn destroy(self: *@This(), entt: Entity) !void {
             std.debug.assert(self.valid(entt));
             const location = self.entity_registry.getEntityLocation(entt);
-            if (try location.chunk.remove(self.allocator, @intCast(location.dense_index))) |removal_result| {
+            if (try location.storage.remove(self.allocator, @intCast(location.dense_index))) |removal_result| {
                 const swapped_entt, const new_slot_index = removal_result;
                 self.entity_registry.setEntityDenseIndex(swapped_entt, new_slot_index);
             }
@@ -192,7 +192,7 @@ pub fn World(comptime options: WorldOptions) type {
             return switch (comptime Components.getStorageType(Component)) {
                 .Dense => dense: {
                     const location = self.entity_registry.getEntityLocation(entt);
-                    break :dense location.chunk.get(Component, location.dense_index);
+                    break :dense location.storage.get(Component, location.dense_index);
                 },
                 .Sparse => self.sparse_sets.get(entt.index),
             };
@@ -203,7 +203,7 @@ pub fn World(comptime options: WorldOptions) type {
             return switch (comptime Components.getStorageType(Component)) {
                 .Dense => dense: {
                     const location = self.entity_registry.getEntityLocation(entt);
-                    break :dense location.chunk.getConst(Component, location.dense_index);
+                    break :dense location.storage.getConst(Component, location.dense_index);
                 },
                 .Sparse => self.sparse_sets.getConst(entt.index),
             };

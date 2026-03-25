@@ -5,7 +5,8 @@ pub const EntityLocationOptions = struct {
 pub fn EntityLocation(comptime options: EntityLocationOptions) type {
     return struct {
         pub const Archetype = options.Archetype;
-        pub const Chunk = Archetype.DenseStorage.Chunk;
+        // pub const Chunk = Archetype.DenseStorage.Chunk;
+        pub const Tables = Archetype.DenseStorage.Tables;
         pub const Components = Archetype.Components;
         pub const Entity = Archetype.Entity;
 
@@ -14,7 +15,8 @@ pub fn EntityLocation(comptime options: EntityLocationOptions) type {
         // move the underlying data if no changes to dense components were made
         arch: *Archetype,
         // points to chunk, if the entity currently resides in a chunked archetype
-        chunk: *Chunk,
+        // or points to a table storage, if the entity currently resides in a tabled archetyped
+        storage: *Tables,
         // slot index inside the chunk if Chunks are used
         // table index if Tables are used
         dense_index: usize,

@@ -2,7 +2,7 @@ const std = @import("std");
 const types = @import("../types.zig");
 const ComponentMetadata = @import("../components.zig").ComponentMetadata;
 
-pub const ChunkOptions = struct {
+pub const ChunksOptions = struct {
     Entity: type,
     EntityLocation: type,
     Components: type,
@@ -30,7 +30,7 @@ pub const ChunkOptions = struct {
 /// | ...                                                                     |
 /// | row of added ticks for last empty component that has it enabled         |
 /// +-------------------------------------------------------------------------+
-pub fn ChunksFactory(comptime options: ChunkOptions) type {
+pub fn ChunksFactory(comptime options: ChunksOptions) type {
     return struct {
         const Chunks = @This();
         pub const Components = options.Components;
@@ -91,7 +91,7 @@ pub fn ChunksFactory(comptime options: ChunkOptions) type {
             const capacity_per_chunk = calculateCapacity(dense_sig);
             const offsets, const metadata_start, const zst_metadata_start = try calculateOffsets(
                 alloc,
-                &dense_sig,
+                dense_sig,
                 capacity_per_chunk,
             );
             return .{
@@ -115,16 +115,6 @@ pub fn ChunksFactory(comptime options: ChunkOptions) type {
             allocator.free(self.component_sizes);
         }
 
-        pub inline fn get(_: *const @This(), comptime Component: type, _: Entity, location: *EntityLocation) *Component {
-            return location.chunk.get(Component, location.dense_index);
-        }
-        pub inline fn getConst(_: *const @This(), comptime Component: type, _: Entity, location: *EntityLocation) Component {
-            return location.chunk.getConst(Component, location.dense_index);
-        }
-        pub inline fn getSize(self: *const @This(), tid_or_component: anytype) ?usize {
-            const type_index = self.getNonEmptyTypeIndex(tid_or_component);
-            return self.component_sizes[type_index];
-        }
         inline fn getSizes(alloc: std.mem.Allocator, signature: *Components) ![]usize {
             const sizes = try alloc.alloc(usize, signature.lenNonEmpty());
             var iter = signature.iterator();
@@ -137,10 +127,9 @@ pub fn ChunksFactory(comptime options: ChunkOptions) type {
         }
         inline fn calculateOffsets(
             alloc: std.mem.Allocator,
-            signature: *Components,
+            signature: Components,
             capacity: usize,
         ) !struct { []usize, usize, usize } {
-            // + 1 for metadata_start at the end
             const offsets = try alloc.alloc(usize, signature.lenNonEmpty());
             var iter = signature.iterator();
             var offset = capacity * @sizeOf(Entity);
@@ -297,7 +286,7 @@ pub fn ChunksFactory(comptime options: ChunkOptions) type {
     };
 }
 
-pub fn ChunkFactory(comptime options: ChunkOptions) type {
+pub fn ChunkFactory(comptime options: ChunksOptions) type {
     return struct {
         pub const Components = options.Components;
         pub const Entity = options.Entity;

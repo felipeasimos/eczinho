@@ -176,6 +176,10 @@ pub fn Components(comptime ComponentTypes: []const type, comptime Configs: []con
                 .Sparse => self.intersection(comptime DenseStorageMask.complement()),
             };
         }
+        /// applies a mask that removes ZSTs with no Added metadata
+        pub inline fn applyOccupiesSpaceMask(self: @This()) @This() {
+            return self.difference(comptime EmptyMask.difference(AddedMetadataMask));
+        }
         /// check if a bitset as an intersection with another
         pub fn hasIntersection(self: @This(), other: @This()) bool {
             return !self.intersection(other).eql(comptime @This().init(&.{}));
