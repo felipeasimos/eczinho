@@ -1,5 +1,4 @@
 const std = @import("std");
-const StorageType = @import("../storage/storage.zig").StorageType;
 
 pub const EntityRegistryOptions = struct {
     EntityLocation: type,
@@ -29,11 +28,8 @@ pub fn EntityRegistry(comptime options: EntityRegistryOptions) type {
             return &self.entities_to_locations.items[entt.index];
         }
 
-        pub inline fn setEntityIndex(self: *@This(), entt: Entity, index: usize, comptime storage: StorageType) void {
-            switch (comptime storage) {
-                .Dense => self.entities_to_locations.items[entt.index].chunk_slot_index = @intCast(index),
-                .Sparse => self.entities_to_locations.items[entt.index].dense_index = index,
-            }
+        pub inline fn setEntityDenseIndex(self: *@This(), entt: Entity, index: usize) void {
+            self.entities_to_locations.items[entt.index].dense_index = index;
         }
 
         pub inline fn valid(self: *@This(), entt: Entity) bool {
@@ -75,7 +71,7 @@ pub fn EntityRegistry(comptime options: EntityRegistryOptions) type {
                 .arch = empty_arch,
                 .version = entity_id.version,
                 .chunk = chunk,
-                .chunk_slot_index = @intCast(slot_index),
+                .dense_index = @intCast(slot_index),
             };
 
             return entity_id;

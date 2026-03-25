@@ -20,6 +20,7 @@ pub const QueryFactoryOptions = struct {
 /// checkout QueryRequest for more information
 pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
     const req = options.request;
+    req.validate(options.Components);
     var field_types: [req.q.len]type = undefined;
     for (req.q, 0..) |AccessibleType, i| {
         if (comptime AccessibleType != options.Entity) {

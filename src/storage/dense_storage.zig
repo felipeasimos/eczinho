@@ -1,32 +1,29 @@
 pub const chunks = @import("chunks.zig");
-pub const sparseset = @import("sparseset.zig");
+pub const tables = @import("tables.zig");
+pub const sparsesets = @import("sparseset/sparsesets.zig");
 const std = @import("std");
 const Tick = @import("../types.zig").Tick;
+const DenseStorageType = @import("storage_types.zig").DenseStorageType;
 
-pub const StorageType = enum {
-    Dense,
-    Sparse,
+pub const DenseStorageConfig = union(DenseStorageType) {
+    Chunks: chunks.ChunkOptions,
+    Tables: tables.TableOptions,
 };
 
-pub const StorageConfig = union(StorageType) {
-    Dense: chunks.ChunkOptions,
-    Sparse: sparseset.SparseSetOptions,
-};
-
-pub const StorageOptions = struct {
+pub const DenseStorageOptions = struct {
     World: type,
-    Config: StorageConfig,
+    Config: DenseStorageConfig,
 };
 
-pub fn Storage(options: StorageOptions) type {
+pub fn DenseStorage(options: DenseStorageOptions) type {
     return struct {
         pub const World = options.World;
         pub const Entity = options.World.Entity;
         pub const EntityLocation = options.World.EntityLocation;
         pub const Components = options.World.Components;
         pub const StorageTypeSelected = switch (options.Config) {
-            .Dense => |c| chunks.ChunksFactory(c),
-            .Sparse => |s| sparseset.SparseSet(s),
+            .Chunks => |c| chunks.ChunksFactory(c),
+            .Tables => |t| tables.Tables(t),
         };
         pub const ReserveResult = StorageTypeSelected.ReserveResult;
         pub const Chunk = StorageTypeSelected.Chunk;
@@ -73,15 +70,9 @@ pub fn Storage(options: StorageOptions) type {
         ) !?struct { Entity, usize } {
             const new_storage, const new_index = try to.reserve(allocator);
 
-            const old_index: usize = switch (comptime options.Config) {
-                .Dense => @intCast(location.chunk_slot_index),
-                .Sparse => location.dense_index,
-            };
+            const old_index = location.dense_index;
 
-            const old_storage = switch (comptime options.Config) {
-                .Dense => location.chunk,
-                .Sparse => location.chunk,
-            };
+            const old_storage = location.chunk;
 
             var old_iter_type_id = from.signature.iterator();
             while (old_iter_type_id.nextTypeId()) |tid| {
@@ -137,7 +128,7 @@ pub fn Storage(options: StorageOptions) type {
             const removed_result = old_storage.remove(allocator, old_index);
             switch (comptime options.Config) {
                 .Dense => {
-                    location.chunk_slot_index = @intCast(new_index);
+                    location.dense_index = @intCast(new_index);
                     location.chunk = new_storage;
                 },
                 .Sparse => location.dense_index = new_index,

@@ -3,7 +3,7 @@ const entity = @import("entity/entity.zig");
 const components = @import("components.zig");
 const Tick = @import("types.zig").Tick;
 const WorldFactory = @import("world.zig").World;
-const storage = @import("storage/storage.zig");
+const dense_storage = @import("storage/dense_storage.zig");
 
 pub const ArchetypeOptions = struct {
     Components: type,
@@ -22,20 +22,21 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             .Entity = Entity,
         });
         pub const EntityLocation = World.EntityLocation;
-        pub const Chunk = Storage.Chunk;
-        pub const Storage = storage.Storage(.{
+        pub const DenseStorage = dense_storage.DenseStorage(.{
             .World = World,
-            .Config = storage.StorageConfig{
-                .Dense = storage.chunks.ChunkOptions{
+            .Config = dense_storage.DenseStorageConfig{
+                .Chunks = dense_storage.chunks.ChunkOptions{
                     .Entity = Entity,
                     .EntityLocation = EntityLocation,
                     .Components = Components,
                 },
             },
         });
+        pub const Chunk = DenseStorage.Chunk;
 
+        /// only contains components that both belong to this archetype AND have dense storage set
         signature: Components,
-        storage: Storage,
+        storage: DenseStorage,
 
         inline fn hash(tid_or_component: anytype) ComponentTypeId {
             if (comptime @TypeOf(tid_or_component) == ComponentTypeId) {
@@ -47,7 +48,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
 
         pub fn init(alloc: std.mem.Allocator, sig: Components) !@This() {
             return .{
-                .storage = try Storage.init(alloc, sig),
+                .storage = try DenseStorage.init(alloc, sig),
                 .signature = sig,
             };
         }
@@ -65,13 +66,14 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             return self.signature.has(tid_or_component);
         }
 
-        pub fn reserve(self: *@This(), allocator: std.mem.Allocator, entt: Entity) !Storage.ReserveResult {
+        pub fn reserve(self: *@This(), allocator: std.mem.Allocator, entt: Entity) !DenseStorage.ReserveResult {
             return self.storage.reserve(allocator, entt);
         }
 
         /// move entity to new archetype.
-        /// this function only copies the values from component that exist in both archetypes.
-        /// components only present in 'new_arch' must be set after this call.
+        /// this function only copies the values from dense components that exist in both archetypes.
+        /// dense components only present in 'new_arch' must be set after this call.
+        /// no move happens if the only difference between the two archetypes is sparse components
         pub fn moveTo(
             self: *@This(),
             allocator: std.mem.Allocator,
@@ -83,17 +85,20 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
         ) !?struct { Entity, usize } {
             const new_chunk, const new_slot_index = try new_arch.reserve(allocator, entt);
 
+            const old_dense_signature = self.signature.applyStorageTypeMask(.Dense);
+            const new_dense_signature = new_arch.signature.applyStorageTypeMask(.Dense);
+
             // both archetypes have the non empty component -> just copy it
             {
-                var intersection = self.signature
-                    .intersection(new_arch.signature)
+                var intersection = old_dense_signature
+                    .intersection(new_dense_signature)
                     .applyNonEmptyMask();
                 var iter_intersection = intersection.iterator();
                 while (iter_intersection.nextTypeId()) |tid| {
                     const old_type_index = location.chunk.getNonEmptyTypeIndex(tid);
                     const old_addr = location
                         .chunk
-                        .getElemWithTypeIndex(old_type_index, @intCast(location.chunk_slot_index));
+                        .getElemWithTypeIndex(old_type_index, @intCast(location.dense_index));
                     const new_chunk_type_index = new_chunk.getNonEmptyTypeIndex(tid);
                     const new_addr = new_chunk.getElemWithTypeIndex(new_chunk_type_index, new_slot_index);
                     @memcpy(new_addr, old_addr);
@@ -101,8 +106,8 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             }
             // removed components -> add to removed logs
             {
-                var removed = self.signature
-                    .difference(new_arch.signature);
+                var removed = old_dense_signature
+                    .difference(new_dense_signature);
                 var iter_removed = removed.iterator();
                 while (iter_removed.nextTypeId()) |tid| {
                     try removed_logs.addRemoved(tid, entt, current_tick);
@@ -110,8 +115,8 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             }
             // already existing zst components with added metadata -> copy metadta
             {
-                var existing_zst_with_added = self.signature
-                    .intersection(new_arch.signature)
+                var existing_zst_with_added = old_dense_signature
+                    .intersection(new_dense_signature)
                     .applyEmptyMask()
                     .applyAddedMask();
                 var iter = existing_zst_with_added.iterator();
@@ -121,13 +126,13 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                     new_chunk
                         .getZSTMetadataArray(new_type_index)[new_slot_index] = location
                         .chunk
-                        .getZSTMetadataArray(old_type_index)[@intCast(location.chunk_slot_index)];
+                        .getZSTMetadataArray(old_type_index)[@intCast(location.dense_index)];
                 }
             }
             // already existing non empty components with added metadata -> copy metadata
             {
-                var existing_with_added = self.signature
-                    .intersection(new_arch.signature)
+                var existing_with_added = old_dense_signature
+                    .intersection(new_dense_signature)
                     .applyNonEmptyMask()
                     .applyAddedMask();
                 var iter = existing_with_added.iterator();
@@ -137,15 +142,15 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                     new_chunk
                         .getNonEmptyMetadataArray(new_type_index, .Added)[new_slot_index] = location
                         .chunk
-                        .getNonEmptyMetadataArray(old_type_index, .Added)[@intCast(location.chunk_slot_index)];
+                        .getNonEmptyMetadataArray(old_type_index, .Added)[@intCast(location.dense_index)];
                 }
             }
             // already existing non empty components with changed metadata -> copy metadata
             {
-                var existing_with_changed = self.signature
-                    .intersection(new_arch.signature)
+                var existing_with_changed = old_dense_signature
+                    .intersection(new_dense_signature)
                     .applyNonEmptyMask()
-                    .applyAddedMask();
+                    .applyChangedMask();
                 var iter = existing_with_changed.iterator();
                 while (iter.nextTypeId()) |tid| {
                     const old_type_index = location.chunk.getNonEmptyTypeIndex(tid);
@@ -153,13 +158,13 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                     new_chunk
                         .getNonEmptyMetadataArray(new_type_index, .Changed)[new_slot_index] = location
                         .chunk
-                        .getNonEmptyMetadataArray(old_type_index, .Changed)[@intCast(location.chunk_slot_index)];
+                        .getNonEmptyMetadataArray(old_type_index, .Changed)[@intCast(location.dense_index)];
                 }
             }
             // newly added zst component with added metadata -> update metadata
             {
-                var newly_added_zst = new_arch.signature
-                    .difference(self.signature)
+                var newly_added_zst = new_dense_signature
+                    .difference(old_dense_signature)
                     .applyEmptyMask()
                     .applyAddedMask();
                 var iter = newly_added_zst.iterator();
@@ -170,8 +175,8 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             }
             // newly added non-empty component with added metadata -> update metadata
             {
-                var newly_added_non_empty = new_arch.signature
-                    .difference(self.signature)
+                var newly_added_non_empty = new_dense_signature
+                    .difference(old_dense_signature)
                     .applyNonEmptyMask()
                     .applyAddedMask();
                 var iter = newly_added_non_empty.iterator();
@@ -182,8 +187,8 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             }
             // newly added non-empty component with changed metadata -> update metadata
             {
-                var newly_added_non_empty = new_arch.signature
-                    .difference(self.signature)
+                var newly_added_non_empty = new_dense_signature
+                    .difference(old_dense_signature)
                     .applyNonEmptyMask()
                     .applyChangedMask();
                 var iter = newly_added_non_empty.iterator();
@@ -192,8 +197,8 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                     new_chunk.getNonEmptyMetadataArray(new_type_index, .Changed)[new_slot_index] = current_tick;
                 }
             }
-            const removed_result = location.chunk.remove(allocator, @intCast(location.chunk_slot_index));
-            location.chunk_slot_index = @intCast(new_slot_index);
+            const removed_result = location.chunk.remove(allocator, @intCast(location.dense_index));
+            location.dense_index = @intCast(new_slot_index);
             location.chunk = new_chunk;
             location.arch = new_arch;
             return removed_result;
@@ -224,10 +229,10 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             return struct {
                 last_run: Tick,
                 current_run: Tick,
-                iter: Storage.Iterator,
+                iter: DenseStorage.Iterator,
                 pub fn init(archetype: *Self, last_run: Tick, current_run: Tick) @This() {
                     return .{
-                        .iter = Storage.Iterator.init(&archetype.storage.storage),
+                        .iter = DenseStorage.Iterator.init(&archetype.storage.storage),
                         .last_run = last_run,
                         .current_run = current_run,
                     };

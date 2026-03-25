@@ -1,6 +1,12 @@
 ## Eczinho
 
-Eczinho is a little archetype-style ECS built in pure Zig with a bevy-flavored API.
+Eczinho is a little hybrid ECS built in pure Zig with a bevy-flavored API.
+
+* Features:
+   * customization without runtime overhead, thanks to zig's comptime
+   * closed-universe component set, without getting in the way of creating and using bundles
+   * optional metadata tracking (Added/Changed/Remove) for queries. Only pay for what you use!
+
 
 ## Running examples
 
@@ -18,7 +24,40 @@ zig build --build-file examples/pong/build.zig
 - [ ] expose storage options to app creation (chunk size, table growth rate)
 - [ ] multithreading
 - [ ] bulk operations
+- [ ] time and delta time
 - [ ] better core bundles
+
+## Implementation goals and bevy comparison
+
+- [x] closed-universe component design
+   * all components are known at comptime for the final app
+- [x] bundling!
+   * Even though the component universe is closed, bundling is possible by merging bundle's universes and defining them through functions for dependency injection of the final app context
+- [ ] optional per-archetype dense storage strategy (Chunking or Table) (bevy currently doesn't have!)
+   * define specific dense signatures that should use an specific strategy
+   * set a default (for example, Table storage) and define a list of dense signatures that would use another
+- [ ] adding/removing sparse components doesn't move dense components
+   * changes entity's archetype (with proper signature), but the archetype data will be pointing to the same data
+- [ ] opt-in addition / removal / changed tracking for certain components (bevy currently doesn't have)
+   * don't pay for what you don't use!
+   * don't worry about it being off by default! Queries that use metadata for components without it will show a helpful compile error message to remind you!
+      * always off for the "changed" metadata for ZSTs
+- [ ] scheduling
+   * with chunking: work unit is each chunk (better for high cpu counts!)
+   * with table and sparse sets storage: work unit is systems
+   * scheduling strategy resolved at comptime
+      * optinal optimizations at runtime using run data? (idk)
+- [ ] conditional systems
+   * only run if query is not empty
+- [ ] system explicit ordering
+- [ ] hooks
+- [ ] bulk operations
+- [ ] chunking options
+   * chunk size (16KB)
+      * metadata is kept separately
+   * compactation strategy:
+      * add to `free_list` when empty
+      * on removal, distribute remanining entities in the chunk if the chunk is below a certain threshold
 
 ## Different Storage Options (not implemented yet)
 
@@ -61,3 +100,10 @@ zig build --build-file examples/pong/build.zig
 ### Sparse Sets (per-component storage type)
 
 Like EnTT. Great for components that are removed / added with high frequency.
+
+
+## High performance + closed universe component set + customization - LSP Support
+
+> A good architect maximizes the number of decisions not made. _Clean Architecture, Robert C. Martin_
+
+I just had to add this quote somewhere in the README. When developing something focused on performance, indirections are something to always look out for. Zig allows this codebase to abstract so much without dealing with runtime overhead because of it. `fn NewType(comptime options: anytype) type` may be the enemy of LSP support in the user-facing API, but it is really feels worth it.

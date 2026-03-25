@@ -1,7 +1,7 @@
 // zlint-disable case-convention
 const std = @import("std");
 const TypeHasher = @import("type_hasher.zig").TypeHasher;
-const StorageType = @import("storage/storage.zig").StorageType;
+const StorageType = @import("storage/storage_types.zig").StorageType;
 
 pub const ComponentMetadata = enum {
     Added,
@@ -104,6 +104,16 @@ pub fn Components(comptime ComponentTypes: []const type, comptime Configs: []con
         /// store the info given a tid
         bitset: BitSet,
 
+        pub fn initFull() @This() {
+            return @This(){
+                .bitset = BitSet.initFull(),
+            };
+        }
+        pub fn initEmpty() @This() {
+            return @This(){
+                .bitset = BitSet.initEmpty(),
+            };
+        }
         pub fn init(comptime Types: []const type) @This() {
             const bitset = comptime bitset: {
                 var set = BitSet.initEmpty();
@@ -160,6 +170,12 @@ pub fn Components(comptime ComponentTypes: []const type, comptime Configs: []con
         pub fn applyChangedMask(self: @This()) @This() {
             return self.intersection(comptime ChangedMetadataMask);
         }
+        pub inline fn applyStorageTypeMask(self: @This(), storage_type: StorageType) @This() {
+            return switch (storage_type) {
+                .Dense => self.intersection(comptime DenseStorageMask),
+                .Sparse => self.intersection(comptime DenseStorageMask.complement()),
+            };
+        }
         /// check if a bitset as an intersection with another
         pub fn hasIntersection(self: @This(), other: @This()) bool {
             return !self.intersection(other).eql(comptime @This().init(&.{}));
@@ -183,6 +199,10 @@ pub fn Components(comptime ComponentTypes: []const type, comptime Configs: []con
 
         pub fn len(self: *const @This()) usize {
             return self.bitset.count();
+        }
+
+        pub fn getType(comptime tid: ComponentTypeId) type {
+            return ComponentTypes[getIndex(tid)];
         }
 
         pub fn format(self: *const @This(), w: *std.Io.Writer) !void {
@@ -213,27 +233,28 @@ pub fn Components(comptime ComponentTypes: []const type, comptime Configs: []con
             return self.bitset.isSet(Hasher.getIndex(tid_or_component));
         }
 
-        pub inline fn getConfig(tid_or_type: anytype) ComponentConfig {
-            if (comptime Len == 0) return 0;
-            if (comptime @TypeOf(tid_or_type) == ComponentTypeId) {
-                return ComponentConfigMap.get(tid_or_type);
-            } else if (comptime isComponent(tid_or_type)) {
-                return comptime ComponentConfigMap.get(Hasher.TypeIds[getIndex(tid_or_type)]);
+        pub inline fn getConfig(tid_or_component: anytype) ComponentConfig {
+            if (comptime Len == 0) return .{};
+            if (comptime @TypeOf(tid_or_component) == ComponentTypeId) {
+                return ComponentConfigMap.get(tid_or_component);
+            } else if (comptime isComponent(tid_or_component)) {
+                return comptime ComponentConfigMap.get(Hasher.TypeIds[getIndex(tid_or_component)]);
             }
             @compileError("invalid type " ++
-                @typeName(@TypeOf(tid_or_type)) ++
+                @typeName(@TypeOf(tid_or_component)) ++
                 ": must be a ComponentTypeId or a registered component");
         }
 
-        pub inline fn getStorageType(tid_or_type: anytype) StorageType {
-            return getConfig(tid_or_type).storage_type;
+        pub inline fn hasAddedMetadata(tid_or_component: anytype) bool {
+            return getConfig(tid_or_component).track_metadata.added;
         }
 
-        pub inline fn applyStorageTypeMask(self: *@This(), storage_type: StorageType) @This() {
-            return switch (storage_type) {
-                .Dense => self.intersection(comptime DenseStorageMask),
-                .Sparse => self.intersection(comptime DenseStorageMask.complement()),
-            };
+        pub inline fn hasChangedMetadata(tid_or_component: anytype) bool {
+            return getConfig(tid_or_component).track_metadata.changed;
+        }
+
+        pub inline fn getStorageType(tid_or_component: anytype) StorageType {
+            return getConfig(tid_or_component).storage_type;
         }
 
         pub fn getIndexInSet(self: *@This(), tid_or_component: anytype) usize {

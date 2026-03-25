@@ -3,6 +3,7 @@ const entity = @import("entity/entity.zig");
 const archetype = @import("archetype.zig");
 const commands = @import("commands/commands.zig");
 const removed = @import("removed/removed.zig");
+const sparsesets = @import("storage/sparseset/sparsesets.zig");
 const Tick = @import("types.zig").Tick;
 
 pub const WorldOptions = struct {
@@ -18,7 +19,7 @@ pub fn World(comptime options: WorldOptions) type {
             .Entity = Entity,
             .Components = Components,
         });
-        pub const Storage = Archetype.Storage;
+        pub const Storage = Archetype.DenseStorage;
         pub const EntityLocation = entity.EntityLocation(.{
             .Archetype = Archetype,
         });
@@ -34,10 +35,16 @@ pub fn World(comptime options: WorldOptions) type {
             .Components = Components,
             .Entity = Entity,
         });
+        pub const SparseSets = sparsesets.SparseSets(.{
+            .PageSize = 4096,
+            .Components = Components,
+            .Entity = Entity,
+        });
 
         allocator: std.mem.Allocator,
         entity_registry: EntityRegistry,
         archetypes: std.AutoHashMap(Components, *Archetype),
+        sparse_sets: SparseSets = .empty,
         queues: std.ArrayList(CommandsQueue) = .empty,
         removed: RemovedLog,
         global_tick: Tick = 0,
@@ -58,6 +65,7 @@ pub fn World(comptime options: WorldOptions) type {
                 arch_ptr.deinit(self.allocator);
                 self.allocator.destroy(arch_ptr);
             }
+            self.sparse_sets.deinit(self.allocator);
             self.archetypes.deinit();
             self.entity_registry.deinit(self.allocator);
             self.deinitQueues();
@@ -117,42 +125,51 @@ pub fn World(comptime options: WorldOptions) type {
         pub fn destroy(self: *@This(), entt: Entity) !void {
             std.debug.assert(self.valid(entt));
             const location = self.entity_registry.getEntityLocation(entt);
-            if (try location.chunk.remove(self.allocator, @intCast(location.chunk_slot_index))) |removal_result| {
+            if (try location.chunk.remove(self.allocator, @intCast(location.dense_index))) |removal_result| {
                 const swapped_entt, const new_slot_index = removal_result;
-                self.entity_registry.setEntityIndex(swapped_entt, new_slot_index, .Dense);
+                self.entity_registry.setEntityDenseIndex(swapped_entt, new_slot_index);
             }
             try self.entity_registry.destroy(self.allocator, entt);
             location.version += 1;
         }
 
-        fn moveTo(self: *@This(), entt: Entity, from: *Archetype, to: *Archetype) !void {
+        fn moveToArchetype(self: *@This(), entt: Entity, from: *Archetype, to: *Archetype) !void {
             std.debug.assert(self.valid(entt));
             const location_ptr = self.entity_registry.getEntityLocation(entt);
             if (try from.moveTo(self.allocator, entt, location_ptr, to, self.getTick(), &self.removed)) |removal_result| {
                 const swapped_entt, const new_slot_index = removal_result;
-                self.entity_registry.setEntityIndex(swapped_entt, new_slot_index, .Dense);
+                self.entity_registry.setEntityDenseIndex(swapped_entt, new_slot_index);
             }
         }
 
         pub fn has(self: *@This(), comptime Component: type, entt: Entity) bool {
             std.debug.assert(self.valid(entt));
-            return self.getEntityArchetype(entt).has(Component);
+            return switch (comptime Components.getStorageType(Component)) {
+                .Dense => self.getEntityArchetype(entt).has(Component),
+                .Sparse => self.sparse_sets.contains(entt, Component),
+            };
         }
 
-        pub fn remove(self: *@This(), tid_or_component: anytype, entt: Entity) !void {
+        pub fn remove(self: *@This(), comptime Component: type, entt: Entity) !void {
             std.debug.assert(self.valid(entt));
             const old_arch_sig = self.entity_registry.getEntitySignature(entt);
             var new_signature = old_arch_sig;
-            new_signature.remove(tid_or_component);
+            new_signature.remove(Component);
             const new_arch = self.getArchetypeFromSignature(new_signature);
             const old_arch = self.getArchetypeFromSignature(old_arch_sig);
-            try self.moveTo(entt, old_arch, new_arch);
+
+            // change archetype (and thus the signature) of this entity
+            // will also move dense component data ONLY if added component is dense
+            try self.moveToArchetype(entt, old_arch, new_arch);
+
+            if (comptime Components.getStorageType(Component) == .Sparse) {
+                self.sparse_sets.remove(entt, Component);
+            }
         }
 
         pub fn add(self: *@This(), entt: Entity, value: anytype) !void {
             std.debug.assert(self.valid(entt));
             const Component = @TypeOf(value);
-
             const old_arch_sig = self.entity_registry.getEntitySignature(entt);
 
             var new_signature = old_arch_sig;
@@ -161,22 +178,35 @@ pub fn World(comptime options: WorldOptions) type {
             const new_arch = try self.tryGetArchetypeFromSignature(new_signature);
             const old_arch = self.getArchetypeFromSignature(old_arch_sig);
 
-            try self.moveTo(entt, old_arch, new_arch);
-            if (@sizeOf(Component) != 0) {
-                self.get(Component, entt).* = value;
+            // change archetype (and thus the signature) of this entity
+            // will also move dense component data ONLY if added component is dense
+            try self.moveToArchetype(entt, old_arch, new_arch);
+
+            if (comptime Components.getStorageType(@TypeOf(value)) == .Sparse) {
+                try self.sparse_sets.add(self.allocator, entt, value);
             }
         }
 
         pub fn get(self: *@This(), comptime Component: type, entt: Entity) *Component {
             std.debug.assert(self.valid(entt));
-            const location = self.entity_registry.getEntityLocation(entt);
-            return location.chunk.get(Component, location.chunk_slot_index);
+            return switch (comptime Components.getStorageType(Component)) {
+                .Dense => dense: {
+                    const location = self.entity_registry.getEntityLocation(entt);
+                    break :dense location.chunk.get(Component, location.dense_index);
+                },
+                .Sparse => self.sparse_sets.get(entt.index),
+            };
         }
 
-        pub fn getConst(self: *@This(), comptime Component: type, entt: Entity) Component {
+        pub fn getConst(self: *@This(), comptime Component: type, entt: Entity) *Component {
             std.debug.assert(self.valid(entt));
-            const location = self.entity_registry.getEntityLocation(entt);
-            return location.chunk.getConst(Component, location.chunk_slot_index);
+            return switch (comptime Components.getStorageType(Component)) {
+                .Dense => dense: {
+                    const location = self.entity_registry.getEntityLocation(entt);
+                    break :dense location.chunk.getConst(Component, location.dense_index);
+                },
+                .Sparse => self.sparse_sets.getConst(entt.index),
+            };
         }
 
         pub fn createQueue(self: *@This()) !*CommandsQueue {
@@ -224,7 +254,16 @@ pub fn World(comptime options: WorldOptions) type {
                             }
                         },
                         .remove => |type_id| {
-                            try self.remove(type_id, entt);
+                            if (comptime Components.Len != 0) {
+                                switch (type_id) {
+                                    inline else => |tid| {
+                                        try self.remove(
+                                            comptime Components.getType(tid),
+                                            entt,
+                                        );
+                                    },
+                                }
+                            }
                         },
                         .despawn => |d| {
                             try self.destroy(d.entt);

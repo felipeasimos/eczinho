@@ -1,28 +1,36 @@
 const std = @import("std");
 
-pub const SparseSetOptions = struct {
-    T: type,
-    /// mask to get the page number from the data
-    PageMask: usize = 4095,
+pub const DisjointSparseSetOptions = struct {
+    K: type,
+    V: type,
     /// if null, OS page size will be used
     PageSize: usize = 4096,
 };
 
-pub fn SparseSet(comptime options: SparseSetOptions) type {
-    const data_bits = @typeInfo(options.T).int.bits;
+pub fn DisjointSparseSet(comptime options: DisjointSparseSetOptions) type {
+    if (@popCount(options.PageSize) != 1) {
+        @compileError("Page size is not a power of 2");
+    }
+
+    const key_bits = @typeInfo(options.K).int.bits;
     const usize_bits = @typeInfo(usize).int.bits;
 
-    const Page = struct {
-        data: []options.T,
+    const KeyPage = struct {
+        keys: []options.K,
     };
 
     return struct {
-        const Null = std.math.maxInt(options.T);
+        pub const PageSize = options.PageSize;
+        pub const PageMask = PageSize - 1;
+        pub const K = options.K;
+        pub const V = options.V;
+        pub const empty: @This() = .{};
 
-        sparse: std.ArrayList(?Page) = .empty,
-        dense: std.ArrayList(options.T) = .empty,
-        allocator: std.mem.Allocator,
-        page_size: usize,
+        const Null = std.math.maxInt(K);
+
+        sparse: std.ArrayList(?KeyPage) = .empty,
+        dense_keys: std.ArrayList(K) = .empty,
+        dense_data: std.ArrayList(V) = .empty,
 
         pub fn init(alloc: std.mem.Allocator) @This() {
             return .{
@@ -30,122 +38,133 @@ pub fn SparseSet(comptime options: SparseSetOptions) type {
             };
         }
 
-        pub fn deinit(self: *@This()) void {
+        pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
             for (self.sparse.items) |page_opt| {
                 if (page_opt) |p| {
-                    self.allocator.free(p.data);
+                    allocator.free(p.keys);
                 }
             }
-            self.sparse.deinit(self.allocator);
-            self.dense.deinit(self.allocator);
+            self.sparse.deinit(allocator);
+            self.dense_keys.deinit(allocator);
+            self.dense_data.deinit(allocator);
         }
 
         pub fn len(self: *@This()) usize {
-            return self.dense.items.len;
+            return self.dense_keys.items.len;
         }
 
-        pub fn getDenseIndex(self: *@This(), data: options.T) usize {
-            std.debug.assert(self.contains(data));
-            return self.getPage(self.page(data)).data[self.offset(data)];
+        fn getDenseIndex(self: *@This(), key: K) usize {
+            std.debug.assert(self.contains(key));
+            return self.getPage(getPageIndex(key)).keys[getPageOffset(key)];
         }
 
-        fn page(data: options.T) usize {
-            return (toUsize(data) & options.PageMask) / options.PageSize;
+        fn getPageIndex(key: K) usize {
+            return (toUsize(key) & PageMask) / PageSize;
         }
 
-        fn offset(data: options.T) usize {
-            return toUsize(data) & (options.Mask);
+        fn getPageOffset(key: K) usize {
+            return toUsize(key) & (PageMask);
         }
 
-        fn toUsize(data: options.T) usize {
-            if (data_bits > usize_bits) {
-                return @truncate(data);
+        fn toUsize(key: K) usize {
+            if (key_bits > usize_bits) {
+                return @truncate(key);
             }
-            return @intCast(data);
+            return @intCast(key);
         }
 
-        fn toData(idx: usize) options.T {
-            if (data_bits > usize_bits) {
+        fn toKey(idx: usize) K {
+            if (key_bits > usize_bits) {
                 return @intCast(idx);
             }
             return @truncate(idx);
         }
 
         /// check if set already contains integer
-        pub fn contains(self: *@This(), data: options.T) bool {
+        pub fn contains(self: *@This(), data: K) bool {
             std.debug.assert(data != Null);
-            const p = self.page(data);
+            const p = getPageIndex(data);
             return p < self.sparse.items.len and
                 self.sparse.items[p] != null and
-                self.sparse.items[p].?.data[self.offset(data)] != Null;
+                self.sparse.items[p].?.keys[getPageOffset(data)] != Null;
         }
 
         /// create page if it doesn't exists
-        fn createPage(self: *@This(), page_index: usize) !void {
+        fn createPage(self: *@This(), allocator: std.mem.Allocator, page_index: usize) !void {
             if (page_index >= self.sparse.items.len) {
                 const diff = page_index - self.sparse.items.len + 1;
-                try self.sparse.appendNTimes(self.allocator, null, diff);
+                try self.sparse.appendNTimes(allocator, null, diff);
             }
 
             if (self.sparse.items[page_index] == null) {
-                const new_page_data = try self.allocator.alloc(options.T, self.page_size);
+                const new_page_data = try allocator.alloc(K, PageSize);
                 @memset(new_page_data, Null);
-                self.sparse.items[page_index] = Page{
-                    .data = new_page_data,
+                self.sparse.items[page_index] = KeyPage{
+                    .keys = new_page_data,
                 };
             }
         }
 
         /// get page
-        inline fn getPage(self: *@This(), page_index: usize) *Page {
+        inline fn getPage(self: *@This(), page_index: usize) *KeyPage {
             return &self.sparse.items[page_index].?;
         }
 
         /// adds integer to set
-        pub fn add(self: *@This(), data: options.T) !void {
-            std.debug.assert(!self.contains(data));
-            const page_index = self.page(data);
-            try self.createPage(page_index);
+        pub fn add(self: *@This(), allocator: std.mem.Allocator, key: K, value: V) !void {
+            std.debug.assert(!self.contains(key));
+            const page_index = getPageIndex(key);
+            try self.createPage(allocator, page_index);
             const p = self.getPage(page_index);
-            p.data[self.offset(data)] = toData(self.dense.items.len);
-            try self.dense.append(self.allocator, data);
+            p.keys[getPageOffset(key)] = toKey(self.dense_keys.items.len);
+            try self.dense_keys.append(allocator, key);
+            try self.dense_data.append(allocator, value);
         }
 
-        fn getElementSparsePtr(self: *@This(), data: options.T) *options.T {
-            const p = self.getPage(self.page(data));
-            return &p.data[self.offset(data)];
+        fn getElementSparsePtr(self: *@This(), data: K) *K {
+            const p = self.getPage(getPageIndex(data));
+            return &p.keys[getPageOffset(data)];
         }
 
         // remove integer from set. Nothing happens if integer is already not contained
         // return dense index
-        pub fn remove(self: *@This(), data: options.T) usize {
+        pub fn remove(self: *@This(), data: K) usize {
             std.debug.assert(self.contains(data));
 
-            const p = self.getPage(self.page(data));
-            const last_ptr = self.getElementSparsePtr(self.dense.getLast());
+            const p = self.getPage(getPageIndex(data));
+            const last_ptr = self.getElementSparsePtr(self.dense_keys.getLast());
             // 1. set 'data' in dense array to be the value of the last element in the dense array
-            const dense_index = p.data[self.offset(data)];
+            const dense_index = p.keys[getPageOffset(data)];
             last_ptr.* = dense_index;
             // 2. set 'data' in the sparse array to set to Null
-            p.data[self.offset(data)] = Null;
+            p.keys[getPageOffset(data)] = Null;
 
-            _ = self.dense.swapRemove(dense_index);
+            _ = self.dense_keys.swapRemove(dense_index);
+            _ = self.dense_data.swapRemove(dense_index);
             return dense_index;
         }
 
-        pub fn items(self: *@This()) []options.T {
-            return self.dense.items;
+        pub inline fn get(self: *@This(), key: K) *V {
+            const dense_index = self.getDenseIndex(key);
+            return &self.dense_data[dense_index];
+        }
+
+        pub fn keys(self: *@This()) []K {
+            return self.dense_keys.items;
+        }
+        pub fn values(self: *@This()) []K {
+            return self.dense_data.items;
         }
     };
 }
 
 test "sparseset init" {
-    var _u1 = SparseSet(.{ .T = u1 }).init(std.testing.allocator);
+    var _u1 = DisjointSparseSet(.{ .T = u1 }).init(std.testing.allocator);
     try std.testing.expectEqual(0, _u1.len());
 }
 
 test "u2 sparseset contains" {
-    var _u2 = SparseSet(.{ .T = u2 }).init(std.testing.allocator);
+    var _u2 = DisjointSparseSet(.{ .T = u2 }).init(std.testing.allocator);
     defer _u2.deinit();
 
     try std.testing.expect(!_u2.contains(0));
@@ -153,7 +172,7 @@ test "u2 sparseset contains" {
 }
 
 test "u2 sparseset add" {
-    var _u2 = SparseSet(.{ .T = u2 }).init(std.testing.allocator);
+    var _u2 = DisjointSparseSet(.{ .T = u2 }).init(std.testing.allocator);
     defer _u2.deinit();
 
     try _u2.add(0);
@@ -162,7 +181,7 @@ test "u2 sparseset add" {
 }
 
 test "u2 sparseset multiple add" {
-    var _u2 = SparseSet(.{ .T = u2 }).init(std.testing.allocator);
+    var _u2 = DisjointSparseSet(.{ .T = u2 }).init(std.testing.allocator);
     defer _u2.deinit();
 
     try _u2.add(0);
@@ -175,7 +194,7 @@ test "u2 sparseset multiple add" {
 }
 
 test "u2 sparseset multiple add out of order" {
-    var _u2 = SparseSet(.{ .T = u2 }).init(std.testing.allocator);
+    var _u2 = DisjointSparseSet(.{ .T = u2 }).init(std.testing.allocator);
     defer _u2.deinit();
 
     try _u2.add(0);
@@ -188,7 +207,7 @@ test "u2 sparseset multiple add out of order" {
 }
 
 test "u2 sparseset multiple add redundant" {
-    var _u2 = SparseSet(.{ .T = u2 }).init(std.testing.allocator);
+    var _u2 = DisjointSparseSet(.{ .T = u2 }).init(std.testing.allocator);
     defer _u2.deinit();
 
     try _u2.add(0);
@@ -201,7 +220,7 @@ test "u2 sparseset multiple add redundant" {
 }
 
 test "u2 sparseset remove" {
-    var _u2 = SparseSet(.{ .T = u2 }).init(std.testing.allocator);
+    var _u2 = DisjointSparseSet(.{ .T = u2 }).init(std.testing.allocator);
     defer _u2.deinit();
 
     try _u2.add(2);
@@ -216,7 +235,7 @@ test "u2 sparseset remove" {
 }
 
 test "u2 sparseset multiple remove" {
-    var _u2 = SparseSet(.{ .T = u2 }).init(std.testing.allocator);
+    var _u2 = DisjointSparseSet(.{ .T = u2 }).init(std.testing.allocator);
     defer _u2.deinit();
 
     try _u2.add(2);
@@ -234,7 +253,7 @@ test "u2 sparseset multiple remove" {
 }
 
 test "u40 sparseset contains" {
-    var _u40 = SparseSet(.{ .T = u40 }).init(std.testing.allocator);
+    var _u40 = DisjointSparseSet(.{ .T = u40 }).init(std.testing.allocator);
     defer _u40.deinit();
 
     try std.testing.expect(!_u40.contains(0));
@@ -242,7 +261,7 @@ test "u40 sparseset contains" {
 }
 
 test "u40 sparseset add" {
-    var _u40 = SparseSet(.{ .T = u40 }).init(std.testing.allocator);
+    var _u40 = DisjointSparseSet(.{ .T = u40 }).init(std.testing.allocator);
     defer _u40.deinit();
 
     try _u40.add(0);
@@ -251,7 +270,7 @@ test "u40 sparseset add" {
 }
 
 test "u40 sparseset multiple add" {
-    var _u40 = SparseSet(.{ .T = u40 }).init(std.testing.allocator);
+    var _u40 = DisjointSparseSet(.{ .T = u40 }).init(std.testing.allocator);
     defer _u40.deinit();
 
     try _u40.add(0);
@@ -264,7 +283,7 @@ test "u40 sparseset multiple add" {
 }
 
 test "u40 sparseset multiple add out of order" {
-    var _u40 = SparseSet(.{ .T = u40 }).init(std.testing.allocator);
+    var _u40 = DisjointSparseSet(.{ .T = u40 }).init(std.testing.allocator);
     defer _u40.deinit();
 
     try _u40.add(0);
@@ -277,7 +296,7 @@ test "u40 sparseset multiple add out of order" {
 }
 
 test "u40 sparseset multiple add redundant" {
-    var _u40 = SparseSet(.{ .T = u40 }).init(std.testing.allocator);
+    var _u40 = DisjointSparseSet(.{ .T = u40 }).init(std.testing.allocator);
     defer _u40.deinit();
 
     try _u40.add(0);
@@ -290,7 +309,7 @@ test "u40 sparseset multiple add redundant" {
 }
 
 test "u40 sparseset remove" {
-    var _u40 = SparseSet(.{ .T = u40 }).init(std.testing.allocator);
+    var _u40 = DisjointSparseSet(.{ .T = u40 }).init(std.testing.allocator);
     defer _u40.deinit();
 
     try _u40.add(2);
@@ -305,7 +324,7 @@ test "u40 sparseset remove" {
 }
 
 test "u40 sparseset multiple remove" {
-    var _u40 = SparseSet(.{ .T = u40 }).init(std.testing.allocator);
+    var _u40 = DisjointSparseSet(.{ .T = u40 }).init(std.testing.allocator);
     defer _u40.deinit();
 
     try _u40.add(2);
@@ -322,8 +341,8 @@ test "u40 sparseset multiple remove" {
     try std.testing.expectEqual(0, _u40.len());
 }
 
-test SparseSet {
-    var _u40 = SparseSet(.{ .T = u40 }).init(std.testing.allocator);
+test DisjointSparseSet {
+    var _u40 = DisjointSparseSet(.{ .T = u40 }).init(std.testing.allocator);
     defer _u40.deinit();
 
     try _u40.add(0);
