@@ -8,7 +8,7 @@ pub const EntityRegistryOptions = struct {
 pub fn EntityRegistry(comptime options: EntityRegistryOptions) type {
     return struct {
         pub const Archetype = options.Archetype;
-        pub const EntityLocation = Archetype.EntityLocation;
+        pub const EntityLocation = options.EntityLocation;
         pub const Entity = Archetype.Entity;
         pub const Components = Archetype.Components;
         /// entity index to -> generations + archetype
@@ -28,8 +28,8 @@ pub fn EntityRegistry(comptime options: EntityRegistryOptions) type {
             return &self.entities_to_locations.items[entt.index];
         }
 
-        pub inline fn setEntityDenseIndex(self: *@This(), entt: Entity, index: usize) void {
-            self.entities_to_locations.items[entt.index].dense_index = index;
+        pub inline fn setEntityDenseIndex(self: *@This(), entt_index: usize, dense_index: usize) void {
+            self.entities_to_locations.items[entt_index].dense_index = dense_index;
         }
 
         pub inline fn valid(self: *@This(), entt: Entity) bool {
@@ -66,11 +66,11 @@ pub fn EntityRegistry(comptime options: EntityRegistryOptions) type {
                     .version = 0,
                 };
             };
-            const chunk, const slot_index = try empty_arch.reserve(allocator, entity_id);
+            const storage, const slot_index = try empty_arch.reserve(allocator, entity_id);
             self.entities_to_locations.items[@intCast(entity_id.index)] = EntityLocation{
                 .arch = empty_arch,
                 .version = entity_id.version,
-                .chunk = chunk,
+                .storage = storage,
                 .dense_index = @intCast(slot_index),
             };
 

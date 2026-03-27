@@ -4,6 +4,47 @@ const components = @import("components.zig");
 const Tick = @import("types.zig").Tick;
 const WorldFactory = @import("world.zig").World;
 const dense_storage = @import("storage/dense_storage.zig");
+const DenseStorageType = @import("storage/storage_types.zig").DenseStorageType;
+
+pub const TaggedArchetypeOptions = struct {
+    Entity: type,
+    Components: type,
+    ChunksStorageConfig: ?dense_storage.chunks.ChunksOptions = null,
+    TablesStorageConfig: ?dense_storage.tables.TablesOptions = null,
+};
+
+pub fn TaggedArchetype(comptime options: TaggedArchetypeOptions) type {
+    return union(DenseStorageType) {
+        pub const Entity = options.Entity;
+        pub const Components = options.Components;
+        pub const ChunkedArchetype = Archetype(ArchetypeOptions{
+            .Entity = Entity,
+            .Components = Components,
+            .DenseStorageConfig = .{
+                .Chunks = if (options.ChunksStorageConfig) |c| c else .{
+                    .Entity = Entity,
+                    .Components = Components,
+                },
+            },
+        });
+        pub const TabledArchetype = Archetype(ArchetypeOptions{
+            .Entity = Entity,
+            .Components = Components,
+            .DenseStorageConfig = .{
+                .Tables = if (options.TablesStorageConfig) |c| c else .{
+                    .Entity = Entity,
+                    .Components = Components,
+                },
+            },
+        });
+        pub const TaggedDenseStorageUnitPtr = union(DenseStorageType) {
+            Chunks: *ChunkedArchetype.DenseStorage.Chunk,
+            Tables: *TabledArchetype.DenseStorage,
+        };
+        Chunks: ChunkedArchetype,
+        Tables: TabledArchetype,
+    };
+}
 
 pub const ArchetypeOptions = struct {
     Components: type,
@@ -12,7 +53,7 @@ pub const ArchetypeOptions = struct {
 };
 
 /// use ArchetypeOptions as options
-fn Archetype(comptime options: ArchetypeOptions) type {
+pub fn Archetype(comptime options: ArchetypeOptions) type {
     return struct {
         const Self = @This();
         pub const ComponentTypeId = options.Components.ComponentTypeId;
@@ -27,6 +68,7 @@ fn Archetype(comptime options: ArchetypeOptions) type {
             .World = World,
             .Config = options.DenseStorageConfig,
         });
+        const StorageAddress = DenseStorage.StorageAddress;
 
         /// only contains components that both belong to this archetype AND have dense storage set
         signature: Components,
@@ -40,9 +82,9 @@ fn Archetype(comptime options: ArchetypeOptions) type {
             }
         }
 
-        pub fn init(alloc: std.mem.Allocator, sig: Components) !@This() {
+        pub fn init(sig: Components) !@This() {
             return .{
-                .storage = try DenseStorage.init(alloc, sig),
+                .storage = try DenseStorage.init(sig),
                 .signature = sig,
             };
         }
@@ -60,7 +102,7 @@ fn Archetype(comptime options: ArchetypeOptions) type {
             return self.signature.has(tid_or_component);
         }
 
-        pub fn reserve(self: *@This(), allocator: std.mem.Allocator, entt: Entity) !DenseStorage.ReserveResult {
+        pub fn reserve(self: *@This(), allocator: std.mem.Allocator, entt: Entity) !DenseStorage.StorageAddress {
             return self.storage.reserve(allocator, entt);
         }
 
@@ -68,6 +110,7 @@ fn Archetype(comptime options: ArchetypeOptions) type {
         /// this function only copies the values from dense components that exist in both archetypes.
         /// dense components only present in 'new_arch' must be set after this call.
         /// no move happens if the only difference between the two archetypes is sparse components
+        /// returns swapped entity index and its new slot index (because of the remove)
         pub fn moveTo(
             self: *@This(),
             allocator: std.mem.Allocator,
@@ -76,7 +119,7 @@ fn Archetype(comptime options: ArchetypeOptions) type {
             new_arch: *@This(),
             current_tick: Tick,
             removed_logs: anytype,
-        ) !?struct { Entity, usize } {
+        ) !?struct { usize, usize } {
             const new_storage, const new_slot_index = try new_arch.reserve(allocator, entt);
 
             const old_dense_signature = self.signature.applyStorageTypeMask(.Dense);
@@ -91,12 +134,8 @@ fn Archetype(comptime options: ArchetypeOptions) type {
                     .applyNonEmptyMask();
                 var iter_intersection = intersection.iterator();
                 while (iter_intersection.nextTypeId()) |tid| {
-                    const old_type_index = old_storage.getNonEmptyTypeIndex(tid);
-                    const old_addr = location
-                        .chunk
-                        .getElemWithTypeIndex(old_type_index, @intCast(location.dense_index));
-                    const new_chunk_type_index = new_storage.getNonEmptyTypeIndex(tid);
-                    const new_addr = new_storage.getElemWithTypeIndex(new_chunk_type_index, new_slot_index);
+                    const old_addr = old_storage.getComponentWithTypeId(tid, location.dense_index);
+                    const new_addr = new_storage.getComponentWithTypeId(tid, new_slot_index);
                     @memcpy(new_addr, old_addr);
                 }
             }
@@ -109,88 +148,48 @@ fn Archetype(comptime options: ArchetypeOptions) type {
                     try removed_logs.addRemoved(tid, entt, current_tick);
                 }
             }
-            // already existing zst components with added metadata -> copy metadta
-            {
-                var existing_zst_with_added = old_dense_signature
-                    .intersection(new_dense_signature)
-                    .applyEmptyMask()
-                    .applyAddedMask();
-                var iter = existing_zst_with_added.iterator();
-                while (iter.nextTypeId()) |tid| {
-                    const old_type_index = old_storage.getZSTIndex(tid);
-                    const new_type_index = new_storage.getZSTIndex(tid);
-                    new_storage
-                        .getZSTMetadataArray(new_type_index)[new_slot_index] = location
-                        .chunk
-                        .getZSTMetadataArray(old_type_index)[@intCast(location.dense_index)];
-                }
-            }
-            // already existing non empty components with added metadata -> copy metadata
+            // already existing components with added metadata -> copy metadata
             {
                 var existing_with_added = old_dense_signature
                     .intersection(new_dense_signature)
-                    .applyNonEmptyMask()
                     .applyAddedMask();
                 var iter = existing_with_added.iterator();
                 while (iter.nextTypeId()) |tid| {
-                    const old_type_index = old_storage.getNonEmptyTypeIndex(tid);
-                    const new_type_index = new_storage.getNonEmptyTypeIndex(tid);
                     new_storage
-                        .getNonEmptyMetadataArray(new_type_index, .Added)[new_slot_index] = location
-                        .chunk
-                        .getNonEmptyMetadataArray(old_type_index, .Added)[@intCast(location.dense_index)];
+                        .getAddedWithTypeId(tid, new_slot_index).* = old_storage
+                        .getAddedWithTypeId(tid, location.dense_index).*;
                 }
             }
             // already existing non empty components with changed metadata -> copy metadata
             {
                 var existing_with_changed = old_dense_signature
                     .intersection(new_dense_signature)
-                    .applyNonEmptyMask()
                     .applyChangedMask();
                 var iter = existing_with_changed.iterator();
                 while (iter.nextTypeId()) |tid| {
-                    const old_type_index = old_storage.getNonEmptyTypeIndex(tid);
-                    const new_type_index = new_storage.getNonEmptyTypeIndex(tid);
                     new_storage
-                        .getNonEmptyMetadataArray(new_type_index, .Changed)[new_slot_index] = location
-                        .chunk
-                        .getNonEmptyMetadataArray(old_type_index, .Changed)[@intCast(location.dense_index)];
+                        .getChangedWithTypeId(tid, new_slot_index).* = old_storage
+                        .getChangedWithTypeId(tid, location.dense_index).*;
                 }
             }
-            // newly added zst component with added metadata -> update metadata
+            // newly added components with added metadata -> update metadata
             {
-                var newly_added_zst = new_dense_signature
+                var newly_added = new_dense_signature
                     .difference(old_dense_signature)
-                    .applyEmptyMask()
                     .applyAddedMask();
-                var iter = newly_added_zst.iterator();
+                var iter = newly_added.iterator();
                 while (iter.nextTypeId()) |tid| {
-                    const new_type_index = new_storage.getZSTIndex(tid);
-                    new_storage.getZSTMetadataArray(new_type_index)[new_slot_index] = current_tick;
+                    new_storage.getAddedWithTypeId(tid, new_slot_index).* = current_tick;
                 }
             }
-            // newly added non-empty component with added metadata -> update metadata
+            // newly added component with changed metadata -> update metadata
             {
-                var newly_added_non_empty = new_dense_signature
+                var newly_added = new_dense_signature
                     .difference(old_dense_signature)
-                    .applyNonEmptyMask()
-                    .applyAddedMask();
-                var iter = newly_added_non_empty.iterator();
-                while (iter.nextTypeId()) |tid| {
-                    const new_type_index = new_storage.getNonEmptyTypeIndex(tid);
-                    new_storage.getNonEmptyMetadataArray(new_type_index, .Added)[new_slot_index] = current_tick;
-                }
-            }
-            // newly added non-empty component with changed metadata -> update metadata
-            {
-                var newly_added_non_empty = new_dense_signature
-                    .difference(old_dense_signature)
-                    .applyNonEmptyMask()
                     .applyChangedMask();
-                var iter = newly_added_non_empty.iterator();
+                var iter = newly_added.iterator();
                 while (iter.nextTypeId()) |tid| {
-                    const new_type_index = new_storage.getNonEmptyTypeIndex(tid);
-                    new_storage.getNonEmptyMetadataArray(new_type_index, .Changed)[new_slot_index] = current_tick;
+                    new_storage.getChangedWithTypeId(tid, new_slot_index).* = current_tick;
                 }
             }
             const removed_result = old_storage.remove(allocator, @intCast(location.dense_index));
@@ -228,7 +227,7 @@ fn Archetype(comptime options: ArchetypeOptions) type {
                 iter: DenseStorage.Iterator,
                 pub fn init(archetype: *Self, last_run: Tick, current_run: Tick) @This() {
                     return .{
-                        .iter = DenseStorage.Iterator.init(&archetype.storage.storage),
+                        .iter = DenseStorage.Iterator.init(&archetype.storage),
                         .last_run = last_run,
                         .current_run = current_run,
                     };
@@ -246,14 +245,14 @@ fn Archetype(comptime options: ArchetypeOptions) type {
                 }
                 fn nextInner(self: *@This(), comptime mark_change: bool) ?Tuple {
                     if (self.nextValidEntity()) |iter_result| {
-                        const chunk, const slot_index = iter_result;
+                        const storage, const index = iter_result;
                         // SAFETY: immediatly filled in the following lines
                         var tuple: std.meta.Tuple(ReturnTypes) = undefined;
                         inline for (ReturnTypes, 0..) |Type, i| {
                             if (comptime Type == Entity) {
-                                tuple[i] = chunk.getConst(Entity, slot_index);
+                                tuple[i] = storage.getConst(Entity, index);
                             } else {
-                                tuple[i] = self.getComponent(Type, chunk, slot_index, mark_change);
+                                tuple[i] = self.getComponent(Type, iter_result, mark_change);
                             }
                         }
                         return tuple;
@@ -261,31 +260,24 @@ fn Archetype(comptime options: ArchetypeOptions) type {
                     return null;
                 }
                 /// iterate until we get a valid entity, or return null
-                fn nextValidEntity(self: *@This()) ?struct { *Chunk, usize } {
+                fn nextValidEntity(self: *@This()) ?StorageAddress {
                     while (self.iter.next()) |iter_result| {
-                        const chunk, const slot_index = iter_result;
-                        if (self.hasValidTicks(chunk, slot_index)) {
-                            return .{ chunk, slot_index };
+                        if (self.hasValidTicks(iter_result)) {
+                            return iter_result;
                         }
                     }
                     return null;
                 }
-                inline fn hasValidTicks(self: *@This(), chunk: *Chunk, slot_index: usize) bool {
+                inline fn hasValidTicks(self: *@This(), storage_address: StorageAddress) bool {
                     inline for (Added) |Type| {
-                        if (comptime @sizeOf(Type) != 0) {
-                            const type_index = chunk.getNonEmptyTypeIndex(Type);
-                            const added_tick = chunk.getNonEmptyMetadataArray(type_index, .Added)[slot_index];
-                            if (added_tick < self.last_run) return false;
-                        } else {
-                            const type_index = chunk.getZSTIndex(Type);
-                            const added_tick = chunk.getZSTMetadataArray(type_index)[slot_index];
-                            if (added_tick < self.last_run) return false;
-                        }
+                        const tid = comptime Components.hash(Type);
+                        const added_tick = storage_address[0].getAddedWithTypeId(tid, storage_address[1]).*;
+                        if (added_tick < self.last_run) return false;
                     }
                     inline for (Changed) |Type| {
                         if (comptime @sizeOf(Type) != 0) {
-                            const type_index = chunk.getNonEmptyTypeIndex(Type);
-                            const changed_tick = chunk.getNonEmptyMetadataArray(type_index, .Changed)[slot_index];
+                            const tid = comptime Components.hash(Type);
+                            const changed_tick = storage_address[0].getChangedWithTypeId(tid, storage_address[1]).*;
                             if (changed_tick < self.last_run) return false;
                         }
                     }
@@ -294,8 +286,7 @@ fn Archetype(comptime options: ArchetypeOptions) type {
                 fn getComponent(
                     self: *@This(),
                     comptime Type: type,
-                    chunk: *Chunk,
-                    slot_index: usize,
+                    storage_address: StorageAddress,
                     comptime mark_change: bool,
                 ) Type {
                     const CanonicalType = comptime Components.getCanonicalType(Type);
@@ -304,22 +295,22 @@ fn Archetype(comptime options: ArchetypeOptions) type {
                         @compileError("Cannot get access to zero size component " ++ @typeName(CanonicalType));
                     }
                     const return_value: Type = switch (comptime access_type) {
-                        .Const => chunk.getConst(CanonicalType, slot_index),
-                        .PointerConst => @ptrCast(chunk.getConst(CanonicalType, slot_index)),
-                        .PointerMut => chunk.get(CanonicalType, slot_index),
-                        .OptionalConst => chunk.getConst(CanonicalType, slot_index),
-                        .OptionalPointerMut => chunk.get(CanonicalType, slot_index),
-                        .OptionalPointerConst => @ptrCast(chunk.getConst(CanonicalType, slot_index)),
+                        .Const => storage_address[0].getConst(CanonicalType, storage_address[1]),
+                        .PointerConst => @ptrCast(storage_address[0].getConst(CanonicalType, storage_address[1])),
+                        .PointerMut => storage_address[0].get(CanonicalType, storage_address[1]),
+                        .OptionalConst => storage_address[0].getConst(CanonicalType, storage_address[1]),
+                        .OptionalPointerMut => storage_address[0].get(CanonicalType, storage_address[1]),
+                        .OptionalPointerConst => @ptrCast(storage_address[0].getConst(CanonicalType, storage_address[1])),
                     };
                     // ZSTs don't change, so we can ignore this for ZSTs
                     if (comptime mark_change) {
                         if (comptime (access_type == .PointerMut)) {
-                            const tid = chunk.getNonEmptyTypeIndex(CanonicalType);
-                            chunk.getNonEmptyMetadataArray(tid, .Changed)[slot_index] = self.current_run;
+                            const tid = Components.hash(CanonicalType);
+                            storage_address[0].getChangedWithTypeId(tid, storage_address[1]).* = self.current_run;
                         } else if (comptime (access_type == .OptionalPointerMut)) {
                             if (return_value != null) {
-                                const tid = chunk.getNonEmptyTypeIndex(CanonicalType);
-                                chunk.getNonEmptyMetadataArray(tid, .Changed)[slot_index] = self.current_run;
+                                const tid = Components.hash(CanonicalType);
+                                storage_address[0].getChangedWithTypeId(tid, storage_address[1]).* = self.current_run;
                             }
                         }
                     }

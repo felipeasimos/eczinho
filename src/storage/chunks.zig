@@ -1,10 +1,8 @@
 const std = @import("std");
 const types = @import("../types.zig");
-const ComponentMetadata = @import("../components.zig").ComponentMetadata;
 
 pub const ChunksOptions = struct {
     Entity: type,
-    EntityLocation: type,
     Components: type,
     InitialNumChunks: usize = 0,
     ChunkSize: usize = 1024 * 16, // 16 KB
@@ -17,14 +15,17 @@ pub const ChunksOptions = struct {
 /// | row of data for non empty C2                                            |
 /// |             ...                                                         |
 /// | row of data for non empty CN                                            |
+/// | ----------------------------------------------------------------------- /
 /// | row of added ticks for first non empty component that has it enabled    |
 /// | row of added ticks for second non empty component that has it enabled   |
 /// | ...                                                                     |
 /// | row of added ticks for last non empty component that has it enabled     |
+/// | ----------------------------------------------------------------------- /
 /// | row of changed ticks for first non empty component that has it enabled  |
 /// | row of changed ticks for second non empty component that has it enabled |
 /// | ...                                                                     |
-/// | row of added ticks for last empty component that has it enabled         |
+/// | row of changed ticks for last non empty component that has it enabled   |
+/// | ----------------------------------------------------------------------- /
 /// | row of added ticks for first empty component that has it enabled        |
 /// | row of added ticks for second empty component that has it enabled       |
 /// | ...                                                                     |
@@ -35,12 +36,72 @@ pub fn ChunksFactory(comptime options: ChunksOptions) type {
         const Chunks = @This();
         pub const Components = options.Components;
         pub const Entity = options.Entity;
-        pub const EntityLocation = options.EntityLocation;
         pub const ChunkSize = options.ChunkSize;
         pub const Chunk = ChunkFactory(options);
-        pub const MaxAlignment = @max(Components.MaxAlignment, @alignOf(Entity));
+        pub const MaxAlignment = @max(Components.MaxAlignment, @alignOf(Entity), @alignOf(types.Tick));
         pub const MaxCapacity = @divFloor(ChunkSize, @sizeOf(Entity));
-        pub const ReserveResult = struct { *Chunk, usize };
+        pub const StorageAddress = struct { *Chunk, usize };
+        pub const Storage = Chunk;
+
+        const ChunkLayout = struct {
+            component_data_offsets: std.EnumMap(Components.ComponentTypeId, usize),
+            component_added_offsets: std.EnumMap(Components.ComponentTypeId, usize),
+            component_changed_offsets: std.EnumMap(Components.ComponentTypeId, usize),
+
+            pub fn init(signature: Components, capacity: usize) @This() {
+                var non_empty = signature.applyNonEmptyMask();
+                var component_data_offsets = std.EnumMap(Components.ComponentTypeId, usize){};
+                var component_added_offsets = std.EnumMap(Components.ComponentTypeId, usize){};
+                var component_changed_offsets = std.EnumMap(Components.ComponentTypeId, usize){};
+
+                if (comptime Components.Len != 0) {
+                    var offset = @sizeOf(Entity) * capacity;
+                    var iter = non_empty.iterator();
+                    // non empty component data
+                    while (iter.nextTypeId()) |tid| {
+                        offset = std.mem.alignForward(usize, offset, Components.getAlignment(tid));
+                        component_data_offsets.put(tid, offset);
+                        offset += Components.getSize(tid) * capacity;
+                    }
+                    // non empty component added metadata
+                    iter = non_empty.applyAddedMask().iterator();
+                    offset = std.mem.alignForward(usize, offset, @alignOf(types.Tick));
+                    while (iter.nextTypeId()) |tid| {
+                        component_added_offsets.put(tid, offset);
+                        offset += @sizeOf(types.Tick) * capacity;
+                    }
+                    // non empty component changed metadata
+                    iter = non_empty.applyChangedMask().iterator();
+                    offset = std.mem.alignForward(usize, offset, @alignOf(types.Tick));
+                    while (iter.nextTypeId()) |tid| {
+                        component_changed_offsets.put(tid, offset);
+                        offset += @sizeOf(types.Tick) * capacity;
+                    }
+                    // empty component added metadata
+                    iter = signature.applyEmptyMask().applyAddedMask().iterator();
+                    offset = std.mem.alignForward(usize, offset, @alignOf(types.Tick));
+                    while (iter.nextTypeId()) |tid| {
+                        component_added_offsets.put(tid, offset);
+                        offset += @sizeOf(types.Tick) * capacity;
+                    }
+                }
+                return .{
+                    .component_data_offsets = component_data_offsets,
+                    .component_added_offsets = component_added_offsets,
+                    .component_changed_offsets = component_changed_offsets,
+                };
+            }
+
+            pub fn getComponentOffset(self: *const @This(), comptime Component: type) ?usize {
+                return self.component_data_offsets.get(Components.hash(Component));
+            }
+            pub fn getComponentAddedOffset(self: *const @This(), comptime Component: type) ?usize {
+                return self.component_added_offsets.get(Components.hash(Component));
+            }
+            pub fn getComponentChangedOffset(self: *const @This(), comptime Component: type) ?usize {
+                return self.component_changed_offsets.get(Components.hash(Component));
+            }
+        };
 
         entity_count: usize = 0,
 
@@ -50,59 +111,20 @@ pub fn ChunksFactory(comptime options: ChunksOptions) type {
 
         insertion_chunk: ?*Chunk = null,
 
-        component_arrays_offsets: []usize,
-
-        component_sizes: []usize,
-
         signature: Components,
 
         capacity_per_chunk: usize,
 
-        metadata_start: usize,
+        chunk_layout: ChunkLayout,
 
-        zst_metadata_start: usize,
-
-        map_non_empty_to_type_index: std.EnumMap(Components.ComponentTypeId, usize),
-        map_zst_to_type_index: std.EnumMap(Components.ComponentTypeId, usize),
-
-        pub fn init(alloc: std.mem.Allocator, signature: Components) !@This() {
-            var dense_sig = signature.applyStorageTypeMask(.Dense);
-
-            var non_empty_sig = dense_sig.applyNonEmptyMask();
-            var non_empty_map = std.EnumMap(Components.ComponentTypeId, usize){};
-            var iter = non_empty_sig.iterator();
-            var i: usize = 0;
-            if (comptime Components.Len != 0) {
-                while (iter.nextTypeId()) |tid| {
-                    non_empty_map.put(tid, i);
-                    i += 1;
-                }
-            }
-            var zst_sig = dense_sig.applyEmptyMask();
-            var zst_map = std.EnumMap(Components.ComponentTypeId, usize){};
-            iter = zst_sig.iterator();
-            i = 0;
-            if (comptime Components.Len != 0) {
-                while (iter.nextTypeId()) |tid| {
-                    zst_map.put(tid, i);
-                    i += 1;
-                }
-            }
+        pub fn init(signature: Components) !@This() {
+            const dense_sig = signature.applyStorageTypeMask(.Dense);
             const capacity_per_chunk = calculateCapacity(dense_sig);
-            const offsets, const metadata_start, const zst_metadata_start = try calculateOffsets(
-                alloc,
-                dense_sig,
-                capacity_per_chunk,
-            );
+            const chunk_layout = ChunkLayout.init(dense_sig, capacity_per_chunk);
             return .{
                 .capacity_per_chunk = capacity_per_chunk,
-                .component_arrays_offsets = offsets,
-                .metadata_start = metadata_start,
-                .zst_metadata_start = zst_metadata_start,
-                .component_sizes = try getSizes(alloc, &dense_sig),
-                .signature = signature,
-                .map_non_empty_to_type_index = non_empty_map,
-                .map_zst_to_type_index = zst_map,
+                .signature = dense_sig,
+                .chunk_layout = chunk_layout,
             };
         }
         pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
@@ -111,39 +133,8 @@ pub fn ChunksFactory(comptime options: ChunksOptions) type {
             }
             self.free_list.deinit(allocator);
             self.chunks.deinit(allocator);
-            allocator.free(self.component_arrays_offsets);
-            allocator.free(self.component_sizes);
         }
 
-        inline fn getSizes(alloc: std.mem.Allocator, signature: *Components) ![]usize {
-            const sizes = try alloc.alloc(usize, signature.lenNonEmpty());
-            var iter = signature.iterator();
-            var i: usize = 0;
-            while (iter.nextTypeIdNonEmpty()) |tid| {
-                sizes[i] = Components.getSize(tid);
-                i += 1;
-            }
-            return sizes;
-        }
-        inline fn calculateOffsets(
-            alloc: std.mem.Allocator,
-            signature: Components,
-            capacity: usize,
-        ) !struct { []usize, usize, usize } {
-            const offsets = try alloc.alloc(usize, signature.lenNonEmpty());
-            var iter = signature.iterator();
-            var offset = capacity * @sizeOf(Entity);
-            var i: usize = 0;
-            while (iter.nextTypeIdNonEmpty()) |tid| {
-                offset = std.mem.alignForward(usize, offset, Components.getAlignment(tid));
-                offsets[i] = offset;
-                offset += Components.getSize(tid) * capacity;
-                i += 1;
-            }
-            const metadata_start = std.mem.alignForward(usize, offset, @alignOf(types.Tick));
-            const zst_metadata_start = metadata_start + @sizeOf(types.Tick) * capacity * 2 * i;
-            return .{ offsets, metadata_start, zst_metadata_start };
-        }
         inline fn tableSize(signature: Components, n: usize) usize {
             const non_empty_sig = signature.applyNonEmptyMask();
             const zst_sig = signature.applyEmptyMask();
@@ -181,22 +172,6 @@ pub fn ChunksFactory(comptime options: ChunksOptions) type {
             }
             return lower;
         }
-        pub inline fn getNonEmptyTypeIndex(self: *const @This(), tid_or_component: anytype) ?usize {
-            if (comptime Components.Len == 0) return null;
-            const tid: Components.ComponentTypeId = if (comptime @TypeOf(tid_or_component) == type)
-                comptime Components.hash(tid_or_component)
-            else
-                tid_or_component;
-            return self.map_non_empty_to_type_index.get(tid);
-        }
-        pub inline fn getZSTIndex(self: *const @This(), tid_or_component: anytype) ?usize {
-            if (comptime Components.Len == 0) return null;
-            const hash: Components.ComponentTypeId = if (comptime @TypeOf(tid_or_component) == type)
-                Components.hash(tid_or_component)
-            else
-                tid_or_component;
-            return self.map_zst_to_type_index.get(hash);
-        }
         inline fn getInsertionChunk(self: *@This(), allocator: std.mem.Allocator) !*Chunk {
             if (self.insertion_chunk) |chunk| {
                 if (!chunk.full()) {
@@ -213,7 +188,7 @@ pub fn ChunksFactory(comptime options: ChunksOptions) type {
             try self.chunks.append(allocator, chunk_ptr);
             return self.chunks.items[self.chunks.items.len - 1];
         }
-        pub fn reserve(self: *@This(), allocator: std.mem.Allocator, entt: Entity) !ReserveResult {
+        pub fn reserve(self: *@This(), allocator: std.mem.Allocator, entt: Entity) !StorageAddress {
             const chunk = try self.getInsertionChunk(allocator);
             const index = chunk.reserve(entt);
             return .{ chunk, index };
@@ -292,9 +267,9 @@ pub fn ChunkFactory(comptime options: ChunksOptions) type {
         pub const Entity = options.Entity;
         pub const CountInt = std.math.IntFittingRange(0, options.ChunkSize);
         pub const Chunks = ChunksFactory(options);
-        memory: [options.ChunkSize]u8 align(Chunks.MaxAlignment),
         chunks: *Chunks,
         count: CountInt,
+        memory: [options.ChunkSize]u8 align(Chunks.MaxAlignment),
         pub fn init(chunks: *Chunks) @This() {
             return .{
                 .chunks = chunks,
@@ -303,19 +278,45 @@ pub fn ChunkFactory(comptime options: ChunksOptions) type {
                 .memory = undefined,
             };
         }
-        inline fn getSignature(self: *@This()) *Components {
-            return &self.chunks.signature;
+        inline fn getSignature(self: *@This()) Components {
+            return self.chunks.signature;
         }
-        inline fn getEntity(self: *@This(), slot_index: usize) *Entity {
-            const start = @sizeOf(Entity) * slot_index;
-            const end = start + @sizeOf(Entity);
-            return @alignCast(std.mem.bytesAsValue(Entity, self.memory[start..end]));
+        inline fn getAddedMetadata(self: *@This(), comptime Component: type, index: usize) *types.Tick {
+            if (comptime Component == Entity) {
+                @compileError("Entity itself doesn't store metadata");
+            }
+            std.debug.assert(index < self.len());
+            const arr_offset = self.chunks.chunk_layout.component_added_offsets.get(comptime Components.hash(Component)).?;
+            const offset = arr_offset + @sizeOf(types.Tick) * index;
+            return @alignCast(std.mem.bytesAsValue(types.Tick, self.memory[offset .. offset + @sizeOf(types.Tick)]));
         }
-        inline fn getOffset(self: *const @This(), type_index: usize) usize {
-            return self.chunks.component_arrays_offsets[type_index];
+        inline fn getChangedArray(self: *@This(), comptime Component: type, index: usize) *types.Tick {
+            if (comptime Component == Entity) {
+                @compileError("Entity itself doesn't store metadata");
+            }
+            std.debug.assert(index < self.len());
+            const arr_offset = self.chunks.chunk_layout.component_changed_offsets.get(comptime Components.hash(Component)).?;
+            const offset = arr_offset + @sizeOf(types.Tick) * index;
+            return @alignCast(std.mem.bytesAsValue(types.Tick, self.memory[offset .. offset + @sizeOf(types.Tick)]));
         }
-        inline fn getSize(self: *const @This(), type_index: usize) usize {
-            return self.chunks.component_sizes[type_index];
+        pub inline fn getAddedWithTypeId(self: *@This(), tid: Components.ComponentTypeId, index: usize) *types.Tick {
+            std.debug.assert(index < self.len());
+            const arr_offset = self.chunks.chunk_layout.component_added_offsets.get(tid).?;
+            const offset = arr_offset + @sizeOf(types.Tick) * index;
+            return @alignCast(std.mem.bytesAsValue(types.Tick, self.memory[offset .. offset + @sizeOf(types.Tick)]));
+        }
+        pub inline fn getChangedWithTypeId(self: *@This(), tid: Components.ComponentTypeId, index: usize) *types.Tick {
+            std.debug.assert(index < self.len());
+            const arr_offset = self.chunks.chunk_layout.component_added_offsets.get(tid).?;
+            const offset = arr_offset + @sizeOf(types.Tick) * index;
+            return @alignCast(std.mem.bytesAsValue(types.Tick, self.memory[offset .. offset + @sizeOf(types.Tick)]));
+        }
+        pub inline fn getComponentWithTypeId(self: *@This(), tid: Components.ComponentTypeId, index: usize) []u8 {
+            std.debug.assert(index < self.len());
+            const arr_offset = self.chunks.chunk_layout.component_data_offsets.get(tid).?;
+            const tid_size = Components.getSize(tid);
+            const offset = arr_offset + tid_size * index;
+            return @alignCast(self.memory[offset .. offset + tid_size]);
         }
         pub inline fn empty(self: *const @This()) bool {
             return self.count == 0;
@@ -328,106 +329,54 @@ pub fn ChunkFactory(comptime options: ChunksOptions) type {
             self.count += 1;
             self.chunks.entity_count += 1;
             self.get(Entity, self.count - 1).* = entt;
-            return @intCast(self.count - 1);
-        }
-        pub fn getElemWithTypeIndex(self: *@This(), type_index: usize, elem_index: usize) []u8 {
-            const size = self.getSize(type_index);
-            const start = self.getOffset(type_index) + elem_index * size;
-            const end = start + size;
-            return self.memory[start..end];
-        }
-        pub fn getNonEmptyTypeIndex(self: *const @This(), tid_or_component: anytype) usize {
-            return self.chunks.getNonEmptyTypeIndex(tid_or_component).?;
-        }
-        pub fn getZSTIndex(self: *const @This(), tid_or_component: anytype) usize {
-            return self.chunks.getZSTIndex(tid_or_component).?;
-        }
-        inline fn getElemWithType(self: *@This(), comptime Component: type, elem_index: usize) *Component {
-            const start = self.getOffset(self.getNonEmptyTypeIndex(Component)) + elem_index * @sizeOf(Component);
-            const end = start + @sizeOf(Component);
-            return @alignCast(std.mem.bytesAsValue(Component, self.memory[start..end]));
+            return self.count - 1;
         }
         pub fn get(self: *@This(), comptime Component: type, index: usize) *Component {
             std.debug.assert(index < self.len());
-            if (comptime Component == Entity) {
-                return self.getEntity(index);
-            }
-            return self.getElemWithType(Component, index);
+            const arr_offset = arr_offset: {
+                if (comptime Component == Entity) break :arr_offset 0;
+                break :arr_offset self.chunks.chunk_layout.component_data_offsets.get(comptime Components.hash(Component)).?;
+            };
+            const offset = arr_offset + @sizeOf(Component) * index;
+            return @alignCast(std.mem.bytesAsValue(Component, self.memory[offset .. offset + @sizeOf(Component)]));
         }
         pub fn getConst(self: *@This(), comptime Component: type, index: usize) Component {
             std.debug.assert(index < self.len());
-            if (comptime Component == Entity) {
-                return self.getEntity(index).*;
-            }
             return self.get(Component, index).*;
         }
         pub inline fn len(self: *@This()) usize {
             return self.count;
         }
-
-        pub fn getZSTMetadataArray(self: *@This(), type_index: usize) []types.Tick {
-            const capacity = self.chunks.capacity_per_chunk;
-            const zst_metadata_start = self.chunks.zst_metadata_start;
-            const start = zst_metadata_start + type_index * @sizeOf(types.Tick) * capacity;
-            const end = start + @sizeOf(types.Tick) * capacity;
-            return @alignCast(std.mem.bytesAsSlice(types.Tick, self.memory[start..end]));
-        }
-        pub fn getNonEmptyMetadataArray(
-            self: *@This(),
-            type_index: usize,
-            comptime metadata_type: ComponentMetadata,
-        ) []types.Tick {
-            const metadata_start = self.chunks.metadata_start;
-            const capacity = self.chunks.capacity_per_chunk;
-            switch (metadata_type) {
-                .Added => {
-                    const start = metadata_start + type_index * @sizeOf(types.Tick) * capacity;
-                    const end = start + @sizeOf(types.Tick) * capacity;
-                    return @alignCast(std.mem.bytesAsSlice(types.Tick, self.memory[start..end]));
-                },
-                .Changed => {
-                    const start = metadata_start +
-                        (self.chunks.component_sizes.len + type_index) *
-                            @sizeOf(types.Tick) *
-                            capacity;
-                    const end = start + @sizeOf(types.Tick) *
-                        capacity;
-                    return @alignCast(std.mem.bytesAsSlice(types.Tick, self.memory[start..end]));
-                },
-            }
-        }
         /// Return swapped entity and its new index
-        pub fn remove(self: *@This(), allocator: std.mem.Allocator, index: usize) !?struct { Entity, usize } {
+        pub fn remove(self: *@This(), allocator: std.mem.Allocator, index: usize) !?struct { usize, usize } {
             std.debug.assert(index < self.len());
             defer self.count -= 1;
             defer self.chunks.entity_count -= 1;
 
-            // swap remove entity ID
-            self.get(Entity, index).* = self.getConst(Entity, self.count - 1);
+            if (index != self.count - 1 and comptime Components.Len != 0) {
+                // swap remove entity ID
+                self.get(Entity, index).* = self.getConst(Entity, self.count - 1);
 
-            var iter = self.getSignature().iterator();
-
-            var i: usize = 0;
-            if (index != self.count - 1) {
-                while (iter.nextTypeIdNonEmpty()) |_| {
+                const signature = self.getSignature();
+                const non_empty = signature.applyNonEmptyMask();
+                var iter = non_empty.iterator();
+                while (iter.nextTypeId()) |tid| {
                     // swap component data
-                    @memcpy(self.getElemWithTypeIndex(i, index), self.getElemWithTypeIndex(i, self.count - 1));
-                    const changed = self.getNonEmptyMetadataArray(i, .Changed);
-                    changed[index] = changed[self.count - 1];
-                    const added = self.getNonEmptyMetadataArray(i, .Added);
-                    added[index] = added[self.count - 1];
-                    i += 1;
+                    @memcpy(self.getComponentWithTypeId(tid, index), self.getComponentWithTypeId(tid, self.count - 1));
                 }
-                iter = self.getSignature().iterator();
-                i = 0;
-                while (iter.nextTypeIdZST()) |_| {
-                    const added = self.getZSTMetadataArray(i);
-                    added[index] = added[self.count - 1];
-                    i += 1;
+                const has_added_metadata = signature.applyAddedMask();
+                iter = has_added_metadata.iterator();
+                while (iter.nextTypeId()) |tid| {
+                    self.getAddedWithTypeId(tid, index).* = self.getAddedWithTypeId(tid, self.count - 1).*;
+                }
+                const has_changed_metadata = signature.applyChangedMask();
+                iter = has_changed_metadata.iterator();
+                while (iter.nextTypeId()) |tid| {
+                    self.getChangedWithTypeId(tid, index).* = self.getChangedWithTypeId(tid, self.count - 1).*;
                 }
                 const swapped_entt = self.getConst(Entity, index);
                 return .{
-                    swapped_entt,
+                    swapped_entt.index,
                     index,
                 };
             }

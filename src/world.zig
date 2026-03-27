@@ -18,6 +18,12 @@ pub fn World(comptime options: WorldOptions) type {
         pub const Archetype = archetype.Archetype(.{
             .Entity = Entity,
             .Components = Components,
+            .DenseStorageConfig = .{
+                .Chunks = .{
+                    .Entity = Entity,
+                    .Components = Components,
+                },
+            },
         });
         pub const Storage = Archetype.DenseStorage;
         pub const EntityLocation = entity.EntityLocation(.{
@@ -107,7 +113,7 @@ pub fn World(comptime options: WorldOptions) type {
                 return entry.value_ptr.*;
             }
             const arch_ptr = try self.allocator.create(Archetype);
-            arch_ptr.* = try Archetype.init(self.allocator, signature);
+            arch_ptr.* = try Archetype.init(signature);
             entry.value_ptr.* = arch_ptr;
             return arch_ptr;
         }
@@ -125,10 +131,12 @@ pub fn World(comptime options: WorldOptions) type {
         pub fn destroy(self: *@This(), entt: Entity) !void {
             std.debug.assert(self.valid(entt));
             const location = self.entity_registry.getEntityLocation(entt);
-            if (try location.storage.remove(self.allocator, @intCast(location.dense_index))) |removal_result| {
-                const swapped_entt, const new_slot_index = removal_result;
-                self.entity_registry.setEntityDenseIndex(swapped_entt, new_slot_index);
+
+            if (try location.storage.remove(self.allocator, location.dense_index)) |removal_result| {
+                const swapped_entt_index, const new_slot_index = removal_result;
+                self.entity_registry.setEntityDenseIndex(swapped_entt_index, new_slot_index);
             }
+
             try self.entity_registry.destroy(self.allocator, entt);
             location.version += 1;
         }
@@ -182,7 +190,11 @@ pub fn World(comptime options: WorldOptions) type {
             // will also move dense component data ONLY if added component is dense
             try self.moveToArchetype(entt, old_arch, new_arch);
 
-            if (comptime Components.getStorageType(@TypeOf(value)) == .Sparse) {
+            if (comptime Components.getStorageType(@TypeOf(value)) == .Dense) {
+                if (comptime @sizeOf(Component) != 0) {
+                    self.get(Component, entt).* = value;
+                }
+            } else {
                 try self.sparse_sets.add(self.allocator, entt, value);
             }
         }

@@ -9,11 +9,11 @@ pub const ComponentMetadata = enum {
 };
 
 pub const ComponentConfig = struct {
-    storage_type: StorageType = .Sparse,
+    storage_type: StorageType = .Dense,
     track_metadata: struct {
         added: bool = true,
         // setting this to true for ZSTs will result in a compile error
-        // the context builders set this to false for ZSTs
+        // the context builders set this to false for ZSTs by default
         changed: bool = true,
     } = .{},
 };
@@ -98,6 +98,8 @@ pub fn Components(comptime ComponentTypes: []const type, comptime Configs: []con
             }
             break :ChangedMetadataMask sig;
         };
+
+        pub const DenseOccupiesSpaceComponents: @This() = initFull().applyStorageTypeMask(.Dense).applyOccupiesSpaceMask();
 
         const BitSet = std.bit_set.StaticBitSet(ComponentTypes.len);
         /// this is where archetype signatures are stored. Comptime static maps and arrays

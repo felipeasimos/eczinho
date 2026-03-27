@@ -1,10 +1,8 @@
 const std = @import("std");
-const types = @import("../../types.zig").Tick;
 const Table = @import("table.zig").Table;
 
 pub const TablesOptions = struct {
     Entity: type,
-    EntityLocation: type,
     Components: type,
 };
 
@@ -22,7 +20,6 @@ fn CreateComponentArraysTupleType(
 
         const Type = Table(.{
             .Entity = options.Entity,
-            .EntityLocation = options.EntityLocation,
             .Components = options.Components,
             .Component = Component,
         });
@@ -36,7 +33,7 @@ pub fn Tables(comptime options: TablesOptions) type {
     const dense_components = options.Components
         .initFull()
         .applyStorageTypeMask(.Dense)
-        .applyOccupieSpaceMask();
+        .applyOccupiesSpaceMask();
     const ComponentArrays = CreateComponentArraysTupleType(options, dense_components);
     const ComponentArraysLen = @typeInfo(ComponentArrays).@"struct".fields.len;
 
@@ -50,14 +47,13 @@ pub fn Tables(comptime options: TablesOptions) type {
     };
     return struct {
         const Entity = options.Entity;
-        const EntityLocation = options.EntityLocation;
         const Components = options.Components;
         tables: ComponentArrays = EmptyArrays,
         signature: Components,
 
-        pub fn init(self: *@This(), signature: Components) void {
+        pub fn init(signature: Components) void {
             return .{
-                .signature = signature.applyStorageTypeMask(.Dense).applyOccupieSpaceMask(),
+                .signature = signature.intersection(comptime Components.DenseOccupiesSpaceComponents),
             };
         }
         pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
@@ -73,7 +69,8 @@ pub fn Tables(comptime options: TablesOptions) type {
                     return i;
                 }
             }
-            @compileError("Shouldn't reach this code line during comptime: Component is not dense, or is a ZST with no metadata attached");
+            @compileError("Shouldn't reach this code line during comptime:" ++
+                " Component is not dense, or is a ZST with no metadata attached");
         }
         fn GetTableResultType(comptime Component: type) type {
             const index = getTableIndex(Component);
@@ -96,12 +93,18 @@ pub fn Tables(comptime options: TablesOptions) type {
             const table = self.getTable(Component);
             return table.contains(entt.index);
         }
-        pub fn remove(self: *@This(), allocator: std.mem.Allocator, entt: Entity) void {
-            var 
-            for
-            const table = self.getTable(Component);
-            std.debug.assert(table.contains(entt.index));
-            _ = table.remove(entt.index);
+        pub fn remove(self: *@This(), allocator: std.mem.Allocator, index: usize) !?struct { usize, usize } {
+            if (comptime Components.Len == 0) return null;
+            _ = allocator;
+            comptime var iter = Components.DenseOccupiesSpaceComponents.iterator();
+            inline while (comptime iter.nextTypeId()) |tid| {
+                const Component = comptime Components.getType(tid);
+                if (!self.signature.has(Component)) continue;
+                const table = self.getTable(Component);
+                std.debug.assert(table.contains(index));
+                return .{ self, table.remove(index) };
+            }
+            return null;
         }
         pub fn get(self: *@This(), entt: Entity, comptime Component: type) *Component {
             const table = self.getTable(Component);

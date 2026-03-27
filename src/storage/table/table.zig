@@ -54,9 +54,21 @@ fn CreateTableData(comptime options: TableOptions) type {
 
 pub fn Table(comptime options: TableOptions) type {
     return struct {
+        pub const Components = options.Components;
         pub const Component = options.Component;
         pub const Data = CreateTableData(options);
         pub const empty: @This() = .{};
         data: Data = .{},
+
+        pub fn contains(self: *@This(), index: usize) bool {
+            if (comptime @sizeOf(Component) != 0) {
+                return index < self.data.items.len;
+            }
+            if (comptime Components.hasAddedMetadata(Component)) {
+                return index < self.data.added.len;
+            }
+            @compileError("This table for type " ++ @typeName(Component) ++
+                " shouldn't even exist. It occupies no space, even for metadata!");
+        }
     };
 }

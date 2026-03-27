@@ -2,7 +2,6 @@ const std = @import("std");
 const Request = @import("request.zig").QueryRequest;
 const ComponentsFactory = @import("../components.zig").Components;
 const EntityFactory = @import("../entity/entity.zig").EntityTypeFactory;
-const archetype = @import("../archetype.zig");
 const world = @import("../world.zig");
 const SystemData = @import("../system_data.zig").SystemData;
 const Tick = @import("../types.zig").Tick;
@@ -75,10 +74,7 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
             .Entity = Entity,
             .Components = Components,
         });
-        pub const Archetype = archetype.Archetype(.{
-            .Entity = Entity,
-            .Components = Components,
-        });
+        pub const Archetype = World.Archetype;
 
         archetypes: std.ArrayList(Components) = .empty,
         world: *World,
