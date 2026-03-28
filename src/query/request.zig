@@ -15,4 +15,19 @@ pub const QueryRequest = struct {
     added: []const type = &.{},
     /// only return entities which had these components changed since this system last run
     changed: []const type = &.{},
+
+    pub fn validate(self: @This(), comptime Components: type) void {
+        inline for (self.added) |Added| {
+            if (!Components.hasAddedMetadata(Added)) {
+                @compileError("Component " ++ @typeName(Added) ++ " is being queried for `added` metadata, " ++
+                    "which it doesn't have. Please include it in the component config");
+            }
+        }
+        inline for (self.changed) |Changed| {
+            if (!Components.hasChangedMetadata(Changed)) {
+                @compileError("Component " ++ @typeName(Changed) ++ " is being queried for `changed` metadata, " ++
+                    "which it doesn't have. Please include it in the component config");
+            }
+        }
+    }
 };

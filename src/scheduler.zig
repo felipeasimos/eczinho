@@ -1,5 +1,5 @@
 const std = @import("std");
-const RegistryFactory = @import("registry.zig").Registry;
+const WorldFactory = @import("world.zig").World;
 const TypeStoreFactory = @import("resource/type_store.zig").TypeStore;
 const EventStoreFactory = @import("event/event_store.zig").EventStore;
 const RemovedLogFactory = @import("removed/removed_log.zig").RemovedComponentsLog;
@@ -38,7 +38,7 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
         pub const Systems = options.Systems;
         pub const Labels = options.Labels;
         pub const SchedulerStages = initSchedulerStages(Systems, Labels);
-        pub const Registry = RegistryFactory(.{
+        pub const World = WorldFactory(.{
             .Components = Components,
             .Entity = Entity,
         });
@@ -53,15 +53,15 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
             .Entity = Entity,
         });
 
-        registry: *Registry,
+        world: *World,
         resource_store: *TypeStore,
         event_store: *EventStore,
         system_data: [Systems.len]SystemData,
 
-        pub fn init(reg: *Registry, resource_store: *TypeStore, event_store: *EventStore) !@This() {
+        pub fn init(reg: *World, resource_store: *TypeStore, event_store: *EventStore) !@This() {
             var new: @This() = .{
                 .resource_store = resource_store,
-                .registry = reg,
+                .world = reg,
                 .event_store = event_store,
                 // SAFETY: immediatly populated in the following lines
                 .system_data = undefined,
@@ -76,7 +76,7 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
 
         pub fn deinit(self: *const @This()) void {
             for (self.system_data) |data| {
-                data.deinit(self.registry.allocator);
+                data.deinit(self.world.allocator);
             }
         }
 
@@ -98,19 +98,19 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
             // swap event buffers
             self.event_store.swap();
             // sync deferred changes
-            try self.registry.sync();
+            try self.world.sync();
         }
         fn runStage(self: *@This(), comptime label: StageLabel) !void {
             inline for (comptime SchedulerStages.get(label)) |system| {
                 const system_data_ptr = self.getSystemData(system);
                 try system.call(.{
-                    .registry = self.registry,
+                    .world = self.world,
                     .type_store = self.resource_store,
                     .event_store = self.event_store,
-                    .removed_logs = &self.registry.removed,
+                    .removed_logs = &self.world.removed,
                     .system_data = system_data_ptr,
                 });
-                system_data_ptr.last_run = self.registry.getTick();
+                system_data_ptr.last_run = self.world.getTick();
             }
         }
 

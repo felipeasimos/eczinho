@@ -1,7 +1,7 @@
 const std = @import("std");
-const RegistryFactory = @import("registry.zig").Registry;
+const WorldFactory = @import("world.zig").World;
 const SchedulerFactory = @import("scheduler.zig").Scheduler;
-const EntityTypeFactory = @import("entity.zig").EntityTypeFactory;
+const EntityTypeFactory = @import("entity/entity.zig").EntityTypeFactory;
 const StageLabel = @import("stage_label.zig").StageLabel;
 const query = @import("query/query.zig");
 const commands = @import("commands/commands.zig");
@@ -120,7 +120,7 @@ pub fn App(comptime options: AppOptions) type {
         pub const Entity = options.Context.Entity;
         pub const Resources = options.Context.Resources;
         pub const Events = options.Context.Events;
-        pub const Registry = RegistryFactory(.{
+        pub const World = WorldFactory(.{
             .Components = Components,
             .Entity = Entity,
         });
@@ -141,7 +141,7 @@ pub fn App(comptime options: AppOptions) type {
         });
 
         allocator: std.mem.Allocator,
-        registry: Registry,
+        world: World,
         resource_store: TypeStore,
         event_store: EventStore,
         scheduler: ?Scheduler = null,
@@ -162,7 +162,7 @@ pub fn App(comptime options: AppOptions) type {
 
         pub fn startup(self: *@This()) !void {
             self.scheduler = try Scheduler.init(
-                &self.registry,
+                &self.world,
                 &self.resource_store,
                 &self.event_store,
             );
@@ -173,7 +173,7 @@ pub fn App(comptime options: AppOptions) type {
         }
 
         pub fn deinit(self: *@This()) void {
-            self.registry.deinit();
+            self.world.deinit();
             self.resource_store.deinit();
             self.event_store.deinit();
             if (self.scheduler) |sch| {

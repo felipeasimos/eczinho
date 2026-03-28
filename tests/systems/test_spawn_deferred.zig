@@ -16,9 +16,9 @@ test "spawn deferred without component" {
         .build(std.testing.allocator, std.testing.io);
     defer app.deinit();
 
-    try std.testing.expectEqual(0, app.registry.len());
+    try std.testing.expectEqual(0, app.world.len());
 
     try app.startup();
 
-    try std.testing.expectEqual(1, app.registry.len());
+    try std.testing.expectEqual(1, app.world.len());
 }
