@@ -32,6 +32,10 @@ pub fn EntityRegistry(comptime options: EntityRegistryOptions) type {
             self.entities_to_locations.items[entt_index].dense_index = dense_index;
         }
 
+        pub inline fn setEntityArchetypeIndex(self: *@This(), entt_index: usize, archetype_index: usize) void {
+            self.entities_to_locations.items[entt_index].archetype_vec_index = archetype_index;
+        }
+
         pub inline fn valid(self: *@This(), entt: Entity) bool {
             if (entt.index >= self.entities_to_locations.items.len) return false;
             return self.entities_to_locations.items[entt.index].version == entt.version;
@@ -66,12 +70,15 @@ pub fn EntityRegistry(comptime options: EntityRegistryOptions) type {
                     .version = 0,
                 };
             };
-            const storage, const slot_index = try empty_arch.reserve(allocator, entity_id);
+            // SAFETY: set right afterwards
+            var location: EntityLocation = undefined;
+            const storage, const slot_index = try empty_arch.reserve(allocator, entity_id, &location);
             self.entities_to_locations.items[@intCast(entity_id.index)] = EntityLocation{
                 .arch = empty_arch,
                 .version = entity_id.version,
                 .storage = storage,
                 .dense_index = @intCast(slot_index),
+                .archetype_vec_index = location.archetype_vec_index,
             };
 
             return entity_id;

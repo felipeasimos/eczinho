@@ -42,6 +42,10 @@ pub fn ChunksFactory(comptime options: ChunksOptions) type {
         pub const MaxCapacity = @divFloor(ChunkSize, @sizeOf(Entity));
         pub const StorageAddress = struct { *Chunk, usize };
         pub const Storage = Chunk;
+        pub const RemovalResult = struct {
+            usize,
+            usize,
+        };
 
         const ChunkLayout = struct {
             component_data_offsets: std.EnumMap(Components.ComponentTypeId, usize),
@@ -281,35 +285,23 @@ pub fn ChunkFactory(comptime options: ChunksOptions) type {
         inline fn getSignature(self: *@This()) Components {
             return self.chunks.signature;
         }
-        inline fn getAddedMetadata(self: *@This(), comptime Component: type, index: usize) *types.Tick {
-            if (comptime Component == Entity) {
-                @compileError("Entity itself doesn't store metadata");
-            }
-            std.debug.assert(index < self.len());
-            const arr_offset = self.chunks.chunk_layout.component_added_offsets.get(comptime Components.hash(Component)).?;
-            const offset = arr_offset + @sizeOf(types.Tick) * index;
-            return @alignCast(std.mem.bytesAsValue(types.Tick, self.memory[offset .. offset + @sizeOf(types.Tick)]));
+        pub inline fn getAddedArray(self: *@This(), tid_or_component: anytype) []types.Tick {
+            const tid = if (comptime @TypeOf(tid_or_component) == type)
+                comptime Components.hash(tid_or_component)
+            else
+                tid_or_component;
+            const offset = self.chunks.chunk_layout.component_added_offsets.get(tid).?;
+            const slice = self.memory[offset .. offset + @sizeOf(types.Tick) * self.count];
+            return @alignCast(std.mem.bytesAsSlice(types.Tick, slice));
         }
-        inline fn getChangedArray(self: *@This(), comptime Component: type, index: usize) *types.Tick {
-            if (comptime Component == Entity) {
-                @compileError("Entity itself doesn't store metadata");
-            }
-            std.debug.assert(index < self.len());
-            const arr_offset = self.chunks.chunk_layout.component_changed_offsets.get(comptime Components.hash(Component)).?;
-            const offset = arr_offset + @sizeOf(types.Tick) * index;
-            return @alignCast(std.mem.bytesAsValue(types.Tick, self.memory[offset .. offset + @sizeOf(types.Tick)]));
-        }
-        pub inline fn getAddedWithTypeId(self: *@This(), tid: Components.ComponentTypeId, index: usize) *types.Tick {
-            std.debug.assert(index < self.len());
-            const arr_offset = self.chunks.chunk_layout.component_added_offsets.get(tid).?;
-            const offset = arr_offset + @sizeOf(types.Tick) * index;
-            return @alignCast(std.mem.bytesAsValue(types.Tick, self.memory[offset .. offset + @sizeOf(types.Tick)]));
-        }
-        pub inline fn getChangedWithTypeId(self: *@This(), tid: Components.ComponentTypeId, index: usize) *types.Tick {
-            std.debug.assert(index < self.len());
-            const arr_offset = self.chunks.chunk_layout.component_added_offsets.get(tid).?;
-            const offset = arr_offset + @sizeOf(types.Tick) * index;
-            return @alignCast(std.mem.bytesAsValue(types.Tick, self.memory[offset .. offset + @sizeOf(types.Tick)]));
+        pub inline fn getChangedArray(self: *@This(), tid_or_component: anytype) []types.Tick {
+            const tid = if (comptime @TypeOf(tid_or_component) == type)
+                comptime Components.hash(tid_or_component)
+            else
+                tid_or_component;
+            const offset = self.chunks.chunk_layout.component_changed_offsets.get(tid).?;
+            const slice = self.memory[offset .. offset + @sizeOf(types.Tick) * self.count];
+            return @alignCast(std.mem.bytesAsSlice(types.Tick, slice));
         }
         pub inline fn getComponentWithTypeId(self: *@This(), tid: Components.ComponentTypeId, index: usize) []u8 {
             std.debug.assert(index < self.len());
@@ -348,7 +340,7 @@ pub fn ChunkFactory(comptime options: ChunksOptions) type {
             return self.count;
         }
         /// Return swapped entity and its new index
-        pub fn remove(self: *@This(), allocator: std.mem.Allocator, index: usize) !?struct { usize, usize } {
+        pub fn remove(self: *@This(), allocator: std.mem.Allocator, index: usize) !?Chunks.RemovalResult {
             std.debug.assert(index < self.len());
             defer self.count -= 1;
             defer self.chunks.entity_count -= 1;
@@ -367,12 +359,12 @@ pub fn ChunkFactory(comptime options: ChunksOptions) type {
                 const has_added_metadata = signature.applyAddedMask();
                 iter = has_added_metadata.iterator();
                 while (iter.nextTypeId()) |tid| {
-                    self.getAddedWithTypeId(tid, index).* = self.getAddedWithTypeId(tid, self.count - 1).*;
+                    self.getAddedArray(tid)[index] = self.getAddedArray(tid)[self.count - 1];
                 }
                 const has_changed_metadata = signature.applyChangedMask();
                 iter = has_changed_metadata.iterator();
                 while (iter.nextTypeId()) |tid| {
-                    self.getChangedWithTypeId(tid, index).* = self.getChangedWithTypeId(tid, self.count - 1).*;
+                    self.getChangedArray(tid)[index] = self.getChangedArray(tid)[self.count - 1];
                 }
                 const swapped_entt = self.getConst(Entity, index);
                 return .{

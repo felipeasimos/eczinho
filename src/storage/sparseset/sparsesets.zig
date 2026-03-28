@@ -1,5 +1,7 @@
 const std = @import("std");
-const DisjointSparseSet = @import("disjoint_sparseset.zig").DisjointSparseSet;
+const ComponentSparseSet = @import("component_sparseset.zig").ComponentSparseSet;
+const types = @import("../../types.zig");
+
 pub const SparseSetsOptions = struct {
     Components: type,
     Entity: type,
@@ -14,9 +16,10 @@ fn CreateComponentArraysTupleType(
     var iter = comptime sparse_components.iterator();
     var i = 0;
     inline while (iter.nextTypeId()) |tid| {
-        const Type = DisjointSparseSet(.{
-            .K = options.Entity.Index,
-            .V = options.Components.getType(tid),
+        const Type = ComponentSparseSet(.{
+            .Component = options.Components.getType(tid),
+            .Components = options.Components,
+            .Entity = options.Entity,
             .PageSize = options.PageSize,
         });
         field_types[i] = Type;
@@ -77,22 +80,42 @@ pub fn SparseSets(comptime options: SparseSetsOptions) type {
         }
         pub fn contains(self: *@This(), entt: Entity, comptime Component: type) bool {
             const sparse_set = self.getSparseSet(Component);
-            return sparse_set.contains(entt.index);
+            return sparse_set.contains(entt.index, "data");
         }
         pub fn remove(self: *@This(), entt: Entity, comptime Component: type) void {
             const sparse_set = self.getSparseSet(Component);
             std.debug.assert(sparse_set.contains(entt.index));
-            _ = sparse_set.remove(entt.index);
+            _ = sparse_set.remove(entt.index, "data");
         }
         pub fn get(self: *@This(), entt: Entity, comptime Component: type) *Component {
             const sparse_set = self.getSparseSet(Component);
             std.debug.assert(sparse_set.contains(entt.index));
-            return sparse_set.get(entt.index);
+            return sparse_set.get(entt.index, "data");
         }
         pub fn getConst(self: *@This(), entt: Entity, comptime Component: type) Component {
             const sparse_set = self.getSparseSet(Component);
             std.debug.assert(sparse_set.contains(entt.index));
-            return sparse_set.getConst(entt.index);
+            return sparse_set.getConst(entt.index, "data");
+        }
+        pub fn getAdded(self: *@This(), entt: Entity, comptime Component: type) *types.Tick {
+            const sparse_set = self.getSparseSet(Component);
+            std.debug.assert(sparse_set.contains(entt.index));
+            return sparse_set.get(entt.index, "added");
+        }
+        pub fn getChanged(self: *@This(), entt: Entity, comptime Component: type) *types.Tick {
+            const sparse_set = self.getSparseSet(Component);
+            std.debug.assert(sparse_set.contains(entt.index));
+            return sparse_set.get(entt.index, "changed");
+        }
+        pub fn getAddedConst(self: *@This(), entt: Entity, comptime Component: type) types.Tick {
+            const sparse_set = self.getSparseSet(Component);
+            std.debug.assert(sparse_set.contains(entt.index));
+            return sparse_set.getConst(entt.index, "added");
+        }
+        pub fn getChangedConst(self: *@This(), entt: Entity, comptime Component: type) types.Tick {
+            const sparse_set = self.getSparseSet(Component);
+            std.debug.assert(sparse_set.contains(entt.index));
+            return sparse_set.getConst(entt.index, "changed");
         }
     };
 }

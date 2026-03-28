@@ -1,11 +1,57 @@
 const std = @import("std");
 
+pub const ValueType = struct {
+    name: []const u8,
+    T: type,
+};
+
 pub const DisjointSparseSetOptions = struct {
     K: type,
-    V: type,
-    /// if null, OS page size will be used
+    Vs: []const ValueType,
     PageSize: usize = 4096,
 };
+
+fn CreateValueTuple(comptime Vs: []const ValueType) type {
+    var field_types: []const type = &.{};
+
+    for (Vs) |V| {
+        field_types = field_types ++ .{V.T};
+    }
+
+    return @Tuple(field_types);
+}
+
+fn CreateValueStruct(comptime Vs: []const ValueType) type {
+    var field_names: []const []const u8 = &.{};
+    var field_types: []const type = &.{};
+    var field_attrs: []const std.builtin.Type.StructField.Attributes = &.{};
+
+    for (Vs) |V| {
+        field_names = field_names ++ .{V.name};
+        field_types = field_types ++ .{V.T};
+        field_attrs = field_attrs ++ .{std.builtin.Type.StructField.Attributes{}};
+    }
+
+    return @Struct(.auto, null, field_names, &field_types, &field_attrs);
+}
+
+fn CreateValueArrays(comptime Vs: []const ValueType) type {
+    var field_names: []const []const u8 = &.{};
+    var field_types: []const type = &.{};
+    var field_attrs: []const std.builtin.Type.StructField.Attributes = &.{};
+
+    for (Vs) |V| {
+        field_names = field_names ++ .{V.name};
+        field_types = field_types ++ .{std.ArrayList(V.T)};
+        field_attrs = field_attrs ++ .{
+            std.builtin.Type.StructField.Attributes{
+                .default_value_ptr = &std.ArrayList(V.T).empty,
+            },
+        };
+    }
+
+    return @Struct(.auto, null, field_names, &field_types, &field_attrs);
+}
 
 pub fn DisjointSparseSet(comptime options: DisjointSparseSetOptions) type {
     if (@popCount(options.PageSize) != 1) {
@@ -23,19 +69,20 @@ pub fn DisjointSparseSet(comptime options: DisjointSparseSetOptions) type {
         pub const PageSize = options.PageSize;
         pub const PageMask = PageSize - 1;
         pub const K = options.K;
-        pub const V = options.V;
+        pub const Vs = options.Vs;
         pub const empty: @This() = .{};
+        pub const DisjointDataArrays = CreateValueArrays(Vs);
+        pub const DisjointDataTuple = CreateValueTuple(Vs);
+        pub const DisjointDataStruct = CreateValueStruct(Vs);
 
         const Null = std.math.maxInt(K);
 
         sparse: std.ArrayList(?KeyPage) = .empty,
         dense_keys: std.ArrayList(K) = .empty,
-        dense_data: std.ArrayList(V) = .empty,
+        dense_data: DisjointDataArrays = .{},
 
-        pub fn init(alloc: std.mem.Allocator) @This() {
-            return .{
-                .allocator = alloc,
-            };
+        pub fn init() @This() {
+            return .{};
         }
 
         pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
@@ -46,7 +93,9 @@ pub fn DisjointSparseSet(comptime options: DisjointSparseSetOptions) type {
             }
             self.sparse.deinit(allocator);
             self.dense_keys.deinit(allocator);
-            self.dense_data.deinit(allocator);
+            inline for (Vs) |V| {
+                @field(self.dense_data, V.name).deinit(allocator);
+            }
         }
 
         pub fn len(self: *@This()) usize {
@@ -110,15 +159,72 @@ pub fn DisjointSparseSet(comptime options: DisjointSparseSetOptions) type {
             return &self.sparse.items[page_index].?;
         }
 
-        /// adds integer to set
-        pub fn add(self: *@This(), allocator: std.mem.Allocator, key: K, value: V) !void {
+        fn checkValuesInput(T: type) void {
+            if (T != DisjointDataTuple and T != DisjointDataStruct) {
+                @compileError("input must be either " ++ @typeName(DisjointDataTuple) ++
+                    " or " ++ @typeName(DisjointDataStruct));
+            }
+        }
+
+        inline fn getInputField(
+            values: anytype,
+            comptime index: usize,
+        ) @FieldType(DisjointDataTuple, std.fmt.comptimePrint("{}", .{index})) {
+            if (@TypeOf(values) == DisjointDataTuple) {
+                return values[index];
+            } else if (@TypeOf(values) == DisjointDataStruct) {
+                return @field(values, Vs[index].name);
+            }
+        }
+
+        pub fn reserve(self: *@This(), allocator: std.mem.Allocator, key: K) !void {
             std.debug.assert(!self.contains(key));
             const page_index = getPageIndex(key);
             try self.createPage(allocator, page_index);
             const p = self.getPage(page_index);
             p.keys[getPageOffset(key)] = toKey(self.dense_keys.items.len);
             try self.dense_keys.append(allocator, key);
-            try self.dense_data.append(allocator, value);
+
+            inline for (Vs) |V| {
+                // SAFETY: the whole idea of "reserve" is to just reserve space for data,
+                // without actually setting it
+                @field(self.dense_data, V.name).append(allocator, undefined);
+            }
+        }
+
+        pub fn addOne(
+            self: *@This(),
+            allocator: std.mem.Allocator,
+            comptime Name: []const u8,
+            key: K,
+            value: @FieldType(DisjointDataStruct, Name),
+        ) !void {
+            std.debug.assert(!self.contains(key));
+            const page_index = getPageIndex(key);
+            try self.createPage(allocator, page_index);
+            const p = self.getPage(page_index);
+            p.keys[getPageOffset(key)] = toKey(self.dense_keys.items.len);
+            try self.dense_keys.append(allocator, key);
+
+            inline for (Vs) |V| {
+                @field(self.dense_data, V.name).append(allocator, value);
+            }
+        }
+
+        pub fn add(self: *@This(), allocator: std.mem.Allocator, key: K, disjoint_values: anytype) !void {
+            comptime checkValuesInput(@TypeOf(disjoint_values));
+
+            std.debug.assert(!self.contains(key));
+            const page_index = getPageIndex(key);
+            try self.createPage(allocator, page_index);
+            const p = self.getPage(page_index);
+            p.keys[getPageOffset(key)] = toKey(self.dense_keys.items.len);
+            try self.dense_keys.append(allocator, key);
+
+            inline for (Vs, 0..) |V, i| {
+                const value = getInputField(disjoint_values, i);
+                @field(self.dense_data, V.name).append(allocator, value);
+            }
         }
 
         fn getElementSparsePtr(self: *@This(), data: K) *K {
@@ -140,20 +246,24 @@ pub fn DisjointSparseSet(comptime options: DisjointSparseSetOptions) type {
             p.keys[getPageOffset(data)] = Null;
 
             _ = self.dense_keys.swapRemove(dense_index);
-            _ = self.dense_data.swapRemove(dense_index);
+            inline for (Vs) |V| {
+                _ = @field(self.dense_data, V.name).swapRemove(dense_index);
+            }
             return dense_index;
         }
 
-        pub inline fn get(self: *@This(), key: K) *V {
+        pub inline fn get(self: *@This(), key: K, comptime Name: []const u8) *@FieldType(DisjointDataStruct, Name) {
             const dense_index = self.getDenseIndex(key);
-            return &self.dense_data[dense_index];
+            return &@field(self.dense_data, Name)[dense_index];
+        }
+
+        pub inline fn getConst(self: *@This(), key: K, comptime Name: []const u8) @FieldType(DisjointDataArrays, Name) {
+            const dense_index = self.getDenseIndex(key);
+            return @field(self.dense_data, Name)[dense_index];
         }
 
         pub fn keys(self: *@This()) []K {
             return self.dense_keys.items;
-        }
-        pub fn values(self: *@This()) []K {
-            return self.dense_data.items;
         }
     };
 }

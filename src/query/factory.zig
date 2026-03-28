@@ -12,16 +12,36 @@ pub const QueryFactoryOptions = struct {
     Components: type,
 };
 
+const QueryTypes = struct { dense: Request = .{}, sparse: Request = .{} };
+
 /// use in systems to obtain a query. System signature should be like:
 /// fn systemExample(q: Query(.{.q = &.{typeA, *typeB}, .with = &.{typeC}}) !void {
 ///     ...
 /// }
 /// checkout QueryRequest for more information
 pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
-    const req = options.request;
-    req.validate(options.Components);
-    var field_types: [req.q.len]type = undefined;
-    for (req.q, 0..) |AccessibleType, i| {
+    options.request.validate(options.Components);
+    const request = options.request;
+    const req = req: {
+        var req: QueryTypes = .{};
+        for (@typeInfo(Request).@"struct".fields) |Field| {
+            for (@field(options.request, Field.name)) |Type| {
+                if (Type == options.Entity) {
+                    @field(req.dense, Field.name) = @field(req.dense, Field.name) ++ .{Type};
+                    continue;
+                }
+                const CanonicalType = options.Components.getCanonicalType(Type);
+                const config = options.Components.getConfig(CanonicalType);
+                switch (config.storage_type) {
+                    .Dense => @field(req.dense, Field.name) = @field(req.dense, Field.name) ++ .{Type},
+                    .Sparse => @field(req.sparse, Field.name) = @field(req.sparse, Field.name) ++ .{Type},
+                }
+            }
+        }
+        break :req req;
+    };
+    var field_types: [request.q.len]type = undefined;
+    for (request.q, 0..) |AccessibleType, i| {
         if (comptime AccessibleType != options.Entity) {
             const T = options.Components.getCanonicalType(AccessibleType);
             options.Components.checkSize(T);
@@ -30,7 +50,7 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
     }
     const ResultTuple = @Tuple(&field_types);
     // check if all changed types are not zst
-    for (req.changed) |Type| {
+    for (request.changed) |Type| {
         if (@sizeOf(Type) == 0) {
             @compileError("zero size components types don't have Changed metadata");
         }
@@ -41,10 +61,9 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
         pub const Entity = options.Entity;
         pub const Components = options.Components;
         pub const Tuple = ResultTuple;
-        pub const request = options.request;
         pub const CanonicalTypes = CanonicalTypes: {
             var data: []const type = &.{};
-            for (req.q) |AccessibleType| {
+            for (request.q) |AccessibleType| {
                 if (Entity == AccessibleType) continue;
                 const CanonicalType = Components.getCanonicalType(AccessibleType);
                 if (@sizeOf(CanonicalType) == 0) {
@@ -57,18 +76,18 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
         };
         pub const MustHave = MustHave: {
             var data: []const type = &.{};
-            for (req.q) |Type| {
+            for (request.q) |Type| {
                 if (Entity == Type) continue;
                 if (@typeInfo(Type) != .optional) {
                     const CanonicalType = Components.getCanonicalType(Type);
                     data = data ++ .{CanonicalType};
                 }
             }
-            data = data ++ req.with ++ req.added ++ req.changed;
+            data = data ++ request.with ++ request.added ++ request.changed;
             break :MustHave data;
         };
         pub const CannotHave = CannotHave: {
-            break :CannotHave req.without;
+            break :CannotHave request.without;
         };
         pub const World = world.World(.{
             .Entity = Entity,
@@ -111,20 +130,27 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
         pub fn iter(self: @This()) Iterator {
             return Iterator.init(self.world, self.archetypes, self.system_data.last_run);
         }
+        inline fn archetypeIterator(self: @This(), arch: *Archetype) Archetype.Iterator(
+            req.dense.q,
+            req.dense.added,
+            req.dense.changed,
+        ) {
+            return arch.iterator(
+                req.dense.q,
+                req.dense.added,
+                req.dense.changed,
+                self.system_data.last_run,
+                self.world.getTick(),
+            );
+        }
         pub fn len(self: @This()) usize {
             var count: usize = 0;
             for (self.archetypes.items) |sig| {
                 const arch = self.world.getArchetypeFromSignature(sig);
-                if (comptime req.added.len == 0 and req.changed.len == 0) {
+                if (comptime request.added.len == 0 and request.changed.len == 0) {
                     count += arch.len();
                 } else {
-                    var arch_iter = arch.iterator(
-                        req.q,
-                        req.added,
-                        req.changed,
-                        self.system_data.last_run,
-                        self.world.getTick(),
-                    );
+                    var arch_iter = self.archetypeIterator(arch);
                     while (arch_iter.nextWithoutMarkingChange()) |_| {
                         count += 1;
                     }
@@ -135,16 +161,10 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
         pub fn empty(self: @This()) bool {
             for (self.archetypes.items) |sig| {
                 var arch = self.world.getArchetypeFromSignature(sig);
-                if (comptime req.added.len == 0 and req.changed.len == 0) {
+                if (comptime request.added.len == 0 and request.changed.len == 0) {
                     if (arch.len() != 0) return false;
                 } else if (arch.len() != 0) {
-                    var arch_iter = arch.iterator(
-                        req.q,
-                        req.added,
-                        req.changed,
-                        self.system_data.last_run,
-                        self.world.getTick(),
-                    );
+                    var arch_iter = self.archetypeIterator(arch);
                     const arch_is_empty = arch_iter.nextWithoutMarkingChange() == null;
                     if (!arch_is_empty) return false;
                 }
@@ -156,13 +176,7 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
             for (self.archetypes.items) |sig| {
                 var arch = self.world.getArchetypeFromSignature(sig);
                 if (arch.len() != 0) {
-                    var inner_arch_iter = arch.iterator(
-                        req.q,
-                        req.added,
-                        req.changed,
-                        self.system_data.last_run,
-                        self.world.getTick(),
-                    );
+                    var inner_arch_iter = self.archetypeIterator(arch);
                     return inner_arch_iter.peek();
                 }
             }
@@ -175,16 +189,10 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
             for (self.archetypes.items) |sig| {
                 var arch = self.world.getArchetypeFromSignature(sig);
                 if (arch.len() != 0) {
-                    var inner_arch_iter = arch.iterator(
-                        req.q,
-                        req.added,
-                        req.changed,
-                        self.system_data.last_run,
-                        self.world.getTick(),
-                    );
-                    if (inner_arch_iter.next()) |tuple| {
+                    var inner_arch_iter = self.archetypeIterator(arch);
+                    if (inner_arch_iter.next()) |res| {
                         if (result != null) @panic("optSingle found more than one valid tuple");
-                        result = tuple;
+                        result = res;
                     }
                     if (inner_arch_iter.next() != null) {
                         @panic("optSingle found more than one valid tuple");
@@ -199,13 +207,7 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
             for (self.archetypes.items) |sig| {
                 var arch = self.world.getArchetypeFromSignature(sig);
                 if (arch.len() != 0) {
-                    var inner_arch_iter = arch.iterator(
-                        req.q,
-                        req.added,
-                        req.changed,
-                        self.system_data.last_run,
-                        self.world.getTick(),
-                    );
+                    var inner_arch_iter = self.archetypeIterator(arch);
                     return inner_arch_iter.next().?;
                 }
             }
@@ -216,7 +218,7 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
             world: *World,
             archetypes: std.ArrayList(Components),
             last_system_run: Tick,
-            current_iter: ?Archetype.Iterator(req.q, req.added, req.changed),
+            current_iter: ?Archetype.Iterator(request.q, request.added, request.changed),
             pub fn init(reg: *World, archs: std.ArrayList(Components), last_system_run: Tick) @This() {
                 var new: @This() = .{
                     .world = reg,
@@ -227,16 +229,24 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
                 new.current_iter = new.nextArchetypeIterator();
                 return new;
             }
-            inline fn nextArchetypeIterator(self: *@This()) ?Archetype.Iterator(req.q, req.added, req.changed) {
+            inline fn archetypeIterator(self: @This(), arch: *Archetype) Archetype.Iterator(
+                req.dense.q,
+                req.dense.added,
+                req.dense.changed,
+            ) {
+                return arch.iterator(
+                    req.dense.q,
+                    req.dense.added,
+                    req.dense.changed,
+                    self.last_system_run,
+                    self.world.getTick(),
+                );
+            }
+
+            inline fn nextArchetypeIterator(self: *@This()) ?Archetype.Iterator(request.q, request.added, request.changed) {
                 while (self.archetypes.pop()) |sig| {
                     const arch = self.world.getArchetypeFromSignature(sig);
-                    var iterator = arch.iterator(
-                        req.q,
-                        req.added,
-                        req.changed,
-                        self.last_system_run,
-                        self.world.getTick(),
-                    );
+                    var iterator = self.archetypeIterator(arch);
                     if (iterator.peek()) |_| {
                         return iterator;
                     }

@@ -4,47 +4,6 @@ const components = @import("components.zig");
 const Tick = @import("types.zig").Tick;
 const WorldFactory = @import("world.zig").World;
 const dense_storage = @import("storage/dense_storage.zig");
-const DenseStorageType = @import("storage/storage_types.zig").DenseStorageType;
-
-pub const TaggedArchetypeOptions = struct {
-    Entity: type,
-    Components: type,
-    ChunksStorageConfig: ?dense_storage.chunks.ChunksOptions = null,
-    TablesStorageConfig: ?dense_storage.tables.TablesOptions = null,
-};
-
-pub fn TaggedArchetype(comptime options: TaggedArchetypeOptions) type {
-    return union(DenseStorageType) {
-        pub const Entity = options.Entity;
-        pub const Components = options.Components;
-        pub const ChunkedArchetype = Archetype(ArchetypeOptions{
-            .Entity = Entity,
-            .Components = Components,
-            .DenseStorageConfig = .{
-                .Chunks = if (options.ChunksStorageConfig) |c| c else .{
-                    .Entity = Entity,
-                    .Components = Components,
-                },
-            },
-        });
-        pub const TabledArchetype = Archetype(ArchetypeOptions{
-            .Entity = Entity,
-            .Components = Components,
-            .DenseStorageConfig = .{
-                .Tables = if (options.TablesStorageConfig) |c| c else .{
-                    .Entity = Entity,
-                    .Components = Components,
-                },
-            },
-        });
-        pub const TaggedDenseStorageUnitPtr = union(DenseStorageType) {
-            Chunks: *ChunkedArchetype.DenseStorage.Chunk,
-            Tables: *TabledArchetype.DenseStorage,
-        };
-        Chunks: ChunkedArchetype,
-        Tables: TabledArchetype,
-    };
-}
 
 pub const ArchetypeOptions = struct {
     Components: type,
@@ -73,6 +32,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
         /// only contains components that both belong to this archetype AND have dense storage set
         signature: Components,
         storage: DenseStorage,
+        entities: std.ArrayList(Entity) = .empty,
 
         inline fn hash(tid_or_component: anytype) ComponentTypeId {
             if (comptime @TypeOf(tid_or_component) == ComponentTypeId) {
@@ -89,23 +49,35 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             };
         }
 
-        pub fn deinit(self: *@This(), alloc: std.mem.Allocator) void {
-            self.storage.deinit(alloc);
+        pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+            self.storage.deinit(allocator);
+            self.entities.deinit(allocator);
         }
 
         /// return the number of entities in the archetype
         pub inline fn len(self: *@This()) usize {
-            return self.storage.len();
+            return self.entities.items.len;
         }
 
         pub inline fn has(self: *@This(), tid_or_component: anytype) bool {
             return self.signature.has(tid_or_component);
         }
 
-        pub fn reserve(self: *@This(), allocator: std.mem.Allocator, entt: Entity) !DenseStorage.StorageAddress {
+        pub fn reserve(
+            self: *@This(),
+            allocator: std.mem.Allocator,
+            entt: Entity,
+            location: *EntityLocation,
+        ) !DenseStorage.StorageAddress {
+            location.archetype_vec_index = self.len();
+            try self.entities.append(allocator, entt);
             return self.storage.reserve(allocator, entt);
         }
 
+        pub const MoveToResult = struct {
+            archetype_removal_result: struct { usize, usize },
+            dense_removal_result: ?DenseStorage.RemovalResult,
+        };
         /// move entity to new archetype.
         /// this function only copies the values from dense components that exist in both archetypes.
         /// dense components only present in 'new_arch' must be set after this call.
@@ -119,8 +91,13 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             new_arch: *@This(),
             current_tick: Tick,
             removed_logs: anytype,
-        ) !?struct { usize, usize } {
-            const new_storage, const new_slot_index = try new_arch.reserve(allocator, entt);
+        ) !MoveToResult {
+            const old_archetype_vec_index = location.archetype_vec_index;
+            const new_storage, const new_slot_index = try new_arch.reserve(
+                allocator,
+                entt,
+                location,
+            );
 
             const old_dense_signature = self.signature.applyStorageTypeMask(.Dense);
             const new_dense_signature = new_arch.signature.applyStorageTypeMask(.Dense);
@@ -156,8 +133,8 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                 var iter = existing_with_added.iterator();
                 while (iter.nextTypeId()) |tid| {
                     new_storage
-                        .getAddedWithTypeId(tid, new_slot_index).* = old_storage
-                        .getAddedWithTypeId(tid, location.dense_index).*;
+                        .getAddedArray(tid)[new_slot_index] = old_storage
+                        .getAddedArray(tid)[location.dense_index];
                 }
             }
             // already existing non empty components with changed metadata -> copy metadata
@@ -168,8 +145,8 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                 var iter = existing_with_changed.iterator();
                 while (iter.nextTypeId()) |tid| {
                     new_storage
-                        .getChangedWithTypeId(tid, new_slot_index).* = old_storage
-                        .getChangedWithTypeId(tid, location.dense_index).*;
+                        .getChangedArray(tid)[new_slot_index] = old_storage
+                        .getChangedArray(tid)[location.dense_index];
                 }
             }
             // newly added components with added metadata -> update metadata
@@ -179,7 +156,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                     .applyAddedMask();
                 var iter = newly_added.iterator();
                 while (iter.nextTypeId()) |tid| {
-                    new_storage.getAddedWithTypeId(tid, new_slot_index).* = current_tick;
+                    new_storage.getAddedArray(tid)[new_slot_index] = current_tick;
                 }
             }
             // newly added component with changed metadata -> update metadata
@@ -189,14 +166,22 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                     .applyChangedMask();
                 var iter = newly_added.iterator();
                 while (iter.nextTypeId()) |tid| {
-                    new_storage.getChangedWithTypeId(tid, new_slot_index).* = current_tick;
+                    new_storage.getChangedArray(tid)[new_slot_index] = current_tick;
                 }
             }
-            const removed_result = old_storage.remove(allocator, @intCast(location.dense_index));
+            const removed_result = try old_storage.remove(allocator, @intCast(location.dense_index)) orelse null;
             location.dense_index = @intCast(new_slot_index);
             location.storage = new_storage;
             location.arch = new_arch;
-            return removed_result;
+            const archetype_swapped_entt = self.entities.getLast();
+            _ = self.entities.swapRemove(old_archetype_vec_index);
+            return MoveToResult{
+                .archetype_removal_result = .{
+                    archetype_swapped_entt.index,
+                    old_archetype_vec_index,
+                },
+                .dense_removal_result = removed_result,
+            };
         }
 
         pub fn iterator(
@@ -247,7 +232,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                     if (self.nextValidEntity()) |iter_result| {
                         const storage, const index = iter_result;
                         // SAFETY: immediatly filled in the following lines
-                        var tuple: std.meta.Tuple(ReturnTypes) = undefined;
+                        var tuple: Tuple = undefined;
                         inline for (ReturnTypes, 0..) |Type, i| {
                             if (comptime Type == Entity) {
                                 tuple[i] = storage.getConst(Entity, index);
@@ -271,13 +256,13 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                 inline fn hasValidTicks(self: *@This(), storage_address: StorageAddress) bool {
                     inline for (Added) |Type| {
                         const tid = comptime Components.hash(Type);
-                        const added_tick = storage_address[0].getAddedWithTypeId(tid, storage_address[1]).*;
+                        const added_tick = storage_address[0].getAddedArray(tid)[storage_address[1]];
                         if (added_tick < self.last_run) return false;
                     }
                     inline for (Changed) |Type| {
                         if (comptime @sizeOf(Type) != 0) {
                             const tid = comptime Components.hash(Type);
-                            const changed_tick = storage_address[0].getChangedWithTypeId(tid, storage_address[1]).*;
+                            const changed_tick = storage_address[0].getChangedArray(tid)[storage_address[1]];
                             if (changed_tick < self.last_run) return false;
                         }
                     }
@@ -306,11 +291,11 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                     if (comptime mark_change) {
                         if (comptime (access_type == .PointerMut)) {
                             const tid = Components.hash(CanonicalType);
-                            storage_address[0].getChangedWithTypeId(tid, storage_address[1]).* = self.current_run;
+                            storage_address[0].getChangedArray(tid)[storage_address[1]] = self.current_run;
                         } else if (comptime (access_type == .OptionalPointerMut)) {
                             if (return_value != null) {
                                 const tid = Components.hash(CanonicalType);
-                                storage_address[0].getChangedWithTypeId(tid, storage_address[1]).* = self.current_run;
+                                storage_address[0].getChangedArray(tid)[storage_address[1]] = self.current_run;
                             }
                         }
                     }

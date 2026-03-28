@@ -144,9 +144,24 @@ pub fn World(comptime options: WorldOptions) type {
         fn moveToArchetype(self: *@This(), entt: Entity, from: *Archetype, to: *Archetype) !void {
             std.debug.assert(self.valid(entt));
             const location_ptr = self.entity_registry.getEntityLocation(entt);
-            if (try from.moveTo(self.allocator, entt, location_ptr, to, self.getTick(), &self.removed)) |removal_result| {
-                const swapped_entt, const new_slot_index = removal_result;
-                self.entity_registry.setEntityDenseIndex(swapped_entt, new_slot_index);
+            const move_to_result = try from.moveTo(self.allocator, entt, location_ptr, to, self.getTick(), &self.removed);
+            // archetype vec
+            {
+                const archetype_removal_result = move_to_result.archetype_removal_result;
+                self.entity_registry.setEntityArchetypeIndex(
+                    archetype_removal_result[0],
+                    archetype_removal_result[1],
+                );
+            }
+            if (move_to_result.dense_removal_result) |removal_result| {
+                // dense storage
+                {
+                    const dense_removal_result = removal_result;
+                    self.entity_registry.setEntityDenseIndex(
+                        dense_removal_result[0],
+                        dense_removal_result[1],
+                    );
+                }
             }
         }
 
