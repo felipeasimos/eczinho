@@ -23,13 +23,15 @@ fn CreateValueTuple(comptime Vs: []const ValueType) type {
 
 fn CreateValueStruct(comptime Vs: []const ValueType) type {
     var field_names: []const []const u8 = &.{};
-    var field_types: []const type = &.{};
-    var field_attrs: []const std.builtin.Type.StructField.Attributes = &.{};
+    // SAFETY: populated in the loop below
+    var field_types: [Vs.len]type = undefined;
+    // SAFETY: populated in the loop below
+    var field_attrs: [Vs.len]std.builtin.Type.StructField.Attributes = undefined;
 
-    for (Vs) |V| {
+    for (Vs, 0..) |V, i| {
         field_names = field_names ++ .{V.name};
-        field_types = field_types ++ .{V.T};
-        field_attrs = field_attrs ++ .{std.builtin.Type.StructField.Attributes{}};
+        field_types[i] = V.T;
+        field_attrs[i] = std.builtin.Type.StructField.Attributes{};
     }
 
     return @Struct(.auto, null, field_names, &field_types, &field_attrs);
@@ -37,16 +39,16 @@ fn CreateValueStruct(comptime Vs: []const ValueType) type {
 
 fn CreateValueArrays(comptime Vs: []const ValueType) type {
     var field_names: []const []const u8 = &.{};
-    var field_types: []const type = &.{};
-    var field_attrs: []const std.builtin.Type.StructField.Attributes = &.{};
+    // SAFETY: populated in the following loop
+    var field_types: [Vs.len]type = undefined;
+    // SAFETY: populated in the following loop
+    var field_attrs: [Vs.len]std.builtin.Type.StructField.Attributes = undefined;
 
-    for (Vs) |V| {
+    for (Vs, 0..) |V, i| {
         field_names = field_names ++ .{V.name};
-        field_types = field_types ++ .{std.ArrayList(V.T)};
-        field_attrs = field_attrs ++ .{
-            std.builtin.Type.StructField.Attributes{
-                .default_value_ptr = &std.ArrayList(V.T).empty,
-            },
+        field_types[i] = std.ArrayList(V.T);
+        field_attrs[i] = std.builtin.Type.StructField.Attributes{
+            .default_value_ptr = &std.ArrayList(V.T).empty,
         };
     }
 
@@ -188,7 +190,7 @@ pub fn DisjointSparseSet(comptime options: DisjointSparseSetOptions) type {
             inline for (Vs) |V| {
                 // SAFETY: the whole idea of "reserve" is to just reserve space for data,
                 // without actually setting it
-                @field(self.dense_data, V.name).append(allocator, undefined);
+                try @field(self.dense_data, V.name).append(allocator, undefined);
             }
         }
 
@@ -254,12 +256,12 @@ pub fn DisjointSparseSet(comptime options: DisjointSparseSetOptions) type {
 
         pub inline fn get(self: *@This(), key: K, comptime Name: []const u8) *@FieldType(DisjointDataStruct, Name) {
             const dense_index = self.getDenseIndex(key);
-            return &@field(self.dense_data, Name)[dense_index];
+            return &@field(self.dense_data, Name).items[dense_index];
         }
 
-        pub inline fn getConst(self: *@This(), key: K, comptime Name: []const u8) @FieldType(DisjointDataArrays, Name) {
+        pub inline fn getConst(self: *@This(), key: K, comptime Name: []const u8) @FieldType(DisjointDataStruct, Name) {
             const dense_index = self.getDenseIndex(key);
-            return @field(self.dense_data, Name)[dense_index];
+            return @field(self.dense_data, Name).items[dense_index];
         }
 
         pub fn keys(self: *@This()) []K {

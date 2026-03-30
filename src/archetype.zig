@@ -205,7 +205,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                     @compileError("Can't iterate over zero sized component array");
                 }
             }
-            const Tuple = std.meta.Tuple(ReturnTypes);
+            const Tuple = @Tuple(ReturnTypes);
             return struct {
                 last_run: Tick,
                 current_run: Tick,
@@ -217,30 +217,31 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                         .current_run = current_run,
                     };
                 }
-                pub fn peek(self: *@This()) ?Tuple {
+                pub fn peek(self: *@This()) ?struct { Entity, Tuple } {
                     const old_iter = self.iter;
                     defer self.iter = old_iter;
                     return self.nextWithoutMarkingChange();
                 }
-                pub fn next(self: *@This()) ?Tuple {
+                pub fn next(self: *@This()) ?struct { Entity, Tuple } {
                     return self.nextInner(true);
                 }
-                pub fn nextWithoutMarkingChange(self: *@This()) ?Tuple {
+                pub fn nextWithoutMarkingChange(self: *@This()) ?struct { Entity, Tuple } {
                     return self.nextInner(false);
                 }
-                fn nextInner(self: *@This(), comptime mark_change: bool) ?Tuple {
+                fn nextInner(self: *@This(), comptime mark_change: bool) ?struct { Entity, Tuple } {
                     if (self.nextValidEntity()) |iter_result| {
                         const storage, const index = iter_result;
                         // SAFETY: immediatly filled in the following lines
                         var tuple: Tuple = undefined;
+                        const entt = storage.getConst(Entity, index);
                         inline for (ReturnTypes, 0..) |Type, i| {
                             if (comptime Type == Entity) {
-                                tuple[i] = storage.getConst(Entity, index);
+                                tuple[i] = entt;
                             } else {
                                 tuple[i] = self.getComponent(Type, iter_result, mark_change);
                             }
                         }
-                        return tuple;
+                        return .{ entt, tuple };
                     }
                     return null;
                 }

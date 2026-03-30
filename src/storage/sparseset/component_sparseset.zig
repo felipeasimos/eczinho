@@ -8,27 +8,33 @@ pub const ComponentSparseSetOptions = struct {
     Entity: type,
 };
 
-fn createComponentValuesLayout(comptime Components: type, comptime Component: type) disjoint_sparseset.ValueType {
+fn createComponentValuesLayout(comptime Components: type, comptime Component: type) []const disjoint_sparseset.ValueType {
     var values: []const disjoint_sparseset.ValueType = &.{};
 
     if (@sizeOf(Component) != 0) {
         values = values ++ .{
-            .name = "data",
-            .T = Component,
+            disjoint_sparseset.ValueType{
+                .name = "data",
+                .T = Component,
+            },
         };
     }
 
-    if (Components.hasAddedMetatadata(Component)) {
+    if (Components.hasAddedMetadata(Component)) {
         values = values ++ .{
-            .name = "added",
-            .T = types.Tick,
+            disjoint_sparseset.ValueType{
+                .name = "added",
+                .T = types.Tick,
+            },
         };
     }
 
-    if (Components.hasChangedMetatadata(Component)) {
+    if (Components.hasChangedMetadata(Component)) {
         values = values ++ .{
-            .name = "changed",
-            .T = types.Tick,
+            disjoint_sparseset.ValueType{
+                .name = "changed",
+                .T = types.Tick,
+            },
         };
     }
 

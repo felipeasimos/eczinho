@@ -186,7 +186,7 @@ pub fn World(comptime options: WorldOptions) type {
             try self.moveToArchetype(entt, old_arch, new_arch);
 
             if (comptime Components.getStorageType(Component) == .Sparse) {
-                self.sparse_sets.remove(entt, Component);
+                try self.sparse_sets.remove(Component, entt, self.getTick(), &self.removed);
             }
         }
 
@@ -205,12 +205,17 @@ pub fn World(comptime options: WorldOptions) type {
             // will also move dense component data ONLY if added component is dense
             try self.moveToArchetype(entt, old_arch, new_arch);
 
-            if (comptime Components.getStorageType(@TypeOf(value)) == .Dense) {
-                if (comptime @sizeOf(Component) != 0) {
-                    self.get(Component, entt).* = value;
+            if (comptime Components.getStorageType(@TypeOf(value)) == .Sparse) {
+                try self.sparse_sets.reserve(self.allocator, @TypeOf(value), entt);
+                if (comptime Components.hasAddedMetadata(@TypeOf(value))) {
+                    self.sparse_sets.getAdded(@TypeOf(value), entt).* = self.getTick();
                 }
-            } else {
-                try self.sparse_sets.add(self.allocator, entt, value);
+                if (comptime Components.hasChangedMetadata(@TypeOf(value))) {
+                    self.sparse_sets.getChanged(@TypeOf(value), entt).* = self.getTick();
+                }
+            }
+            if (comptime @sizeOf(Component) != 0) {
+                self.get(Component, entt).* = value;
             }
         }
 
@@ -221,7 +226,7 @@ pub fn World(comptime options: WorldOptions) type {
                     const location = self.entity_registry.getEntityLocation(entt);
                     break :dense location.storage.get(Component, location.dense_index);
                 },
-                .Sparse => self.sparse_sets.get(entt.index),
+                .Sparse => self.sparse_sets.get(Component, entt),
             };
         }
 

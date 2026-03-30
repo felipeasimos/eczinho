@@ -143,6 +143,59 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
                 self.world.getTick(),
             );
         }
+        fn sparseEnttIsValid(self: @This(), entt: Entity) bool {
+            inline for (req.sparse.added) |Added| {
+                const added_tick = self.world.sparse_sets.getAddedConst(Added, entt);
+                if (added_tick < self.system_data.last_run) return false;
+            }
+            inline for (req.sparse.changed) |Changed| {
+                const changed_tick = self.world.sparse_sets.getChangedConst(Changed, entt);
+                if (changed_tick < self.system_data.last_run) return false;
+            }
+            return true;
+        }
+        fn addToDenseTuple(self: @This(), entt: Entity, dense_tuple: @Tuple(req.dense.q), comptime mark_change: bool) Tuple {
+            var tuple: Tuple = undefined;
+            comptime var dense_counter = 0;
+            comptime var tuple_counter = 0;
+            inline for (request.q) |Q| {
+                if (comptime Q == Entity) {
+                    tuple[tuple_counter] = entt;
+                    tuple_counter += 1;
+                    continue;
+                }
+                const CanonicalType = Components.getCanonicalType(Q);
+                switch (comptime Components.getStorageType(CanonicalType)) {
+                    .Dense => {
+                        tuple[tuple_counter] = dense_tuple[dense_counter];
+                        dense_counter += 1;
+                    },
+                    .Sparse => {
+                        const AccessType = comptime Components.getAccessType(Q);
+                        const value: Q = switch (comptime AccessType) {
+                            .Const => self.world.sparse_sets.getConst(CanonicalType, entt),
+                            .PointerConst => @ptrCast(self.world.sparse_sets.get(CanonicalType, entt)),
+                            .PointerMut => self.world.sparse_sets.get(CanonicalType, entt),
+                            .OptionalConst => self.world.sparse_sets.getConst(CanonicalType, entt),
+                            .OptionalPointerMut => self.world.sparse_sets.get(CanonicalType, entt),
+                            .OptionalPointerConst => @ptrCast(self.world.sparse_sets.getConst(CanonicalType, entt)),
+                        };
+                        if (comptime mark_change) {
+                            if (comptime (AccessType == .PointerMut)) {
+                                self.world.sparse_sets.getChanged(CanonicalType, entt).* = self.world.getTick();
+                            } else if (comptime (AccessType == .OptionalPointerMut)) {
+                                if (value != null) {
+                                    self.world.sparse_sets.getChanged(CanonicalType, entt).* = self.world.getTick();
+                                }
+                            }
+                        }
+                        tuple[tuple_counter] = value;
+                    },
+                }
+                tuple_counter += 1;
+            }
+            return tuple;
+        }
         pub fn len(self: @This()) usize {
             var count: usize = 0;
             for (self.archetypes.items) |sig| {
@@ -151,8 +204,9 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
                     count += arch.len();
                 } else {
                     var arch_iter = self.archetypeIterator(arch);
-                    while (arch_iter.nextWithoutMarkingChange()) |_| {
-                        count += 1;
+                    while (arch_iter.nextWithoutMarkingChange()) |res| {
+                        const entt, _ = res;
+                        count += @intFromBool(self.sparseEnttIsValid(entt));
                     }
                 }
             }
@@ -174,10 +228,13 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
         /// get next tuple, returning null if query is empty
         pub fn peek(self: @This()) ?Tuple {
             for (self.archetypes.items) |sig| {
-                var arch = self.world.getArchetypeFromSignature(sig);
-                if (arch.len() != 0) {
-                    var inner_arch_iter = self.archetypeIterator(arch);
-                    return inner_arch_iter.peek();
+                const arch = self.world.getArchetypeFromSignature(sig);
+                var inner_arch_iter = self.archetypeIterator(arch);
+                while (inner_arch_iter.nextWithoutMarkingChange()) |res| {
+                    const entt, const dense_tuple = res;
+                    if (self.sparseEnttIsValid(entt)) {
+                        return self.addToDenseTuple(entt, dense_tuple, false);
+                    }
                 }
             }
             return null;
@@ -190,9 +247,15 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
                 var arch = self.world.getArchetypeFromSignature(sig);
                 if (arch.len() != 0) {
                     var inner_arch_iter = self.archetypeIterator(arch);
-                    if (inner_arch_iter.next()) |res| {
+                    while (inner_arch_iter.peek()) |res| {
                         if (result != null) @panic("optSingle found more than one valid tuple");
-                        result = res;
+                        const entt, const dense_tuple = res;
+                        if (self.sparseEnttIsValid(entt)) {
+                            _ = inner_arch_iter.next();
+                            result = self.addToDenseTuple(entt, dense_tuple, true);
+                        } else {
+                            _ = inner_arch_iter.nextWithoutMarkingChange();
+                        }
                     }
                     if (inner_arch_iter.next() != null) {
                         @panic("optSingle found more than one valid tuple");
@@ -208,7 +271,15 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
                 var arch = self.world.getArchetypeFromSignature(sig);
                 if (arch.len() != 0) {
                     var inner_arch_iter = self.archetypeIterator(arch);
-                    return inner_arch_iter.next().?;
+                    while (inner_arch_iter.peek()) |res| {
+                        const entt, const dense_tuple = res;
+                        if (self.sparseEnttIsValid(entt)) {
+                            _ = inner_arch_iter.next();
+                            return self.addToDenseTuple(entt, dense_tuple, true);
+                        } else {
+                            _ = inner_arch_iter.nextWithoutMarkingChange();
+                        }
+                    }
                 }
             }
             @panic("no tuple found");
@@ -257,13 +328,18 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
                 if (self.current_iter == null) {
                     return null;
                 }
-                if (self.current_iter.?.next()) |tuple| {
+                if (self.current_iter.?.next()) |iter_result| {
+                    _, const tuple = iter_result;
                     return tuple;
                 }
                 // if nothing is returned from the current iter
                 if (self.nextArchetypeIterator()) |iterator| {
                     self.current_iter = iterator;
-                    return self.current_iter.?.next();
+                    if (self.current_iter.?.next()) |iter_result| {
+                        _, const tuple = iter_result;
+                        return tuple;
+                    }
+                    return null;
                 }
                 return null;
             }
