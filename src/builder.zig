@@ -17,9 +17,10 @@ const app_events = @import("app_events.zig");
 const ComponentConfig = @import("components.zig").ComponentConfig;
 
 pub const AppContextBuilder = struct {
+    const ConfigOverride = struct { type, ComponentConfig };
     bundle_builder: BundleContext.Builder = BundleContext.Builder.init(),
     entity: type = EntityTypeFactory(.medium),
-    config_overrides: []const struct { type, ComponentConfig } = &.{},
+    config_overrides: []const ConfigOverride = &.{},
     pub fn init() @This() {
         return .{};
     }
@@ -49,7 +50,7 @@ pub const AppContextBuilder = struct {
     /// results in a compile error if the component was never added.
     pub fn overrideComponentConfig(self: @This(), comptime Component: type, comptime config: ComponentConfig) @This() {
         var new = self;
-        new.config_overrides = new.config_overrides ++ .{.{ Component, config }};
+        new.config_overrides = new.config_overrides ++ .{ConfigOverride{ Component, config }};
         return new;
     }
     pub fn addComponents(self: @This(), Components: []const type) @This() {
@@ -83,24 +84,30 @@ pub const AppContextBuilder = struct {
         return new;
     }
     pub fn build(self: @This()) type {
-        var context: BundleContext = comptime self.bundle_builder.build(self.entity);
-        for (self.config_overrides) |override| {
-            const Component, const config = override;
-            if (std.mem.indexOfScalar(type, context.ComponentTypes, Component)) |idx| {
-                context.ComponentConfigs[idx] = config;
-            } else {
-                @compileError("Component config override not possible:" ++
-                    "component was never added!" ++
-                    "Use `addComponentWithConfig` instead of `overrideComponentConfig`");
+        comptime {
+            var context: BundleContext = self.bundle_builder.build(self.entity);
+            // Copy into a mutable local array so we can override individual entries
+            var configs: [context.ComponentConfigs.len]ComponentConfig =
+                context.ComponentConfigs[0..].*;
+            for (self.config_overrides) |override| {
+                const Component, const config = override;
+                if (std.mem.indexOfScalar(type, context.ComponentTypes, Component)) |idx| {
+                    configs[idx] = config;
+                } else {
+                    @compileError("Component config override not possible: " ++
+                        "component was never added!" ++
+                        "Use `addComponentWithConfig` instead of `overrideComponentConfig`");
+                }
             }
+            const final_configs = configs;
+            return app.AppContext(.{
+                .Events = EventsFactory(context.EventTypes ++ app_events.appEventsSlice),
+                .Resources = ResourcesFactory(context.ResourceTypes),
+                .Components = ComponentsFactory(context.ComponentTypes, &final_configs),
+                .Bundles = context.Bundles,
+                .Entity = self.entity,
+            });
         }
-        return app.AppContext(.{
-            .Events = EventsFactory(context.EventTypes ++ app_events.appEventsSlice),
-            .Resources = ResourcesFactory(context.ResourceTypes),
-            .Components = ComponentsFactory(context.ComponentTypes, context.ComponentConfigs),
-            .Bundles = context.Bundles,
-            .Entity = self.entity,
-        });
     }
 };
 
