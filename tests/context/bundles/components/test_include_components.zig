@@ -27,6 +27,7 @@ test "with given components and specific configs" {
             .track_metadata = .{
                 .added = false,
                 .changed = false,
+                .removed = true,
             },
         })
         .build(Entity);
@@ -37,6 +38,7 @@ test "with given components and specific configs" {
         .track_metadata = .{
             .added = false,
             .changed = false,
+            .removed = true,
         },
     }, Context.ComponentConfigs[component_index.?]);
 }
@@ -85,6 +87,7 @@ test "include multiple components individually with specific configs" {
             .track_metadata = .{
                 .added = false,
                 .changed = false,
+                .removed = false,
             },
         })
         .addComponentWithConfig(ComponentB, .{
@@ -92,6 +95,7 @@ test "include multiple components individually with specific configs" {
             .track_metadata = .{
                 .added = true,
                 .changed = false,
+                .removed = false,
             },
         })
         .addComponentWithConfig(ComponentC, .{
@@ -99,6 +103,7 @@ test "include multiple components individually with specific configs" {
             .track_metadata = .{
                 .added = false,
                 .changed = true,
+                .removed = false,
             },
         })
         .build(Entity);
@@ -116,6 +121,7 @@ test "include multiple components individually with specific configs" {
         .track_metadata = .{
             .added = false,
             .changed = false,
+            .removed = false,
         },
     }, Context.ComponentConfigs[component_a_index.?]);
 
@@ -124,6 +130,7 @@ test "include multiple components individually with specific configs" {
         .track_metadata = .{
             .added = true,
             .changed = false,
+            .removed = false,
         },
     }, Context.ComponentConfigs[component_b_index.?]);
 
@@ -132,6 +139,7 @@ test "include multiple components individually with specific configs" {
         .track_metadata = .{
             .added = false,
             .changed = true,
+            .removed = false,
         },
     }, Context.ComponentConfigs[component_c_index.?]);
 }
@@ -149,6 +157,7 @@ test "include components individually and at once" {
             .track_metadata = .{
                 .added = false,
                 .changed = true,
+                .removed = false,
             },
         })
         .build(Entity);
@@ -166,6 +175,7 @@ test "include components individually and at once" {
         .track_metadata = .{
             .added = false,
             .changed = true,
+            .removed = false,
         },
     }, Context.ComponentConfigs[component_c_index.?]);
 }

@@ -56,6 +56,7 @@ test "duplicated component/event/resource in different bundles and specific comp
         .track_metadata = .{
             .added = false,
             .changed = true,
+            .removed = false,
         },
     };
     const bundleA: eczinho.Bundle = .{
@@ -78,6 +79,7 @@ test "duplicated component/event/resource in different bundles and specific comp
                         .track_metadata = .{
                             .added = true,
                             .changed = false,
+                            .removed = false,
                         },
                     })
                     .addEvent(typeA)

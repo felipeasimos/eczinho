@@ -60,7 +60,13 @@ const Context = ecs.AppContextBuilder.init()
         Enemy,
         Paddle,
     })
-    .addComponent(Ball)
+    .addComponentWithConfig(Ball, .{
+        .storage_type = .Sparse,
+        .track_metadata = .{
+            .removed = true,
+            .added = true,
+        },
+    })
     .build();
 
 const Commands = Context.Commands;

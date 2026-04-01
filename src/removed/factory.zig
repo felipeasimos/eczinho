@@ -10,6 +10,10 @@ pub const RemovedOptions = struct {
 };
 
 pub fn Removed(comptime options: RemovedOptions) type {
+    if (!options.Components.hasRemovedMetadata(options.T)) {
+        @compileError("Component " ++ @typeName(options.T) ++ " is being queried for `removed` metadata, " ++
+            "which it doesn't have. Please include it in the component config");
+    }
     return struct {
         pub const Marker = Removed;
         pub const T = options.T;

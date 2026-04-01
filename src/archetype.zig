@@ -116,10 +116,11 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                     @memcpy(new_addr, old_addr);
                 }
             }
-            // removed components -> add to removed logs
+            // removed components with removed metadata -> add to removed logs
             {
                 var removed = old_dense_signature
-                    .difference(new_dense_signature);
+                    .difference(new_dense_signature)
+                    .applyRemovedMask();
                 var iter_removed = removed.iterator();
                 while (iter_removed.nextTypeId()) |tid| {
                     try removed_logs.addRemoved(tid, entt, current_tick);
@@ -288,8 +289,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                         .OptionalPointerMut => storage_address[0].get(CanonicalType, storage_address[1]),
                         .OptionalPointerConst => @ptrCast(storage_address[0].getConst(CanonicalType, storage_address[1])),
                     };
-                    // ZSTs don't change, so we can ignore this for ZSTs
-                    if (comptime mark_change) {
+                    if (comptime (mark_change and Components.hasChangedMetadata(CanonicalType))) {
                         if (comptime (access_type == .PointerMut)) {
                             const tid = Components.hash(CanonicalType);
                             storage_address[0].getChangedArray(tid)[storage_address[1]] = self.current_run;

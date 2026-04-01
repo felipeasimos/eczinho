@@ -180,7 +180,7 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
                             .OptionalPointerMut => self.world.sparse_sets.get(CanonicalType, entt),
                             .OptionalPointerConst => @ptrCast(self.world.sparse_sets.getConst(CanonicalType, entt)),
                         };
-                        if (comptime mark_change) {
+                        if (comptime (mark_change and Components.hasChangedMetadata(CanonicalType))) {
                             if (comptime (AccessType == .PointerMut)) {
                                 self.world.sparse_sets.getChanged(CanonicalType, entt).* = self.world.getTick();
                             } else if (comptime (AccessType == .OptionalPointerMut)) {

@@ -8,7 +8,11 @@ test "check if chunked component was just changed" {
     const NotChangedTicks = u31;
     const Context = eczinho.AppContextBuilder.init()
         .addComponent(ComponentA)
-        .addComponent(ComponentB)
+        .addComponentWithConfig(ComponentB, .{
+            .track_metadata = .{
+                .changed = true,
+            },
+        })
         .addResource(ChangedTicks)
         .addResource(NotChangedTicks)
         .build();
@@ -101,6 +105,7 @@ test "check if sparse component was just changed" {
             .track_metadata = .{
                 .added = false,
                 .changed = true,
+                .removed = false,
             },
         })
         .addComponentWithConfig(ComponentB, .{
@@ -108,6 +113,7 @@ test "check if sparse component was just changed" {
             .track_metadata = .{
                 .added = false,
                 .changed = true,
+                .removed = false,
             },
         })
         .addResource(ChangedTicks)

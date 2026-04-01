@@ -8,7 +8,14 @@ test "check if chunked component was just added" {
     const NotAddedTicks = u31;
     const Context = eczinho.AppContextBuilder.init()
         .addComponent(ComponentA)
-        .addComponent(ComponentB)
+        .addComponentWithConfig(ComponentB, .{
+            .storage_type = .Dense,
+            .track_metadata = .{
+                .added = true,
+                .changed = false,
+                .removed = false,
+            },
+        })
         .addResource(AddedTicks)
         .addResource(NotAddedTicks)
         .build();
@@ -100,6 +107,7 @@ test "check if sparse component was just added" {
             .track_metadata = .{
                 .added = true,
                 .changed = false,
+                .removed = false,
             },
         })
         .addComponentWithConfig(ComponentB, .{
@@ -107,6 +115,7 @@ test "check if sparse component was just added" {
             .track_metadata = .{
                 .added = true,
                 .changed = false,
+                .removed = false,
             },
         })
         .addResource(AddedTicks)
