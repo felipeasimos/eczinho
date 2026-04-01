@@ -34,23 +34,17 @@ fn initTypeId(comptime Types: []const type) type {
     );
 }
 
-pub fn TypeHasher(comptime RawTypes: []const type) type {
+pub fn TypeHasher(comptime Types: []const type) type {
     return struct {
-        // TODO: remove this code? This would cause confusion when dealing with type aliases
-        // but just using raw types leave bundles exposed to use repeated types and breaking component
-        // uniqueness
-        // remove repeated types
-        pub const Types = Types: {
-            var types: []const type = &.{};
-            for (RawTypes) |Type| {
-                if (std.mem.indexOfScalar(type, types, Type) == null) {
-                    types = types ++ .{Type};
+        // throw error for repeated types
+        // this should force everybody to use wrappers around their components
+        comptime {
+            for (Types, 0..) |Type, i| {
+                if (std.mem.indexOfScalar(type, Types[0..i], Type) != null) {
+                    @compileError("type '" ++ @typeName(Type) ++ "' was already registered");
                 }
             }
-            break :Types types;
-        };
-        // alternative to todo above
-        // pub const Types = RawTypes;
+        }
 
         /// enum that will be used to make typeIds (tid) typed
         /// EVERY tid should be TypeId

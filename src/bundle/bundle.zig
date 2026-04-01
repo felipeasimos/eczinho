@@ -247,4 +247,32 @@ pub const BundleContext = struct {
         }
         return context_without_duplicates;
     }
+    fn checkForDuplicates(self: @This()) @This() {
+        var context: BundleContext = .{
+            .Bundles = self.Bundles,
+        };
+        for (self.ComponentTypes, self.ComponentConfigs) |Component, config| {
+            if (std.mem.indexOfScalar(type, context.ComponentTypes, Component) == null) {
+                context.ComponentTypes = context.ComponentTypes ++ .{Component};
+                context.ComponentConfigs = context.ComponentConfigs ++ .{config};
+            } else {
+                @compileError("Component of type '" ++ @typeName(Component) ++ "' was already registred");
+            }
+        }
+        for (self.ResourceTypes) |Resource| {
+            if (std.mem.indexOfScalar(type, context.ResourceTypes, Resource) == null) {
+                context.ResourceTypes = context.ResourceTypes ++ .{Resource};
+            } else {
+                @compileError("Resource of type '" ++ @typeName(Resource) ++ "' was already registered");
+            }
+        }
+        for (self.EventTypes) |Event| {
+            if (std.mem.indexOfScalar(type, context.EventTypes, Event) == null) {
+                context.EventTypes = context.EventTypes ++ .{Event};
+            } else {
+                @compileError("Event of type '" ++ @typeName(Event) ++ "' was already registered");
+            }
+        }
+        return context;
+    }
 };
