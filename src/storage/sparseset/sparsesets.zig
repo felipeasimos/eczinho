@@ -94,7 +94,9 @@ pub fn SparseSets(comptime options: SparseSetsOptions) type {
             const sparse_set = self.getSparseSet(Component);
             std.debug.assert(sparse_set.contains(entt.index));
             _ = sparse_set.remove(entt.index);
-            try removed_logs.addRemoved(comptime Components.hash(Component), entt, current_tick);
+            if (comptime Components.hasRemovedMetadata(Component)) {
+                try removed_logs.addRemoved(comptime Components.hash(Component), entt, current_tick);
+            }
         }
         pub fn get(self: *@This(), comptime Component: type, entt: Entity) *Component {
             const sparse_set = self.getSparseSet(Component);

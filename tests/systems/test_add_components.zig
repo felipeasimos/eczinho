@@ -57,6 +57,7 @@ test "add dense chunked components in system without metadata" {
             .track_metadata = .{
                 .added = false,
                 .changed = false,
+                .removed = false,
             },
         })
         .addComponentWithConfig(typeA, .{
@@ -64,6 +65,7 @@ test "add dense chunked components in system without metadata" {
             .track_metadata = .{
                 .added = false,
                 .changed = false,
+                .removed = false,
             },
         })
         .build();
@@ -117,6 +119,7 @@ test "add sparse components in system without metadata" {
             .track_metadata = .{
                 .added = false,
                 .changed = false,
+                .removed = false,
             },
         })
         .addComponentWithConfig(typeA, .{
@@ -124,6 +127,7 @@ test "add sparse components in system without metadata" {
             .track_metadata = .{
                 .added = false,
                 .changed = false,
+                .removed = false,
             },
         })
         .build();
@@ -177,6 +181,7 @@ test "add dense chunked components in system with metadata" {
             .track_metadata = .{
                 .added = true,
                 .changed = true,
+                .removed = false,
             },
         })
         .addComponentWithConfig(typeA, .{
@@ -184,6 +189,7 @@ test "add dense chunked components in system with metadata" {
             .track_metadata = .{
                 .added = false,
                 .changed = false,
+                .removed = false,
             },
         })
         .build();

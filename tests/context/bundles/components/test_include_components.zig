@@ -27,6 +27,7 @@ test "with given components and specific configs" {
             .track_metadata = .{
                 .added = false,
                 .changed = false,
+                .removed = true,
             },
         })
         .build(Entity);
@@ -85,6 +86,7 @@ test "include multiple components individually with specific configs" {
             .track_metadata = .{
                 .added = false,
                 .changed = false,
+                .removed = true,
             },
         })
         .addComponentWithConfig(ComponentB, .{
@@ -92,6 +94,7 @@ test "include multiple components individually with specific configs" {
             .track_metadata = .{
                 .added = true,
                 .changed = false,
+                .removed = true,
             },
         })
         .addComponentWithConfig(ComponentC, .{
@@ -99,6 +102,7 @@ test "include multiple components individually with specific configs" {
             .track_metadata = .{
                 .added = false,
                 .changed = true,
+                .removed = true,
             },
         })
         .build(Entity);
@@ -149,6 +153,7 @@ test "include components individually and at once" {
             .track_metadata = .{
                 .added = false,
                 .changed = true,
+                .removed = true,
             },
         })
         .build(Entity);

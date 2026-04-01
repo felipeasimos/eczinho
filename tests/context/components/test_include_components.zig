@@ -24,6 +24,7 @@ test "with given components with specific configs" {
             .track_metadata = .{
                 .added = false,
                 .changed = false,
+                .removed = false,
             },
         })
         .build();
@@ -32,6 +33,7 @@ test "with given components with specific configs" {
         .track_metadata = .{
             .added = false,
             .changed = false,
+            .removed = false,
         },
     }, Context.Components.getConfig(ComponentA));
 }
@@ -73,6 +75,7 @@ test "include multiple components individually with specific configs" {
             .track_metadata = .{
                 .added = false,
                 .changed = false,
+                .removed = false,
             },
         })
         .addComponentWithConfig(ComponentB, .{
@@ -80,6 +83,7 @@ test "include multiple components individually with specific configs" {
             .track_metadata = .{
                 .added = false,
                 .changed = false,
+                .removed = false,
             },
         })
         .addComponentWithConfig(ComponentC, .{
@@ -87,6 +91,7 @@ test "include multiple components individually with specific configs" {
             .track_metadata = .{
                 .added = false,
                 .changed = false,
+                .removed = false,
             },
         })
         .build();
@@ -95,6 +100,7 @@ test "include multiple components individually with specific configs" {
         .track_metadata = .{
             .added = false,
             .changed = false,
+            .removed = false,
         },
     }, Context.Components.getConfig(ComponentA));
     try std.testing.expectEqual(eczinho.ComponentConfig{
@@ -102,6 +108,7 @@ test "include multiple components individually with specific configs" {
         .track_metadata = .{
             .added = false,
             .changed = false,
+            .removed = false,
         },
     }, Context.Components.getConfig(ComponentB));
     try std.testing.expectEqual(eczinho.ComponentConfig{
@@ -109,6 +116,7 @@ test "include multiple components individually with specific configs" {
         .track_metadata = .{
             .added = false,
             .changed = false,
+            .removed = false,
         },
     }, Context.Components.getConfig(ComponentC));
     try std.testing.expectEqual(3, Context.Components.Len);
@@ -125,6 +133,7 @@ test "include components individually and at once, with specific configs" {
             .track_metadata = .{
                 .added = false,
                 .changed = false,
+                .removed = false,
             },
         })
         .build();
@@ -135,6 +144,7 @@ test "include components individually and at once, with specific configs" {
         .track_metadata = .{
             .added = false,
             .changed = false,
+            .removed = false,
         },
     }, Context.Components.getConfig(ComponentC));
 }

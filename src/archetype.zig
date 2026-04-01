@@ -116,10 +116,11 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                     @memcpy(new_addr, old_addr);
                 }
             }
-            // removed components -> add to removed logs
+            // removed components with removed metadata -> add to removed logs
             {
                 var removed = old_dense_signature
-                    .difference(new_dense_signature);
+                    .difference(new_dense_signature)
+                    .applyRemovedMask();
                 var iter_removed = removed.iterator();
                 while (iter_removed.nextTypeId()) |tid| {
                     try removed_logs.addRemoved(tid, entt, current_tick);

@@ -38,7 +38,7 @@ zig build --build-file examples/pong/build.zig
    * set a default (for example, Table storage) and define a list of dense signatures that would use another
 - [ ] adding/removing sparse components doesn't move dense components
    * changes entity's archetype (with proper signature), but the archetype data will be pointing to the same data
-- [ ] opt-in addition / removal / changed tracking for certain components (bevy currently doesn't have)
+- [x] opt-in addition / removal / changed tracking for certain components (bevy currently doesn't have)
    * don't pay for what you don't use!
    * don't worry about it being off by default! Queries that use metadata for components without it will show a helpful compile error message to remind you!
       * always off for the "changed" metadata for ZSTs

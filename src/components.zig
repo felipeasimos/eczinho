@@ -16,6 +16,7 @@ pub const ComponentConfig = struct {
         // the context builders set this to false for ZSTs by default
         // (so only worry about it if you set it explicitly)
         changed: bool = true,
+        removed: bool = true,
     } = .{},
 };
 
@@ -99,6 +100,17 @@ pub fn Components(comptime ComponentTypes: []const type, comptime Configs: []con
             }
             break :ChangedMetadataMask sig;
         };
+        pub const RemovedMetadataMask = RemovedMetadataMask: {
+            var sig: @This() = .{
+                .bitset = BitSet.initEmpty(),
+            };
+            for (ComponentTypes) |Type| {
+                if (getConfig(Type).track_metadata.removed) {
+                    sig.add(Type);
+                }
+            }
+            break :RemovedMetadataMask sig;
+        };
 
         pub const DenseOccupiesSpaceComponents: @This() = initFull().applyStorageTypeMask(.Dense).applyOccupiesSpaceMask();
 
@@ -172,6 +184,9 @@ pub fn Components(comptime ComponentTypes: []const type, comptime Configs: []con
         }
         pub fn applyChangedMask(self: @This()) @This() {
             return self.intersection(comptime ChangedMetadataMask);
+        }
+        pub fn applyRemovedMask(self: @This()) @This() {
+            return self.intersection(comptime RemovedMetadataMask);
         }
         pub inline fn applyStorageTypeMask(self: @This(), storage_type: StorageType) @This() {
             return switch (storage_type) {
@@ -260,11 +275,15 @@ pub fn Components(comptime ComponentTypes: []const type, comptime Configs: []con
             return getConfig(tid_or_component).track_metadata.changed;
         }
 
+        pub inline fn hasRemovedMetadata(tid_or_component: anytype) bool {
+            return getConfig(tid_or_component).track_metadata.removed;
+        }
+
         pub inline fn getStorageType(tid_or_component: anytype) StorageType {
             return getConfig(tid_or_component).storage_type;
         }
 
-        pub fn getIndexInSet(self: *@This(), tid_or_component: anytype) usize {
+        pub fn getIndexInSet(self: @This(), tid_or_component: anytype) usize {
             const index = getIndex(tid_or_component);
             var only_left = self.bitset;
             only_left.setRangeValue(.{ .start = index, .end = ComponentTypes.len }, false);

@@ -100,6 +100,7 @@ test "check if sparse component was just added" {
             .track_metadata = .{
                 .added = true,
                 .changed = false,
+                .removed = false,
             },
         })
         .addComponentWithConfig(ComponentB, .{
@@ -107,6 +108,7 @@ test "check if sparse component was just added" {
             .track_metadata = .{
                 .added = true,
                 .changed = false,
+                .removed = false,
             },
         })
         .addResource(AddedTicks)
