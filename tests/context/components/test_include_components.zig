@@ -153,19 +153,22 @@ test "override config of component that was just added" {
     const ComponentA = struct { a: f32 };
     const Context = comptime eczinho.AppContextBuilder.init()
         .addComponent(ComponentA)
-        .overrideComponentConfig(ComponentA, .{
+        .overrideComponentConfig(ComponentA, eczinho.ComponentConfig{
             .storage_type = .Sparse,
             .track_metadata = .{
                 .added = false,
                 .changed = false,
+                .removed = false,
             },
         })
         .build();
+
     try std.testing.expectEqual(eczinho.ComponentConfig{
         .storage_type = .Sparse,
         .track_metadata = .{
             .added = false,
             .changed = false,
+            .removed = false,
         },
     }, Context.Components.getConfig(ComponentA));
     try std.testing.expectEqual(1, Context.Components.ComponentConfigs.len);

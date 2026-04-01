@@ -289,8 +289,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                         .OptionalPointerMut => storage_address[0].get(CanonicalType, storage_address[1]),
                         .OptionalPointerConst => @ptrCast(storage_address[0].getConst(CanonicalType, storage_address[1])),
                     };
-                    // ZSTs don't change, so we can ignore this for ZSTs
-                    if (comptime mark_change) {
+                    if (comptime (mark_change and Components.hasChangedMetadata(CanonicalType))) {
                         if (comptime (access_type == .PointerMut)) {
                             const tid = Components.hash(CanonicalType);
                             storage_address[0].getChangedArray(tid)[storage_address[1]] = self.current_run;

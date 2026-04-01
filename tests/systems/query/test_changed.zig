@@ -8,7 +8,11 @@ test "check if chunked component was just changed" {
     const NotChangedTicks = u31;
     const Context = eczinho.AppContextBuilder.init()
         .addComponent(ComponentA)
-        .addComponent(ComponentB)
+        .addComponentWithConfig(ComponentB, .{
+            .track_metadata = .{
+                .changed = true,
+            },
+        })
         .addResource(ChangedTicks)
         .addResource(NotChangedTicks)
         .build();

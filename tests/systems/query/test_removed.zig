@@ -8,7 +8,14 @@ test "check if chunked component was just removed" {
     const NotRemovedTicks = u31;
     const Context = eczinho.AppContextBuilder.init()
         .addComponent(ComponentA)
-        .addComponent(ComponentB)
+        .addComponentWithConfig(ComponentB, .{
+            .storage_type = .Dense,
+            .track_metadata = .{
+                .added = false,
+                .changed = false,
+                .removed = true,
+            },
+        })
         .addResource(RemovedTicks)
         .addResource(NotRemovedTicks)
         .build();

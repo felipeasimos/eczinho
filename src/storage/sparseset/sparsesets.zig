@@ -29,11 +29,11 @@ fn CreateComponentArraysTupleType(
 }
 
 pub fn SparseSets(comptime options: SparseSetsOptions) type {
-    const sparse_components = options.Components
+    const SparseComponents = options.Components
         .initFull()
         .applyStorageTypeMask(.Sparse);
-    const ComponentArrays = CreateComponentArraysTupleType(options, sparse_components);
-    const ComponentArraysLen = @typeInfo(ComponentArrays).@"struct".fields.len;
+    const ComponentArraysLen = SparseComponents.len();
+    const ComponentArrays = CreateComponentArraysTupleType(options, SparseComponents);
 
     const EmptySets = EmptySets: {
         // SAFETY: filled immediatly after
@@ -57,15 +57,7 @@ pub fn SparseSets(comptime options: SparseSetsOptions) type {
         }
 
         fn getSparseSetIndex(comptime Component: type) usize {
-            for (0..ComponentArraysLen) |i| {
-                const TupleType = @typeInfo(ComponentArrays).@"struct".fields[i].type;
-                for (TupleType.Vs) |V| {
-                    if (V.T == Component and std.mem.eql(u8, V.name, "data")) {
-                        return i;
-                    }
-                }
-            }
-            @compileError("Shouldn't reach this code line during comptime: Component is not sparse");
+            return SparseComponents.getIndexInSet(Component);
         }
         fn GetSparseSetResultType(comptime Component: type) type {
             const index = getSparseSetIndex(Component);
