@@ -67,7 +67,7 @@ pub fn RemovedComponentsLog(comptime options: RemovedComponentsLogOptions) type 
 }
 
 test RemovedComponentsLog {
-    const Entity = @import("../entity.zig").EntityTypeFactory(.medium);
+    const Entity = @import("../entity/entity.zig").EntityTypeFactory(.medium);
     const Components = @import("../components.zig").Components(&.{ u64, u32 });
     var removed = RemovedComponentsLog(.{ .Components = Components, .Entity = Entity }).init(std.testing.allocator);
     defer removed.deinit();

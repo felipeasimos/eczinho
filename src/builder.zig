@@ -2,11 +2,11 @@
 const std = @import("std");
 const System = @import("system.zig").System;
 const StageLabel = @import("stage_label.zig").StageLabel;
-const EntityOptions = @import("entity.zig").EntityOptions;
-const EntityTypeFactory = @import("entity.zig").EntityTypeFactory;
+const EntityOptions = @import("entity/entity.zig").EntityOptions;
+const EntityTypeFactory = @import("entity/entity.zig").EntityTypeFactory;
 const ComponentsFactory = @import("components.zig").Components;
 const ResourcesFactory = @import("resource/resources.zig").Resources;
-const RegistryFactory = @import("registry.zig").Registry;
+const WorldFactory = @import("world.zig").World;
 const TypeStoreFactory = @import("resource/type_store.zig").TypeStore;
 const EventStoreFactory = @import("event/event_store.zig").EventStore;
 const EventsFactory = @import("event/events.zig").Events;
@@ -14,10 +14,13 @@ const BundleContext = @import("bundle/bundle.zig").BundleContext;
 const Bundle = @import("bundle/bundle.zig").Bundle;
 const app = @import("app.zig");
 const app_events = @import("app_events.zig");
+const ComponentConfig = @import("components.zig").ComponentConfig;
 
 pub const AppContextBuilder = struct {
+    const ConfigOverride = struct { type, ComponentConfig };
     bundle_builder: BundleContext.Builder = BundleContext.Builder.init(),
     entity: type = EntityTypeFactory(.medium),
+    config_overrides: []const ConfigOverride = &.{},
     pub fn init() @This() {
         return .{};
     }
@@ -34,6 +37,20 @@ pub const AppContextBuilder = struct {
     pub fn addComponent(self: @This(), Component: type) @This() {
         var new = self;
         new.bundle_builder = new.bundle_builder.addComponent(Component);
+        return new;
+    }
+    pub fn addComponentWithConfig(self: @This(), Component: type, config: ComponentConfig) @This() {
+        var new = self;
+        new.bundle_builder = new.bundle_builder.addComponentWithConfig(Component, config);
+        return new;
+    }
+    /// Override a component's config.
+    /// This is available only when building AppContext, not BundleContext intentionally, to avoid bundles
+    /// overriding each other.
+    /// results in a compile error if the component was never added.
+    pub fn overrideComponentConfig(self: @This(), comptime Component: type, comptime config: ComponentConfig) @This() {
+        var new = self;
+        new.config_overrides = new.config_overrides ++ .{ConfigOverride{ Component, config }};
         return new;
     }
     pub fn addComponents(self: @This(), Components: []const type) @This() {
@@ -67,11 +84,25 @@ pub const AppContextBuilder = struct {
         return new;
     }
     pub fn build(self: @This()) type {
-        const context: BundleContext = comptime self.bundle_builder.build(self.entity);
+        var context: BundleContext = self.bundle_builder.build(self.entity);
+        // Copy into a mutable array so we can override individual entries
+        var configs: [context.ComponentConfigs.len]ComponentConfig =
+            context.ComponentConfigs[0..].*;
+        for (self.config_overrides) |override| {
+            const Component, const config = override;
+            if (std.mem.indexOfScalar(type, context.ComponentTypes, Component)) |idx| {
+                configs[idx] = config;
+            } else {
+                @compileError("Component config override not possible: " ++
+                    "component was never added! " ++
+                    "Use `addComponentWithConfig` instead of `overrideComponentConfig`");
+            }
+        }
+        const final_configs = configs;
         return app.AppContext(.{
             .Events = EventsFactory(context.EventTypes ++ app_events.appEventsSlice),
             .Resources = ResourcesFactory(context.ResourceTypes),
-            .Components = ComponentsFactory(context.ComponentTypes),
+            .Components = ComponentsFactory(context.ComponentTypes, &final_configs),
             .Bundles = context.Bundles,
             .Entity = self.entity,
         });
@@ -115,7 +146,7 @@ pub const AppBuilder = struct {
         return new;
     }
     pub fn build(comptime self: @This(), allocator: std.mem.Allocator, io: std.Io) app.App(self.options) {
-        const Registry = RegistryFactory(.{
+        const World = WorldFactory(.{
             .Components = self.options.Context.Components,
             .Entity = self.options.Context.Entity,
         });
@@ -127,7 +158,7 @@ pub const AppBuilder = struct {
         });
         return app.App(self.options){
             .allocator = allocator,
-            .registry = Registry.init(allocator),
+            .world = World.init(allocator),
             .resource_store = TypeStore.init(),
             .event_store = EventStore.init(allocator),
             .scheduler = null,

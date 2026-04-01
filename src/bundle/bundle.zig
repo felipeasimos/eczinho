@@ -1,6 +1,7 @@
 // zlint-disable case-convention
 const std = @import("std");
 const StageLabel = @import("../stage_label.zig").StageLabel;
+const ComponentConfig = @import("../components.zig").ComponentConfig;
 
 pub const Bundle = struct {
     ContextConstructor: fn (comptime Entity: type) BundleContext = (struct {
@@ -92,12 +93,14 @@ pub const Bundle = struct {
 
 pub const BundleContext = struct {
     ComponentTypes: []const type = &.{},
+    ComponentConfigs: []const ComponentConfig = &.{},
     ResourceTypes: []const type = &.{},
     EventTypes: []const type = &.{},
     Bundles: []const Bundle = &.{},
 
     pub const Builder = struct {
         components: []const type = &.{},
+        component_configs: []const ComponentConfig = &.{},
         resources: []const type = &.{},
         events: []const type = &.{},
         bundles: []const Bundle = &.{},
@@ -116,9 +119,20 @@ pub const BundleContext = struct {
             }
             return new;
         }
-        pub fn addComponent(self: @This(), Component: type) @This() {
+        pub fn addComponent(self: @This(), comptime Component: type) @This() {
             var new = self;
             new.components = new.components ++ .{Component};
+            var default_config = ComponentConfig{};
+            if (@sizeOf(Component) == 0) {
+                default_config.track_metadata.changed = false;
+            }
+            new.component_configs = new.component_configs ++ .{default_config};
+            return new;
+        }
+        pub fn addComponentWithConfig(self: @This(), comptime Component: type, comptime config: ComponentConfig) @This() {
+            var new = self;
+            new.components = new.components ++ .{Component};
+            new.component_configs = new.component_configs ++ .{config};
             return new;
         }
         pub fn addComponents(self: @This(), ComponentTypes: []const type) @This() {
@@ -152,14 +166,27 @@ pub const BundleContext = struct {
             }
             return new;
         }
+
         pub fn build(self: @This(), comptime Entity: type) BundleContext {
+            var final_components: []const type = &.{};
+            var final_configs: []const ComponentConfig = &.{};
+
+            for (self.components, self.component_configs) |Component, config| {
+                if (std.mem.indexOfScalar(type, final_components, Component) == null) {
+                    final_components = final_components ++ .{Component};
+                    final_configs = final_configs ++ .{config};
+                }
+            }
             var context = BundleContext{
-                .ComponentTypes = self.components,
+                .ComponentTypes = final_components,
+                .ComponentConfigs = final_configs,
                 .ResourceTypes = self.resources,
                 .EventTypes = self.events,
                 .Bundles = self.bundles,
             };
-            return context.mergeWithBundles(Entity);
+            const result = context.mergeWithBundles(Entity).removeDuplicates();
+
+            return result;
         }
     };
 
@@ -175,7 +202,7 @@ pub const BundleContext = struct {
             return &.{};
         }
         var final_bundles: []const Bundle = current_bundles;
-        // first attach first-level bundles to this one
+        // attach first-level bundles to this one
         for (additional_bundles) |bundle| {
             if (!Bundle.containsBundle(final_bundles, bundle)) {
                 final_bundles = final_bundles ++ .{bundle};
@@ -187,20 +214,65 @@ pub const BundleContext = struct {
     }
     fn mergeWithBundles(self: @This(), comptime Entity: type) @This() {
         const bundles = getCompleteListOfBundles(&.{}, self.Bundles, Entity);
-        var final_components: []const type = self.ComponentTypes;
-        var final_resources: []const type = self.ResourceTypes;
-        var final_events: []const type = self.EventTypes;
+        var merged_context = self;
+        merged_context.Bundles = bundles;
         for (bundles) |bundle| {
             const bundle_context = bundle.ContextConstructor(Entity);
-            final_components = final_components ++ bundle_context.ComponentTypes;
-            final_resources = final_resources ++ bundle_context.ResourceTypes;
-            final_events = final_events ++ bundle_context.EventTypes;
+            merged_context.ComponentTypes = merged_context.ComponentTypes ++ bundle_context.ComponentTypes;
+            merged_context.ComponentConfigs = merged_context.ComponentConfigs ++ bundle_context.ComponentConfigs;
+            merged_context.ResourceTypes = merged_context.ResourceTypes ++ bundle_context.ResourceTypes;
+            merged_context.EventTypes = merged_context.EventTypes ++ bundle_context.EventTypes;
         }
-        return .{
-            .ComponentTypes = final_components,
-            .ResourceTypes = final_resources,
-            .EventTypes = final_events,
-            .Bundles = bundles,
+        return merged_context;
+    }
+    fn removeDuplicates(self: @This()) @This() {
+        var context_without_duplicates: BundleContext = .{
+            .Bundles = self.Bundles,
         };
+        for (self.ComponentTypes, self.ComponentConfigs) |Component, config| {
+            if (std.mem.indexOfScalar(type, context_without_duplicates.ComponentTypes, Component) == null) {
+                context_without_duplicates.ComponentTypes = context_without_duplicates.ComponentTypes ++ .{Component};
+                context_without_duplicates.ComponentConfigs = context_without_duplicates.ComponentConfigs ++ .{config};
+            }
+        }
+        for (self.ResourceTypes) |Resource| {
+            if (std.mem.indexOfScalar(type, context_without_duplicates.ResourceTypes, Resource) == null) {
+                context_without_duplicates.ResourceTypes = context_without_duplicates.ResourceTypes ++ .{Resource};
+            }
+        }
+        for (self.EventTypes) |Event| {
+            if (std.mem.indexOfScalar(type, context_without_duplicates.EventTypes, Event) == null) {
+                context_without_duplicates.EventTypes = context_without_duplicates.EventTypes ++ .{Event};
+            }
+        }
+        return context_without_duplicates;
+    }
+    fn checkForDuplicates(self: @This()) @This() {
+        var context: BundleContext = .{
+            .Bundles = self.Bundles,
+        };
+        for (self.ComponentTypes, self.ComponentConfigs) |Component, config| {
+            if (std.mem.indexOfScalar(type, context.ComponentTypes, Component) == null) {
+                context.ComponentTypes = context.ComponentTypes ++ .{Component};
+                context.ComponentConfigs = context.ComponentConfigs ++ .{config};
+            } else {
+                @compileError("Component of type '" ++ @typeName(Component) ++ "' was already registred");
+            }
+        }
+        for (self.ResourceTypes) |Resource| {
+            if (std.mem.indexOfScalar(type, context.ResourceTypes, Resource) == null) {
+                context.ResourceTypes = context.ResourceTypes ++ .{Resource};
+            } else {
+                @compileError("Resource of type '" ++ @typeName(Resource) ++ "' was already registered");
+            }
+        }
+        for (self.EventTypes) |Event| {
+            if (std.mem.indexOfScalar(type, context.EventTypes, Event) == null) {
+                context.EventTypes = context.EventTypes ++ .{Event};
+            } else {
+                @compileError("Event of type '" ++ @typeName(Event) ++ "' was already registered");
+            }
+        }
+        return context;
     }
 };

@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const RegistryFactory = @import("registry.zig").Registry;
+const WorldFactory = @import("world.zig").World;
 const TypeStoreFactory = @import("resource/type_store.zig").TypeStore;
 const EventStoreFactory = @import("event/event_store.zig").EventStore;
 const RemovedLogFactory = @import("removed/removed_log.zig").RemovedComponentsLog;
@@ -20,7 +20,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
         pub const Resources = Context.Resources;
         pub const Events = Context.Events;
 
-        pub const Registry = RegistryFactory(.{
+        pub const World = WorldFactory(.{
             .Components = Components,
             .Entity = Entity,
         });
@@ -109,7 +109,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
         }
 
         const Dependencies = struct {
-            registry: *Registry,
+            world: *World,
             type_store: *TypeStore,
             event_store: *EventStore,
             system_data: *SystemData,
@@ -127,11 +127,11 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             inline for (InitParams, 0..) |param, i| {
                 args[i] = switch (comptime param.type.?) {
                     *TypeStore => deps.type_store,
-                    *Registry => deps.registry,
+                    *World => deps.world,
                     *EventStore => deps.event_store,
                     *SystemData => deps.system_data,
                     *RemovedLog => deps.removed_logs,
-                    *CommandsQueue => try deps.registry.createQueue(),
+                    *CommandsQueue => try deps.world.createQueue(),
                     ParameterData => ParameterData{
                         .global_index = i,
                         .type_index = numOfType(InitParams[0..i], param.type.?),
