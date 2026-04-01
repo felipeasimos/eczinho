@@ -14,6 +14,7 @@ pub const ComponentConfig = struct {
         added: bool = true,
         // setting this to true for ZSTs will result in a compile error
         // the context builders set this to false for ZSTs by default
+        // (so only worry about it if you set it explicitly)
         changed: bool = true,
     } = .{},
 };

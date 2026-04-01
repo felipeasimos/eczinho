@@ -158,4 +158,5 @@ test "override config of component that was just added" {
             .changed = false,
         },
     }, Context.Components.getConfig(ComponentA));
+    try std.testing.expectEqual(1, Context.Components.ComponentConfigs.len);
 }

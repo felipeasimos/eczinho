@@ -166,12 +166,14 @@ pub const BundleContext = struct {
             }
             return new;
         }
+
         pub fn build(self: @This(), comptime Entity: type) BundleContext {
             var final_components: []const type = &.{};
             var final_configs: []const ComponentConfig = &.{};
-            for (self.components, self.component_configs) |component, config| {
-                if (std.mem.indexOfScalar(type, final_components, component) == null) {
-                    final_components = final_components ++ .{component};
+
+            for (self.components, self.component_configs) |Component, config| {
+                if (std.mem.indexOfScalar(type, final_components, Component) == null) {
+                    final_components = final_components ++ .{Component};
                     final_configs = final_configs ++ .{config};
                 }
             }
@@ -182,7 +184,9 @@ pub const BundleContext = struct {
                 .EventTypes = self.events,
                 .Bundles = self.bundles,
             };
-            return context.mergeWithBundles(Entity);
+            const result = context.mergeWithBundles(Entity).removeDuplicates();
+
+            return result;
         }
     };
 
@@ -198,7 +202,7 @@ pub const BundleContext = struct {
             return &.{};
         }
         var final_bundles: []const Bundle = current_bundles;
-        // first attach first-level bundles to this one
+        // attach first-level bundles to this one
         for (additional_bundles) |bundle| {
             if (!Bundle.containsBundle(final_bundles, bundle)) {
                 final_bundles = final_bundles ++ .{bundle};
@@ -210,23 +214,37 @@ pub const BundleContext = struct {
     }
     fn mergeWithBundles(self: @This(), comptime Entity: type) @This() {
         const bundles = getCompleteListOfBundles(&.{}, self.Bundles, Entity);
-        var final_components: []const type = self.ComponentTypes;
-        var final_component_configs: []const ComponentConfig = self.ComponentConfigs;
-        var final_resources: []const type = self.ResourceTypes;
-        var final_events: []const type = self.EventTypes;
+        var merged_context = self;
+        merged_context.Bundles = bundles;
         for (bundles) |bundle| {
             const bundle_context = bundle.ContextConstructor(Entity);
-            final_components = final_components ++ bundle_context.ComponentTypes;
-            final_component_configs = final_component_configs ++ bundle_context.ComponentConfigs;
-            final_resources = final_resources ++ bundle_context.ResourceTypes;
-            final_events = final_events ++ bundle_context.EventTypes;
+            merged_context.ComponentTypes = merged_context.ComponentTypes ++ bundle_context.ComponentTypes;
+            merged_context.ComponentConfigs = merged_context.ComponentConfigs ++ bundle_context.ComponentConfigs;
+            merged_context.ResourceTypes = merged_context.ResourceTypes ++ bundle_context.ResourceTypes;
+            merged_context.EventTypes = merged_context.EventTypes ++ bundle_context.EventTypes;
         }
-        return .{
-            .ComponentTypes = final_components,
-            .ComponentConfigs = final_component_configs,
-            .ResourceTypes = final_resources,
-            .EventTypes = final_events,
-            .Bundles = bundles,
+        return merged_context;
+    }
+    fn removeDuplicates(self: @This()) @This() {
+        var context_without_duplicates: BundleContext = .{
+            .Bundles = self.Bundles,
         };
+        for (self.ComponentTypes, self.ComponentConfigs) |Component, config| {
+            if (std.mem.indexOfScalar(type, context_without_duplicates.ComponentTypes, Component) == null) {
+                context_without_duplicates.ComponentTypes = context_without_duplicates.ComponentTypes ++ .{Component};
+                context_without_duplicates.ComponentConfigs = context_without_duplicates.ComponentConfigs ++ .{config};
+            }
+        }
+        for (self.ResourceTypes) |Resource| {
+            if (std.mem.indexOfScalar(type, context_without_duplicates.ResourceTypes, Resource) == null) {
+                context_without_duplicates.ResourceTypes = context_without_duplicates.ResourceTypes ++ .{Resource};
+            }
+        }
+        for (self.EventTypes) |Event| {
+            if (std.mem.indexOfScalar(type, context_without_duplicates.EventTypes, Event) == null) {
+                context_without_duplicates.EventTypes = context_without_duplicates.EventTypes ++ .{Event};
+            }
+        }
+        return context_without_duplicates;
     }
 };

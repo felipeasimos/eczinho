@@ -84,30 +84,28 @@ pub const AppContextBuilder = struct {
         return new;
     }
     pub fn build(self: @This()) type {
-        comptime {
-            var context: BundleContext = self.bundle_builder.build(self.entity);
-            // Copy into a mutable local array so we can override individual entries
-            var configs: [context.ComponentConfigs.len]ComponentConfig =
-                context.ComponentConfigs[0..].*;
-            for (self.config_overrides) |override| {
-                const Component, const config = override;
-                if (std.mem.indexOfScalar(type, context.ComponentTypes, Component)) |idx| {
-                    configs[idx] = config;
-                } else {
-                    @compileError("Component config override not possible: " ++
-                        "component was never added!" ++
-                        "Use `addComponentWithConfig` instead of `overrideComponentConfig`");
-                }
+        var context: BundleContext = self.bundle_builder.build(self.entity);
+        // Copy into a mutable array so we can override individual entries
+        var configs: [context.ComponentConfigs.len]ComponentConfig =
+            context.ComponentConfigs[0..].*;
+        for (self.config_overrides) |override| {
+            const Component, const config = override;
+            if (std.mem.indexOfScalar(type, context.ComponentTypes, Component)) |idx| {
+                configs[idx] = config;
+            } else {
+                @compileError("Component config override not possible: " ++
+                    "component was never added! " ++
+                    "Use `addComponentWithConfig` instead of `overrideComponentConfig`");
             }
-            const final_configs = configs;
-            return app.AppContext(.{
-                .Events = EventsFactory(context.EventTypes ++ app_events.appEventsSlice),
-                .Resources = ResourcesFactory(context.ResourceTypes),
-                .Components = ComponentsFactory(context.ComponentTypes, &final_configs),
-                .Bundles = context.Bundles,
-                .Entity = self.entity,
-            });
         }
+        const final_configs = configs;
+        return app.AppContext(.{
+            .Events = EventsFactory(context.EventTypes ++ app_events.appEventsSlice),
+            .Resources = ResourcesFactory(context.ResourceTypes),
+            .Components = ComponentsFactory(context.ComponentTypes, &final_configs),
+            .Bundles = context.Bundles,
+            .Entity = self.entity,
+        });
     }
 };
 
