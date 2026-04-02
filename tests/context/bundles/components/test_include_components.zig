@@ -3,24 +3,21 @@ const std = @import("std");
 
 test "without non included components" {
     const ComponentA = struct { a: f32 };
-    const Entity = eczinho.entity.EntityTypeFactory(.medium);
     const Context = comptime eczinho.BundleContext.Builder.init()
-        .build(Entity);
+        .build();
     try std.testing.expect(comptime std.mem.indexOfScalar(type, Context.ComponentTypes, ComponentA) == null);
 }
 
 test "with given components" {
     const ComponentA = struct { a: f32 };
-    const Entity = eczinho.entity.EntityTypeFactory(.medium);
     const Context = comptime eczinho.BundleContext.Builder.init()
         .addComponent(ComponentA)
-        .build(Entity);
+        .build();
     try std.testing.expect(comptime std.mem.indexOfScalar(type, Context.ComponentTypes, ComponentA) != null);
 }
 
 test "with given components and specific configs" {
     const ComponentA = struct { a: f32 };
-    const Entity = eczinho.entity.EntityTypeFactory(.medium);
     const Context = comptime eczinho.BundleContext.Builder.init()
         .addComponentWithConfig(ComponentA, .{
             .storage_type = .Sparse,
@@ -30,7 +27,7 @@ test "with given components and specific configs" {
                 .removed = true,
             },
         })
-        .build(Entity);
+        .build();
     const component_index = comptime std.mem.indexOfScalar(type, Context.ComponentTypes, ComponentA);
     try std.testing.expect(component_index != null);
     try std.testing.expectEqual(eczinho.ComponentConfig{
@@ -48,10 +45,9 @@ test "include multiple components at once" {
     const ComponentB = struct { a: u31 };
     const ComponentC = struct { a: u30 };
 
-    const Entity = eczinho.entity.EntityTypeFactory(.medium);
     const Context = comptime eczinho.BundleContext.Builder.init()
         .addComponents(&.{ ComponentA, ComponentB, ComponentC })
-        .build(Entity);
+        .build();
 
     try std.testing.expect(comptime std.mem.indexOfScalar(type, Context.ComponentTypes, ComponentA) != null);
     try std.testing.expect(comptime std.mem.indexOfScalar(type, Context.ComponentTypes, ComponentB) != null);
@@ -63,12 +59,11 @@ test "include multiple components individually" {
     const ComponentB = struct { a: u31 };
     const ComponentC = struct { a: u30 };
 
-    const Entity = eczinho.entity.EntityTypeFactory(.medium);
     const Context = comptime eczinho.BundleContext.Builder.init()
         .addComponent(ComponentA)
         .addComponent(ComponentB)
         .addComponent(ComponentC)
-        .build(Entity);
+        .build();
 
     try std.testing.expect(comptime std.mem.indexOfScalar(type, Context.ComponentTypes, ComponentA) != null);
     try std.testing.expect(comptime std.mem.indexOfScalar(type, Context.ComponentTypes, ComponentB) != null);
@@ -80,7 +75,6 @@ test "include multiple components individually with specific configs" {
     const ComponentB = struct { a: u31 };
     const ComponentC = struct { a: u30 };
 
-    const Entity = eczinho.entity.EntityTypeFactory(.medium);
     const Context = comptime eczinho.BundleContext.Builder.init()
         .addComponentWithConfig(ComponentA, .{
             .storage_type = .Sparse,
@@ -106,7 +100,7 @@ test "include multiple components individually with specific configs" {
                 .removed = false,
             },
         })
-        .build(Entity);
+        .build();
 
     const component_a_index = comptime std.mem.indexOfScalar(type, Context.ComponentTypes, ComponentA);
     const component_b_index = comptime std.mem.indexOfScalar(type, Context.ComponentTypes, ComponentB);
@@ -149,7 +143,6 @@ test "include components individually and at once" {
     const ComponentB = struct { a: u31 };
     const ComponentC = struct { a: u30 };
 
-    const Entity = eczinho.entity.EntityTypeFactory(.medium);
     const Context = comptime eczinho.BundleContext.Builder.init()
         .addComponents(&.{ ComponentA, ComponentB })
         .addComponentWithConfig(ComponentC, .{
@@ -160,7 +153,7 @@ test "include components individually and at once" {
                 .removed = false,
             },
         })
-        .build(Entity);
+        .build();
 
     const component_a_index = comptime std.mem.indexOfScalar(type, Context.ComponentTypes, ComponentA);
     const component_b_index = comptime std.mem.indexOfScalar(type, Context.ComponentTypes, ComponentB);

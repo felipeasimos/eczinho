@@ -4,9 +4,9 @@ const std = @import("std");
 test "without non included bundles" {
     const bundleA: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
@@ -18,9 +18,9 @@ test "without non included bundles" {
 test "with given bundles" {
     const bundleA: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
@@ -33,25 +33,25 @@ test "with given bundles" {
 test "include multiple bundles at once" {
     const bundleA: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
     const bundleB: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
     const bundleC: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
@@ -66,25 +66,25 @@ test "include multiple bundles at once" {
 test "include multiple bundles individually" {
     const bundleA: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
     const bundleB: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
     const bundleC: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
@@ -101,25 +101,25 @@ test "include multiple bundles individually" {
 test "include bundles individually and at once" {
     const bundleA: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
     const bundleB: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
     const bundleC: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };

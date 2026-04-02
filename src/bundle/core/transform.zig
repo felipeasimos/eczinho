@@ -6,10 +6,10 @@ pub const Transform = Bundle{
     .SystemsConstructor = BundleSystems,
 };
 
-pub fn BundleContextConstructor(comptime Entity: type) BundleContext {
+pub fn BundleContextConstructor(comptime _: type) BundleContext {
     return BundleContext.Builder.init()
         .addComponents(&.{ Position, Rotation })
-        .build(Entity);
+        .build();
 }
 
 pub fn BundleSystems(comptime _: type) type {

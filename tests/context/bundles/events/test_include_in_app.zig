@@ -10,9 +10,9 @@ test "without non included events" {
     const EventA = struct { a: f32 };
     const bundle: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
@@ -28,10 +28,10 @@ test "with given events" {
     const EventA = struct { a: f32 };
     const bundle: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
                     .addEvent(EventA)
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
@@ -49,10 +49,10 @@ test "include multiple events at once" {
     const EventC = struct { a: u30 };
     const bundle: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
                     .addEvents(&.{ EventA, EventB, EventC })
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
@@ -72,12 +72,12 @@ test "include multiple events individually" {
     const EventC = struct { a: u30 };
     const bundle: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
                     .addEvent(EventA)
                     .addEvent(EventB)
                     .addEvent(EventC)
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
@@ -97,11 +97,11 @@ test "include events individually and at once" {
     const EventC = struct { a: u30 };
     const bundle: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
                     .addEvents(&.{ EventA, EventB })
                     .addEvent(EventC)
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };

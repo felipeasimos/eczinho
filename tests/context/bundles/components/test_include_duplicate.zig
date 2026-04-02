@@ -5,30 +5,30 @@ test "duplicated subbundle in different bundles" {
     const typeA = struct { a: f32 };
     const bundleA: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
                     .addComponent(typeA)
                     .addResource(typeA)
                     .addEvent(typeA)
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
     const bundleB: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
                     .addBundle(bundleA)
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
     const bundleC: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
                     .addBundle(bundleA)
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
@@ -53,30 +53,30 @@ test "duplicate primary and subsubbundle" {
     const typeA = struct { a: f32 };
     const bundleA: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
                     .addComponent(typeA)
                     .addResource(typeA)
                     .addEvent(typeA)
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
     const bundleB: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
                     .addBundle(bundleA)
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
     const bundleC: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
                     .addBundle(bundleB)
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };

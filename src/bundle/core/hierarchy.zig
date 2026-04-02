@@ -12,7 +12,7 @@ pub fn BundleContextConstructor(comptime Entity: type) BundleContext {
     return BundleContext.Builder.init()
         .addComponent(ParentConstructor(Entity))
         .addComponent(ChildConstructor(Entity))
-        .build(Entity);
+        .build();
 }
 
 pub fn ParentConstructor(comptime Entity: type) type {

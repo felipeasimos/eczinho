@@ -167,8 +167,7 @@ pub const BundleContext = struct {
             return new;
         }
 
-        pub fn build(self: @This(), comptime Entity: type) BundleContext {
-            _ = Entity;
+        pub fn build(self: @This()) BundleContext {
             return BundleContext{
                 .ComponentTypes = self.components,
                 .ComponentConfigs = self.component_configs,

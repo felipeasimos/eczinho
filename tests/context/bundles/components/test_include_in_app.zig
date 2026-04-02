@@ -5,9 +5,9 @@ test "without non included components" {
     const ComponentA = struct { a: f32 };
     const bundle: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
@@ -22,10 +22,10 @@ test "with given components" {
     const ComponentA = struct { a: f32 };
     const bundle: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
                     .addComponent(ComponentA)
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
@@ -42,10 +42,10 @@ test "include multiple components at once" {
     const ComponentC = struct { a: u30 };
     const bundle: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
                     .addComponents(&.{ ComponentA, ComponentB, ComponentC })
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
@@ -64,12 +64,12 @@ test "include multiple components individually" {
     const ComponentC = struct { a: u30 };
     const bundle: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
                     .addComponent(ComponentA)
                     .addComponent(ComponentB)
                     .addComponent(ComponentC)
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
@@ -88,11 +88,11 @@ test "include components individually and at once" {
     const ComponentC = struct { a: u30 };
     const bundle: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
                     .addComponents(&.{ ComponentA, ComponentB })
                     .addComponent(ComponentC)
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };

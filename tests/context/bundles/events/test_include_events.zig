@@ -3,18 +3,16 @@ const std = @import("std");
 
 test "without non included events" {
     const EventA = struct { a: f32 };
-    const Entity = eczinho.entity.EntityTypeFactory(.medium);
     const Context = comptime eczinho.BundleContext.Builder.init()
-        .build(Entity);
+        .build();
     try std.testing.expect(comptime std.mem.indexOfScalar(type, Context.EventTypes, EventA) == null);
 }
 
 test "with given events" {
     const EventA = struct { a: f32 };
-    const Entity = eczinho.entity.EntityTypeFactory(.medium);
     const Context = comptime eczinho.BundleContext.Builder.init()
         .addEvent(EventA)
-        .build(Entity);
+        .build();
     try std.testing.expect(comptime std.mem.indexOfScalar(type, Context.EventTypes, EventA) != null);
 }
 
@@ -23,10 +21,9 @@ test "include multiple events at once" {
     const EventB = struct { a: u31 };
     const EventC = struct { a: u30 };
 
-    const Entity = eczinho.entity.EntityTypeFactory(.medium);
     const Context = comptime eczinho.BundleContext.Builder.init()
         .addEvents(&.{ EventA, EventB, EventC })
-        .build(Entity);
+        .build();
 
     try std.testing.expect(comptime std.mem.indexOfScalar(type, Context.EventTypes, EventA) != null);
     try std.testing.expect(comptime std.mem.indexOfScalar(type, Context.EventTypes, EventB) != null);
@@ -38,12 +35,11 @@ test "include multiple events individually" {
     const EventB = struct { a: u31 };
     const EventC = struct { a: u30 };
 
-    const Entity = eczinho.entity.EntityTypeFactory(.medium);
     const Context = comptime eczinho.BundleContext.Builder.init()
         .addEvent(EventA)
         .addEvent(EventB)
         .addEvent(EventC)
-        .build(Entity);
+        .build();
 
     try std.testing.expect(comptime std.mem.indexOfScalar(type, Context.EventTypes, EventA) != null);
     try std.testing.expect(comptime std.mem.indexOfScalar(type, Context.EventTypes, EventB) != null);
@@ -55,11 +51,10 @@ test "include events individually and at once" {
     const EventB = struct { a: u31 };
     const EventC = struct { a: u30 };
 
-    const Entity = eczinho.entity.EntityTypeFactory(.medium);
     const Context = comptime eczinho.BundleContext.Builder.init()
         .addEvents(&.{ EventA, EventB })
         .addEvent(EventC)
-        .build(Entity);
+        .build();
 
     try std.testing.expect(comptime std.mem.indexOfScalar(type, Context.EventTypes, EventA) != null);
     try std.testing.expect(comptime std.mem.indexOfScalar(type, Context.EventTypes, EventB) != null);

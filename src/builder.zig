@@ -87,7 +87,7 @@ pub const AppContextBuilder = struct {
     /// duplicated components, reosurces and events (in different bundles)
     /// will result in a compile time error
     pub fn build(self: @This()) type {
-        const context: BundleContext = self.bundle_builder.build(self.entity);
+        const context: BundleContext = self.bundle_builder.build();
         const merged_context = mergeWithBundles(context, self.entity);
         const validated_context = checkForDuplicates(merged_context);
         // Copy into a mutable array so we can override individual entries
