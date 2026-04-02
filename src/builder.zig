@@ -83,14 +83,19 @@ pub const AppContextBuilder = struct {
         new.entity = EntityTypeFactory(options);
         return new;
     }
+    /// duplicated bundles are silently ignored
+    /// duplicated components, reosurces and events (in different bundles)
+    /// will result in a compile time error
     pub fn build(self: @This()) type {
-        var context: BundleContext = self.bundle_builder.build(self.entity);
+        const context: BundleContext = self.bundle_builder.build(self.entity);
+        const merged_context = mergeWithBundles(context, self.entity);
+        const validated_context = checkForDuplicates(merged_context);
         // Copy into a mutable array so we can override individual entries
-        var configs: [context.ComponentConfigs.len]ComponentConfig =
-            context.ComponentConfigs[0..].*;
+        var configs: [validated_context.ComponentConfigs.len]ComponentConfig =
+            validated_context.ComponentConfigs[0..].*;
         for (self.config_overrides) |override| {
             const Component, const config = override;
-            if (std.mem.indexOfScalar(type, context.ComponentTypes, Component)) |idx| {
+            if (std.mem.indexOfScalar(type, validated_context.ComponentTypes, Component)) |idx| {
                 configs[idx] = config;
             } else {
                 @compileError("Component config override not possible: " ++
@@ -100,12 +105,75 @@ pub const AppContextBuilder = struct {
         }
         const final_configs = configs;
         return app.AppContext(.{
-            .Events = EventsFactory(context.EventTypes ++ app_events.appEventsSlice),
-            .Resources = ResourcesFactory(context.ResourceTypes),
-            .Components = ComponentsFactory(context.ComponentTypes, &final_configs),
-            .Bundles = context.Bundles,
+            .Events = EventsFactory(validated_context.EventTypes ++ app_events.appEventsSlice),
+            .Resources = ResourcesFactory(validated_context.ResourceTypes),
+            .Components = ComponentsFactory(validated_context.ComponentTypes, &final_configs),
+            .Bundles = validated_context.Bundles,
             .Entity = self.entity,
         });
+    }
+    /// recursively go through given bundles, to get a complete list of bundles
+    /// without duplicates
+    /// `current_bundles` should be an empty list initially
+    fn getCompleteListOfBundles(
+        current_bundles: []const Bundle,
+        additional_bundles: []const Bundle,
+        comptime Entity: type,
+    ) []const Bundle {
+        if (current_bundles.len == 0 and additional_bundles.len == 0) {
+            return &.{};
+        }
+        var final_bundles: []const Bundle = current_bundles;
+        // attach first-level bundles to this one
+        for (additional_bundles) |bundle| {
+            if (!Bundle.containsBundle(final_bundles, bundle)) {
+                final_bundles = final_bundles ++ .{bundle};
+                const bundle_context = bundle.ContextConstructor(Entity);
+                final_bundles = getCompleteListOfBundles(final_bundles, bundle_context.Bundles, Entity);
+            }
+        }
+        return final_bundles;
+    }
+    fn mergeWithBundles(bundle: BundleContext, comptime Entity: type) BundleContext {
+        const bundles = getCompleteListOfBundles(&.{}, bundle.Bundles, Entity);
+        var merged_context = bundle;
+        merged_context.Bundles = bundles;
+        for (bundles) |b| {
+            const bundle_context = b.ContextConstructor(Entity);
+            merged_context.ComponentTypes = merged_context.ComponentTypes ++ bundle_context.ComponentTypes;
+            merged_context.ComponentConfigs = merged_context.ComponentConfigs ++ bundle_context.ComponentConfigs;
+            merged_context.ResourceTypes = merged_context.ResourceTypes ++ bundle_context.ResourceTypes;
+            merged_context.EventTypes = merged_context.EventTypes ++ bundle_context.EventTypes;
+        }
+        return merged_context;
+    }
+    fn checkForDuplicates(bundle: BundleContext) BundleContext {
+        var context: BundleContext = .{
+            .Bundles = bundle.Bundles,
+        };
+        for (bundle.ComponentTypes, bundle.ComponentConfigs) |Component, config| {
+            if (std.mem.indexOfScalar(type, context.ComponentTypes, Component) == null) {
+                context.ComponentTypes = context.ComponentTypes ++ .{Component};
+                context.ComponentConfigs = context.ComponentConfigs ++ .{config};
+            } else {
+                @compileError("Component of type '" ++ @typeName(Component) ++ "' was already registered");
+            }
+        }
+        for (bundle.ResourceTypes) |Resource| {
+            if (std.mem.indexOfScalar(type, context.ResourceTypes, Resource) == null) {
+                context.ResourceTypes = context.ResourceTypes ++ .{Resource};
+            } else {
+                @compileError("Resource of type '" ++ @typeName(Resource) ++ "' was already registered");
+            }
+        }
+        for (bundle.EventTypes) |Event| {
+            if (std.mem.indexOfScalar(type, context.EventTypes, Event) == null) {
+                context.EventTypes = context.EventTypes ++ .{Event};
+            } else {
+                @compileError("Event of type '" ++ @typeName(Event) ++ "' was already registered");
+            }
+        }
+        return context;
     }
 };
 

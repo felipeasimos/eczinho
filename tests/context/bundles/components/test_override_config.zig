@@ -8,8 +8,6 @@ test "duplicated component/event/resource in different bundles with config overr
             pub fn constructor(comptime Entity: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
                     .addComponent(typeA)
-                    .addEvent(typeA)
-                    .addResource(typeA)
                     .build(Entity);
             }
         }).constructor,
@@ -18,8 +16,6 @@ test "duplicated component/event/resource in different bundles with config overr
         .ContextConstructor = (struct {
             pub fn constructor(comptime Entity: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
-                    .addComponent(typeA)
-                    .addEvent(typeA)
                     .addResource(typeA)
                     .build(Entity);
             }
@@ -29,9 +25,7 @@ test "duplicated component/event/resource in different bundles with config overr
         .ContextConstructor = (struct {
             pub fn constructor(comptime Entity: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
-                    .addComponent(typeA)
                     .addEvent(typeA)
-                    .addResource(typeA)
                     .build(Entity);
             }
         }).constructor,
@@ -71,8 +65,8 @@ test "duplicated subbundle in different bundles with config override" {
             pub fn constructor(comptime Entity: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
                     .addComponent(typeA)
-                    .addEvent(typeA)
                     .addResource(typeA)
+                    .addEvent(typeA)
                     .build(Entity);
             }
         }).constructor,
@@ -81,9 +75,6 @@ test "duplicated subbundle in different bundles with config override" {
         .ContextConstructor = (struct {
             pub fn constructor(comptime Entity: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
-                    .addComponent(typeA)
-                    .addEvent(typeA)
-                    .addResource(typeA)
                     .addBundle(bundleA)
                     .build(Entity);
             }
@@ -93,9 +84,6 @@ test "duplicated subbundle in different bundles with config override" {
         .ContextConstructor = (struct {
             pub fn constructor(comptime Entity: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
-                    .addComponent(typeA)
-                    .addEvent(typeA)
-                    .addResource(typeA)
                     .addBundle(bundleA)
                     .build(Entity);
             }
@@ -140,8 +128,8 @@ test "duplicate primary and subsubbundle with config override" {
             pub fn constructor(comptime Entity: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
                     .addComponent(typeA)
-                    .addEvent(typeA)
                     .addResource(typeA)
+                    .addEvent(typeA)
                     .build(Entity);
             }
         }).constructor,
@@ -150,9 +138,6 @@ test "duplicate primary and subsubbundle with config override" {
         .ContextConstructor = (struct {
             pub fn constructor(comptime Entity: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
-                    .addComponent(typeA)
-                    .addEvent(typeA)
-                    .addResource(typeA)
                     .addBundle(bundleA)
                     .build(Entity);
             }
@@ -162,9 +147,6 @@ test "duplicate primary and subsubbundle with config override" {
         .ContextConstructor = (struct {
             pub fn constructor(comptime Entity: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
-                    .addComponent(typeA)
-                    .addEvent(typeA)
-                    .addResource(typeA)
                     .addBundle(bundleB)
                     .build(Entity);
             }

@@ -104,4 +104,3 @@ test "include components individually and at once" {
     try std.testing.expect(Context.Components.isComponent(ComponentC));
     try std.testing.expectEqual(&.{bundle}, Context.Bundles);
 }
-
