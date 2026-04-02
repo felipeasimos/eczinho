@@ -45,7 +45,8 @@ pub fn Components(comptime ComponentTypes: []const type, comptime Configs: []con
         pub const TypeIterator = Hasher.Iterator;
 
         const ComponentConfigMap = ComponentConfigMap: {
-            @setEvalBranchQuota(10000);
+            @setEvalBranchQuota(ComponentTypes.len * ComponentTypes.len * 100 *
+                std.math.log2_int_ceil(usize, ComponentTypes.len));
             var map = std.EnumArray(ComponentTypeId, ComponentConfig).initUndefined();
             for (ComponentTypes, 0..) |Type, i| {
                 const type_id = std.meta.stringToEnum(ComponentTypeId, @typeName(Type)).?;

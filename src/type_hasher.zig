@@ -53,7 +53,6 @@ pub fn TypeHasher(comptime Types: []const type) type {
         pub const MaxAlignment = if (Types.len > 0) std.mem.max(usize, TypeIdAlignmentMap.values[0..]) else 1;
 
         pub const Union = Union: {
-            @setEvalBranchQuota(10000);
             var field_names: [Len][]const u8 = undefined;
             var field_types: [Len]type = undefined;
             var field_attributes: [Len]std.builtin.Type.UnionField.Attributes = undefined;
@@ -75,7 +74,7 @@ pub fn TypeHasher(comptime Types: []const type) type {
 
         /// for functions receiving a tid, use a static enum map to return info in O(1)
         const TypeIdSizeMap = TypeIdSizeMap: {
-            @setEvalBranchQuota(10000);
+            @setEvalBranchQuota(Types.len * Types.len * Types.len * 100);
             var map = std.EnumArray(TypeId, usize).initUndefined();
             for (Types) |Type| {
                 const type_id = std.meta.stringToEnum(TypeId, @typeName(Type)).?;
@@ -84,7 +83,7 @@ pub fn TypeHasher(comptime Types: []const type) type {
             break :TypeIdSizeMap map;
         };
         const TypeIdAlignmentMap = TypeIdAlignmentMap: {
-            @setEvalBranchQuota(10000);
+            @setEvalBranchQuota(Types.len * Types.len * Types.len * 100);
             var map = std.EnumArray(TypeId, usize).initUndefined();
             for (Types) |Type| {
                 const type_id = std.meta.stringToEnum(TypeId, @typeName(Type)).?;
@@ -94,7 +93,7 @@ pub fn TypeHasher(comptime Types: []const type) type {
         };
         /// for functions receiving a tid, use a static enum map to return info in O(1)
         const TypeIdIndexMap = TypeIdIndexMap: {
-            @setEvalBranchQuota(10000);
+            @setEvalBranchQuota(Types.len * Types.len * Types.len * 100);
             var map = std.EnumArray(TypeId, usize).initUndefined();
             for (Types, 0..) |Type, i| {
                 const type_id = std.meta.stringToEnum(TypeId, @typeName(Type)).?;
@@ -103,7 +102,7 @@ pub fn TypeHasher(comptime Types: []const type) type {
             break :TypeIdIndexMap map;
         };
         const TypeIdNameMap = TypeIdNameMap: {
-            @setEvalBranchQuota(10000);
+            @setEvalBranchQuota(Types.len * Types.len * Types.len * 100);
             var map = std.EnumArray(TypeId, [:0]const u8).initUndefined();
             for (Types) |Type| {
                 const type_id = std.meta.stringToEnum(TypeId, @typeName(Type)).?;
@@ -113,7 +112,7 @@ pub fn TypeHasher(comptime Types: []const type) type {
         };
 
         pub const TypeIds = TypeIds: {
-            @setEvalBranchQuota(10000);
+            @setEvalBranchQuota(Types.len * Types.len * Types.len * 100);
             var type_ids: [Types.len]TypeId = undefined;
             for (Types, 0..) |Type, i| {
                 type_ids[i] = hash(Type);
@@ -121,7 +120,6 @@ pub fn TypeHasher(comptime Types: []const type) type {
             break :TypeIds type_ids;
         };
         pub const Sizes = Sizes: {
-            @setEvalBranchQuota(10000);
             var sizes: [Types.len]usize = undefined;
             for (Types, 0..) |Type, i| {
                 sizes[i] = @sizeOf(Type);
@@ -146,6 +144,7 @@ pub fn TypeHasher(comptime Types: []const type) type {
         }
 
         pub fn hash(comptime Type: type) TypeId {
+            @setEvalBranchQuota(Types.len * Types.len * 100);
             if (comptime std.meta.stringToEnum(TypeId, @typeName(Type))) |id| {
                 return id;
             }

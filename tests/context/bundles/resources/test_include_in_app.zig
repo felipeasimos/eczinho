@@ -5,9 +5,9 @@ test "without non included resources" {
     const ResourceA = struct { a: f32 };
     const bundle: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
@@ -22,10 +22,10 @@ test "with given resources" {
     const ResourceA = struct { a: f32 };
     const bundle: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
                     .addResource(ResourceA)
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
@@ -42,10 +42,10 @@ test "include multiple resources at once" {
     const ResourceC = struct { a: u30 };
     const bundle: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
                     .addResources(&.{ ResourceA, ResourceB, ResourceC })
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
@@ -64,12 +64,12 @@ test "include multiple resources individually" {
     const ResourceC = struct { a: u30 };
     const bundle: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
                     .addResource(ResourceA)
                     .addResource(ResourceB)
                     .addResource(ResourceC)
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
@@ -88,11 +88,11 @@ test "include resources individually and at once" {
     const ResourceC = struct { a: u30 };
     const bundle: eczinho.Bundle = .{
         .ContextConstructor = (struct {
-            pub fn constructor(comptime Entity: type) eczinho.BundleContext {
+            pub fn constructor(comptime _: type) eczinho.BundleContext {
                 return eczinho.BundleContext.Builder.init()
                     .addResources(&.{ ResourceA, ResourceB })
                     .addResource(ResourceC)
-                    .build(Entity);
+                    .build();
             }
         }).constructor,
     };
