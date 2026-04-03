@@ -25,7 +25,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             .DenseStorageConfig = DenseStorageConfig,
         });
         pub const EntityLocation = World.EntityLocation;
-        pub const DenseStorage = dense_storage.DenseStorage(.{
+        pub const DenseStorage = dense_storage.DenseStorageFactory(.{
             .World = World,
             .Config = options.DenseStorageConfig,
         });
@@ -33,7 +33,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
 
         /// only contains components that both belong to this archetype AND have dense storage set
         signature: Components,
-        storage: DenseStorage,
+        storage: *DenseStorage,
         entities: std.ArrayList(Entity) = .empty,
 
         inline fn hash(tid_or_component: anytype) ComponentTypeId {
@@ -44,21 +44,14 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             }
         }
 
-        pub fn init(allocator: std.mem.Allocator, sig: Components) !@This() {
+        pub fn init(sig: Components, storage: *DenseStorage) !@This() {
             return .{
-                .storage = try DenseStorage.init(allocator, sig),
+                .storage = storage,
                 .signature = sig,
             };
         }
 
-        pub inline fn postInit(self: *@This()) void {
-            if (comptime @hasDecl(DenseStorage, "postInit")) {
-                self.storage.postInit(self);
-            }
-        }
-
         pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
-            self.storage.deinit(allocator);
             self.entities.deinit(allocator);
         }
 
@@ -71,14 +64,17 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             return self.signature.has(tid_or_component);
         }
 
+        /// add entity to archetype
+        pub fn addEntity(self: *@This(), allocator: std.mem.Allocator, entt: Entity, location: *EntityLocation) !void {
+            location.archetype_vec_index = self.entities.items.len;
+            try self.entities.append(allocator, entt);
+        }
+
         pub fn reserve(
             self: *@This(),
             allocator: std.mem.Allocator,
             entt: Entity,
-            location: *EntityLocation,
         ) !DenseStorage.StorageAddress {
-            location.archetype_vec_index = self.len();
-            try self.entities.append(allocator, entt);
             return self.storage.reserve(allocator, entt);
         }
 
@@ -86,29 +82,19 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             archetype_removal_result: struct { usize, usize },
             dense_removal_result: ?DenseStorage.RemovalResult,
         };
-        /// move entity to new archetype.
-        /// this function only copies the values from dense components that exist in both archetypes.
-        /// dense components only present in 'new_arch' must be set after this call.
-        /// no move happens if the only difference between the two archetypes is sparse components
-        /// returns swapped entity index and its new slot index (because of the remove)
-        pub fn moveTo(
-            self: *@This(),
-            allocator: std.mem.Allocator,
-            entt: Entity,
-            location: *EntityLocation,
-            new_arch: *@This(),
-            current_tick: Tick,
-            removed_logs: anytype,
-        ) !MoveToResult {
-            const old_archetype_vec_index = location.archetype_vec_index;
-            const new_storage, const new_slot_index = try new_arch.reserve(
-                allocator,
-                entt,
-                location,
-            );
 
+        fn moveStorageData(self: *@This(), allocator: std.mem.Allocator, entt: Entity, location: *EntityLocation, new_arch: *@This(), current_tick: Tick, removed_logs: anytype) !?DenseStorage.RemovalResult {
             const old_dense_signature = self.signature.applyStorageTypeMask(.Dense);
             const new_dense_signature = new_arch.signature.applyStorageTypeMask(.Dense);
+
+            // if there is no change in dense components, don't move data
+            if (old_dense_signature.eql(new_dense_signature)) {
+                std.debug.assert(new_arch.storage == self.storage);
+                return null;
+            }
+            std.debug.assert(new_arch.storage != self.storage);
+
+            const new_storage, const new_slot_index = try new_arch.reserve(allocator, entt);
 
             const old_storage = location.storage;
 
@@ -178,12 +164,39 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                     new_storage.getChangedArray(tid)[new_slot_index] = current_tick;
                 }
             }
+
             const removed_result = try old_storage.remove(allocator, @intCast(location.dense_index)) orelse null;
             location.dense_index = @intCast(new_slot_index);
             location.storage = new_storage;
+            return removed_result;
+        }
+        /// move entity to new archetype.
+        /// this function only copies the values from dense components that exist in both archetypes.
+        /// dense components only present in 'new_arch' must be set after this call.
+        /// no move happens if the only difference between the two archetypes is sparse components
+        /// returns swapped entity index and its new slot index (because of the remove)
+        pub fn moveTo(
+            self: *@This(),
+            allocator: std.mem.Allocator,
+            entt: Entity,
+            location: *EntityLocation,
+            new_arch: *@This(),
+            current_tick: Tick,
+            removed_logs: anytype,
+        ) !MoveToResult {
+            const old_archetype_vec_index = location.archetype_vec_index;
+
+            // move dense storage data (if any dense components should be moved)
+            const removed_result = try self.moveStorageData(allocator, entt, location, new_arch, current_tick, removed_logs);
+
+            // add entity to new archetype
+            try new_arch.addEntity(allocator, entt, location);
             location.arch = new_arch;
+
+            // remove entity from current archetype
             const archetype_swapped_entt = self.entities.getLast();
             _ = self.entities.swapRemove(old_archetype_vec_index);
+
             return MoveToResult{
                 .archetype_removal_result = .{
                     archetype_swapped_entt.index,
@@ -221,7 +234,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                 iter: DenseStorage.Iterator,
                 pub fn init(archetype: *Self, last_run: Tick, current_run: Tick) @This() {
                     return .{
-                        .iter = DenseStorage.Iterator.init(&archetype.storage),
+                        .iter = DenseStorage.Iterator.init(archetype.storage),
                         .last_run = last_run,
                         .current_run = current_run,
                     };

@@ -44,9 +44,14 @@ pub fn World(comptime options: WorldOptions) type {
             .Components = Components,
             .Entity = Entity,
         });
+        pub const DenseStorageStore = dense_storage.DenseStorageStore(.{
+            .World = @This(),
+            .Config = DenseStorageConfig,
+        });
 
         allocator: std.mem.Allocator,
         entity_registry: EntityRegistry,
+        storage_store: DenseStorageStore,
         archetypes: std.AutoHashMap(Components, *Archetype),
         sparse_sets: SparseSets = .empty,
         queues: std.ArrayList(CommandsQueue) = .empty,
@@ -57,6 +62,7 @@ pub fn World(comptime options: WorldOptions) type {
             return .{
                 .allocator = allocator,
                 .archetypes = @FieldType(@This(), "archetypes").init(allocator),
+                .storage_store = @FieldType(@This(), "storage_store").init(allocator),
                 .entity_registry = EntityRegistry.init(),
                 .removed = RemovedLog.init(allocator),
             };
@@ -69,6 +75,7 @@ pub fn World(comptime options: WorldOptions) type {
                 arch_ptr.deinit(self.allocator);
                 self.allocator.destroy(arch_ptr);
             }
+            self.storage_store.deinit(self.allocator);
             self.sparse_sets.deinit(self.allocator);
             self.archetypes.deinit();
             self.entity_registry.deinit(self.allocator);
@@ -110,9 +117,10 @@ pub fn World(comptime options: WorldOptions) type {
             if (entry.found_existing) {
                 return entry.value_ptr.*;
             }
+            const dense_signature = signature.applyStorageTypeMask(.Dense);
+            const storage_ptr = try self.storage_store.tryGetStorage(self.allocator, dense_signature);
             const arch_ptr = try self.allocator.create(Archetype);
-            arch_ptr.* = try Archetype.init(self.allocator, signature);
-            arch_ptr.postInit();
+            arch_ptr.* = try Archetype.init(signature, storage_ptr);
             entry.value_ptr.* = arch_ptr;
             return arch_ptr;
         }

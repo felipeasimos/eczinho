@@ -1,3 +1,4 @@
+const std = @import("std");
 pub const chunks = @import("chunks/chunks.zig");
 pub const tables = @import("tables/tables.zig");
 pub const sparsesets = @import("sparseset/sparsesets.zig");
@@ -13,7 +14,7 @@ pub const DenseStorageOptions = struct {
     Config: DenseStorageConfig,
 };
 
-pub fn DenseStorage(options: DenseStorageOptions) type {
+pub fn DenseStorageFactory(options: DenseStorageOptions) type {
     return switch (options.Config) {
         .Chunks => |c| chunks.ChunksFactory(.{
             .Entity = options.World.Entity,
@@ -28,9 +29,47 @@ pub fn DenseStorage(options: DenseStorageOptions) type {
     };
 }
 
-pub fn DenseStorageUnit(options: DenseStorageOptions) type {
+pub fn DenseStorageUnitFactory(options: DenseStorageOptions) type {
     return switch (options.Config) {
         .Chunks => |c| chunks.ChunksFactory(c).Chunk,
         .Tables => |t| tables.TablesFactory(t),
+    };
+}
+
+pub fn DenseStorageStore(options: DenseStorageOptions) type {
+    return struct {
+        const Components = options.World.Components;
+        const DenseStorage = DenseStorageFactory(options);
+        storages: std.AutoHashMap(Components, *DenseStorage),
+
+        pub fn init(allocator: std.mem.Allocator) @This() {
+            return .{
+                .storages = @FieldType(@This(), "storages").init(allocator),
+            };
+        }
+        pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+            var iter = self.storages.valueIterator();
+            while (iter.next()) |storage| {
+                const storage_ptr = storage.*;
+                storage_ptr.deinit(allocator);
+                allocator.destroy(storage_ptr);
+            }
+            self.storages.deinit();
+        }
+        pub fn getStorage(self: *@This(), dense_signature: Components) *DenseStorage {
+            std.debug.assert(!dense_signature.hasIntersection(Components.SparseStorageMask));
+            return self.storages.get(dense_signature).?;
+        }
+        pub fn tryGetStorage(self: *@This(), allocator: std.mem.Allocator, dense_signature: Components) !*DenseStorage {
+            std.debug.assert(!dense_signature.hasIntersection(Components.SparseStorageMask));
+            const entry = try self.storages.getOrPut(dense_signature);
+            if (entry.found_existing) {
+                return entry.value_ptr.*;
+            }
+            const storage_ptr = try allocator.create(DenseStorage);
+            storage_ptr.* = try DenseStorage.init(allocator, dense_signature);
+            entry.value_ptr.* = storage_ptr;
+            return storage_ptr;
+        }
     };
 }

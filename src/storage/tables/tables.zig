@@ -61,18 +61,16 @@ pub fn TablesFactory(comptime options: TablesOptions) type {
         };
         pub const Tables = @This();
         tables: ComponentArrays = EmptyArrays,
-        /// read only pointer to the entities array in the archetype
-        entities: *const std.ArrayList(Entity),
+        entities: std.ArrayList(Entity) = .empty,
         signature: Components,
         count: usize = 0,
 
         pub inline fn init(allocator: std.mem.Allocator, signature: Components) !@This() {
             var new = @This(){
                 .signature = signature.intersection(comptime Components.DenseOccupiesSpaceComponents),
-                // SAFETY: set in `postInit`
-                .entities = undefined,
             };
             if (comptime options.Config.InitialSize != 0) {
+                new.entities.ensureTotalCapacity(allocator, options.Config.InitialSize);
                 comptime var iter = Components.DenseOccupiesSpaceComponents.iterator();
 
                 inline while (comptime iter.nextTypeId()) |tid| {
@@ -86,13 +84,11 @@ pub fn TablesFactory(comptime options: TablesOptions) type {
             }
             return new;
         }
-        pub inline fn postInit(self: *@This(), archetype_ptr: anytype) void {
-            self.entities = &archetype_ptr.entities;
-        }
         pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
             inline for (0..ComponentArraysLen) |i| {
                 self.tables[i].deinit(allocator);
             }
+            self.entities.deinit(allocator);
         }
 
         fn getTableIndex(tid_or_component: anytype) usize {
@@ -113,10 +109,11 @@ pub fn TablesFactory(comptime options: TablesOptions) type {
             return &self.tables[index];
         }
         pub fn len(self: *const @This()) usize {
-            return self.count;
+            return self.entities.items.len;
         }
-        pub fn reserve(self: *@This(), allocator: std.mem.Allocator, _: Entity) !StorageAddress {
+        pub fn reserve(self: *@This(), allocator: std.mem.Allocator, entt: Entity) !StorageAddress {
             const index = self.len();
+            try self.entities.append(allocator, entt);
             comptime var iter = Components.DenseOccupiesSpaceComponents.iterator();
             inline while (comptime iter.nextTypeId()) |tid| {
                 const Component = comptime Components.getType(tid);
@@ -125,10 +122,10 @@ pub fn TablesFactory(comptime options: TablesOptions) type {
                     try table.reserve(allocator);
                 }
             }
-            self.count += 1;
             return .{ self, index };
         }
         pub fn remove(self: *@This(), allocator: std.mem.Allocator, index: usize) !?RemovalResult {
+            std.debug.assert(index < self.len());
             _ = allocator;
             if (comptime Components.Len == 0) return null;
             comptime var iter = Components.DenseOccupiesSpaceComponents.iterator();
@@ -140,9 +137,9 @@ pub fn TablesFactory(comptime options: TablesOptions) type {
                     table.remove(index);
                 }
             }
-            self.count -= 1;
             if (index == self.entities.items.len - 1) return null;
             const swapped_entt = self.entities.items[self.entities.items.len - 1];
+            _ = self.entities.swapRemove(index);
             return .{ swapped_entt.index, index };
         }
         pub inline fn getComponentWithTypeId(self: *@This(), tid: Components.ComponentTypeId, index: usize) []u8 {

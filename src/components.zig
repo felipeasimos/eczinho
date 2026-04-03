@@ -73,6 +73,7 @@ pub fn Components(comptime ComponentTypes: []const type, comptime Configs: []con
             }
             break :DenseStorageMask sig;
         };
+        pub const SparseStorageMask = DenseStorageMask.complement();
         pub const AddedMetadataMask = AddedMetadataMask: {
             var sig: @This() = .{
                 .bitset = BitSet.initEmpty(),
