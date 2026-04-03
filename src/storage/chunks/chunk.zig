@@ -7,11 +7,11 @@ pub fn ChunkFactory(comptime options: ChunksOptions) type {
     return struct {
         pub const Components = options.Components;
         pub const Entity = options.Entity;
-        pub const CountInt = std.math.IntFittingRange(0, options.ChunkSize);
+        pub const CountInt = std.math.IntFittingRange(0, options.Config.ChunkSize);
         pub const Chunks = ChunksFactory(options);
         chunks: *Chunks,
         count: CountInt,
-        memory: [options.ChunkSize]u8 align(Chunks.MaxAlignment),
+        memory: [options.Config.ChunkSize]u8 align(Chunks.MaxAlignment),
         pub fn init(chunks: *Chunks) @This() {
             return .{
                 .chunks = chunks,

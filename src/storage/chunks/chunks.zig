@@ -40,7 +40,7 @@ pub fn ChunksFactory(comptime options: ChunksOptions) type {
         const Chunks = @This();
         pub const Components = options.Components;
         pub const Entity = options.Entity;
-        pub const ChunkSize = options.ChunkSize;
+        pub const ChunkSize = options.Config.ChunkSize;
         pub const Chunk = ChunkFactory(options);
         pub const MaxAlignment = @max(Components.MaxAlignment, @alignOf(Entity), @alignOf(types.Tick));
         pub const MaxCapacity = @divFloor(ChunkSize, @sizeOf(Entity));
