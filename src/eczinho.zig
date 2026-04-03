@@ -13,3 +13,4 @@ pub const CoreBundles = @import("bundle/core/core.zig");
 pub const Bundle = @import("bundle/bundle.zig").Bundle;
 pub const BundleContext = @import("bundle/bundle.zig").BundleContext;
 pub const ComponentConfig = @import("components.zig").ComponentConfig;
+pub const DenseStorageConfig = @import("storage/dense_storage.zig").DenseStorageConfig;

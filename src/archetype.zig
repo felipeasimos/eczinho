@@ -18,9 +18,11 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
         pub const ComponentTypeId = options.Components.ComponentTypeId;
         pub const Components = options.Components;
         pub const Entity = options.Entity;
+        pub const DenseStorageConfig = options.DenseStorageConfig;
         pub const World = WorldFactory(.{
             .Components = Components,
             .Entity = Entity,
+            .DenseStorageConfig = DenseStorageConfig,
         });
         pub const EntityLocation = World.EntityLocation;
         pub const DenseStorage = dense_storage.DenseStorage(.{
@@ -42,11 +44,17 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             }
         }
 
-        pub fn init(sig: Components) !@This() {
+        pub fn init(allocator: std.mem.Allocator, sig: Components) !@This() {
             return .{
-                .storage = try DenseStorage.init(sig),
+                .storage = try DenseStorage.init(allocator, sig),
                 .signature = sig,
             };
+        }
+
+        pub inline fn postInit(self: *@This()) void {
+            if (comptime @hasDecl(DenseStorage, "postInit")) {
+                self.storage.postInit(self);
+            }
         }
 
         pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {

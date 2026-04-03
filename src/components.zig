@@ -12,9 +12,6 @@ pub const ComponentConfig = struct {
     storage_type: StorageType = .Dense,
     track_metadata: struct {
         added: bool = false,
-        // setting this to true for ZSTs will result in a compile error
-        // the context builders set this to false for ZSTs by default
-        // (so only worry about it if you set it explicitly)
         changed: bool = false,
         removed: bool = false,
     } = .{},
@@ -251,7 +248,7 @@ pub fn Components(comptime ComponentTypes: []const type, comptime Configs: []con
             return i;
         }
 
-        pub fn has(self: *@This(), tid_or_component: anytype) bool {
+        pub fn has(self: @This(), tid_or_component: anytype) bool {
             Hasher.checkType(tid_or_component);
             return self.bitset.isSet(Hasher.getIndex(tid_or_component));
         }

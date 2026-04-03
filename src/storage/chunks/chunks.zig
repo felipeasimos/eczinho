@@ -1,11 +1,16 @@
 const std = @import("std");
-const types = @import("../types.zig");
+const types = @import("../../types.zig");
+const ChunkFactory = @import("chunk.zig").ChunkFactory;
+
+pub const ChunksConfig = struct {
+    InitialNumChunks: usize = 0,
+    ChunkSize: usize = 1024 * 16, // 16 KB
+};
 
 pub const ChunksOptions = struct {
     Entity: type,
     Components: type,
-    InitialNumChunks: usize = 0,
-    ChunkSize: usize = 1024 * 16, // 16 KB
+    Config: ChunksConfig,
 };
 
 /// Chunk layout:
@@ -36,7 +41,7 @@ pub fn ChunksFactory(comptime options: ChunksOptions) type {
         const Chunks = @This();
         pub const Components = options.Components;
         pub const Entity = options.Entity;
-        pub const ChunkSize = options.ChunkSize;
+        pub const ChunkSize = options.Config.ChunkSize;
         pub const Chunk = ChunkFactory(options);
         pub const MaxAlignment = @max(Components.MaxAlignment, @alignOf(Entity), @alignOf(types.Tick));
         pub const MaxCapacity = @divFloor(ChunkSize, @sizeOf(Entity));
@@ -121,15 +126,19 @@ pub fn ChunksFactory(comptime options: ChunksOptions) type {
 
         chunk_layout: ChunkLayout,
 
-        pub fn init(signature: Components) !@This() {
+        pub fn init(allocator: std.mem.Allocator, signature: Components) !@This() {
             const dense_sig = signature.applyStorageTypeMask(.Dense);
             const capacity_per_chunk = calculateCapacity(dense_sig);
             const chunk_layout = ChunkLayout.init(dense_sig, capacity_per_chunk);
-            return .{
+            var new = @This(){
                 .capacity_per_chunk = capacity_per_chunk,
                 .signature = dense_sig,
                 .chunk_layout = chunk_layout,
             };
+            if (comptime options.Config.InitialNumChunks != 0) {
+                new.chunks.ensureTotalCapacity(allocator, options.Config.InitialNumChunks);
+            }
+            return new;
         }
         pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
             for (self.chunks.items) |chunk| {
@@ -210,16 +219,13 @@ pub fn ChunksFactory(comptime options: ChunksOptions) type {
                     .chunks = chunks,
                 };
             }
-            pub inline fn indices(self: *const @This()) struct { usize, usize } {
-                return .{ self.chunk_index, self.slot_index };
-            }
             inline fn getChunk(self: *@This()) *Chunk {
                 return self.chunks.chunks.items[self.chunk_index];
             }
             inline fn isWithinRange(self: *@This()) bool {
                 return self.chunk_index < self.chunks.chunks.items.len and self.slot_index < self.getChunk().len();
             }
-            pub inline fn peek(self: *@This()) ?struct { *Chunk, usize } {
+            pub inline fn peek(self: *@This()) ?StorageAddress {
                 const old_chunk_index = self.chunk_index;
                 const old_slot_index = self.slot_index;
                 const next_result = self.next();
@@ -249,7 +255,7 @@ pub fn ChunksFactory(comptime options: ChunksOptions) type {
                 }
                 return null;
             }
-            pub inline fn next(self: *@This()) ?struct { *Chunk, usize } {
+            pub inline fn next(self: *@This()) ?StorageAddress {
                 if (self.chunk_index >= self.chunks.chunks.items.len) {
                     return null;
                 }
@@ -265,125 +271,9 @@ pub fn ChunksFactory(comptime options: ChunksOptions) type {
     };
 }
 
-pub fn ChunkFactory(comptime options: ChunksOptions) type {
-    return struct {
-        pub const Components = options.Components;
-        pub const Entity = options.Entity;
-        pub const CountInt = std.math.IntFittingRange(0, options.ChunkSize);
-        pub const Chunks = ChunksFactory(options);
-        chunks: *Chunks,
-        count: CountInt,
-        memory: [options.ChunkSize]u8 align(Chunks.MaxAlignment),
-        pub fn init(chunks: *Chunks) @This() {
-            return .{
-                .chunks = chunks,
-                .count = 0,
-                // SAFETY: the whole point is that we manually manage this memory region
-                .memory = undefined,
-            };
-        }
-        inline fn getSignature(self: *@This()) Components {
-            return self.chunks.signature;
-        }
-        pub inline fn getAddedArray(self: *@This(), tid_or_component: anytype) []types.Tick {
-            const tid = if (comptime @TypeOf(tid_or_component) == type)
-                comptime Components.hash(tid_or_component)
-            else
-                tid_or_component;
-            const offset = self.chunks.chunk_layout.component_added_offsets.get(tid).?;
-            const slice = self.memory[offset .. offset + @sizeOf(types.Tick) * self.count];
-            return @alignCast(std.mem.bytesAsSlice(types.Tick, slice));
-        }
-        pub inline fn getChangedArray(self: *@This(), tid_or_component: anytype) []types.Tick {
-            const tid = if (comptime @TypeOf(tid_or_component) == type)
-                comptime Components.hash(tid_or_component)
-            else
-                tid_or_component;
-            const offset = self.chunks.chunk_layout.component_changed_offsets.get(tid).?;
-            const slice = self.memory[offset .. offset + @sizeOf(types.Tick) * self.count];
-            return @alignCast(std.mem.bytesAsSlice(types.Tick, slice));
-        }
-        pub inline fn getComponentWithTypeId(self: *@This(), tid: Components.ComponentTypeId, index: usize) []u8 {
-            std.debug.assert(index < self.len());
-            const arr_offset = self.chunks.chunk_layout.component_data_offsets.get(tid).?;
-            const tid_size = Components.getSize(tid);
-            const offset = arr_offset + tid_size * index;
-            return @alignCast(self.memory[offset .. offset + tid_size]);
-        }
-        pub inline fn empty(self: *const @This()) bool {
-            return self.count == 0;
-        }
-        pub inline fn full(self: *const @This()) bool {
-            return self.count == self.chunks.capacity_per_chunk;
-        }
-        pub fn reserve(self: *@This(), entt: Entity) usize {
-            std.debug.assert(!self.full());
-            self.count += 1;
-            self.chunks.entity_count += 1;
-            self.get(Entity, self.count - 1).* = entt;
-            return self.count - 1;
-        }
-        pub fn get(self: *@This(), comptime Component: type, index: usize) *Component {
-            std.debug.assert(index < self.len());
-            const arr_offset = arr_offset: {
-                if (comptime Component == Entity) break :arr_offset 0;
-                break :arr_offset self.chunks.chunk_layout.component_data_offsets.get(comptime Components.hash(Component)).?;
-            };
-            const offset = arr_offset + @sizeOf(Component) * index;
-            return @alignCast(std.mem.bytesAsValue(Component, self.memory[offset .. offset + @sizeOf(Component)]));
-        }
-        pub fn getConst(self: *@This(), comptime Component: type, index: usize) Component {
-            std.debug.assert(index < self.len());
-            return self.get(Component, index).*;
-        }
-        pub inline fn len(self: *@This()) usize {
-            return self.count;
-        }
-        /// Return swapped entity and its new index
-        pub fn remove(self: *@This(), allocator: std.mem.Allocator, index: usize) !?Chunks.RemovalResult {
-            std.debug.assert(index < self.len());
-            defer self.count -= 1;
-            defer self.chunks.entity_count -= 1;
-
-            if (index != self.count - 1 and comptime Components.Len != 0) {
-                // swap remove entity ID
-                self.get(Entity, index).* = self.getConst(Entity, self.count - 1);
-
-                const signature = self.getSignature();
-                const non_empty = signature.applyNonEmptyMask();
-                var iter = non_empty.iterator();
-                while (iter.nextTypeId()) |tid| {
-                    // swap component data
-                    @memcpy(self.getComponentWithTypeId(tid, index), self.getComponentWithTypeId(tid, self.count - 1));
-                }
-                const has_added_metadata = signature.applyAddedMask();
-                iter = has_added_metadata.iterator();
-                while (iter.nextTypeId()) |tid| {
-                    self.getAddedArray(tid)[index] = self.getAddedArray(tid)[self.count - 1];
-                }
-                const has_changed_metadata = signature.applyChangedMask();
-                iter = has_changed_metadata.iterator();
-                while (iter.nextTypeId()) |tid| {
-                    self.getChangedArray(tid)[index] = self.getChangedArray(tid)[self.count - 1];
-                }
-                const swapped_entt = self.getConst(Entity, index);
-                return .{
-                    swapped_entt.index,
-                    index,
-                };
-            }
-
-            if (self.empty()) {
-                try self.chunks.free_list.append(allocator, self);
-            }
-            return null;
-        }
-    };
-}
-
 test ChunksFactory {
-    const Entity = @import("../entity/entity.zig").EntityTypeFactory(.medium);
-    const Components = @import("../components.zig").Components(&.{ u64, u32, bool, u16 });
+    const Entity = @import("../../entity/entity.zig").EntityTypeFactory(.medium);
+    const Components = @import("../../components.zig").Components(&.{ u64, u32, bool, u16 });
     const signature: Components = Components.init(&.{ u64, bool });
     var chunks = try ChunksFactory(.{
         .Entity = Entity,
