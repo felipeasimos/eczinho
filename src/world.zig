@@ -111,7 +111,7 @@ pub fn World(comptime options: WorldOptions) type {
                 return entry.value_ptr.*;
             }
             const arch_ptr = try self.allocator.create(Archetype);
-            arch_ptr.* = try Archetype.init(signature);
+            arch_ptr.* = try Archetype.init(self.allocator, signature);
             arch_ptr.postInit();
             entry.value_ptr.* = arch_ptr;
             return arch_ptr;

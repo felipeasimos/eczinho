@@ -2,7 +2,9 @@ const std = @import("std");
 const Table = @import("table.zig").Table;
 const types = @import("../../types.zig");
 
-pub const TablesConfig = struct {};
+pub const TablesConfig = struct {
+    InitialSize: usize = 0,
+};
 
 pub const TablesOptions = struct {
     Entity: type,
@@ -64,12 +66,25 @@ pub fn TablesFactory(comptime options: TablesOptions) type {
         signature: Components,
         count: usize = 0,
 
-        pub inline fn init(signature: Components) !@This() {
-            return .{
+        pub inline fn init(allocator: std.mem.Allocator, signature: Components) !@This() {
+            var new = @This(){
                 .signature = signature.intersection(comptime Components.DenseOccupiesSpaceComponents),
                 // SAFETY: set in `postInit`
                 .entities = undefined,
             };
+            if (comptime options.Config.InitialSize != 0) {
+                comptime var iter = Components.DenseOccupiesSpaceComponents.iterator();
+
+                inline while (comptime iter.nextTypeId()) |tid| {
+                    const Component = comptime Components.getType(tid);
+                    if (new.signaturesig.has(Component)) {
+                        const table_index = comptime getTableIndex(Component);
+                        const table = &new.tables[table_index];
+                        try table.ensureTotalCapacity(allocator, options.Config.InitialSize);
+                    }
+                }
+            }
+            return new;
         }
         pub inline fn postInit(self: *@This(), archetype_ptr: anytype) void {
             self.entities = &archetype_ptr.entities;
@@ -93,7 +108,7 @@ pub fn TablesFactory(comptime options: TablesOptions) type {
             const index = getTableIndex(Component);
             return @typeInfo(ComponentArrays).@"struct".fields[index].type;
         }
-        fn getTable(self: *@This(), comptime Component: type) *GetTableResultType(Component) {
+        inline fn getTable(self: *@This(), comptime Component: type) *GetTableResultType(Component) {
             const index = comptime getTableIndex(Component);
             return &self.tables[index];
         }

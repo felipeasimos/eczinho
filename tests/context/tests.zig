@@ -4,4 +4,5 @@ test "context" {
     _ = @import("resources/tests.zig");
     _ = @import("entity/tests.zig");
     _ = @import("bundles/tests.zig");
+    _ = @import("dense_storage_config/tests.zig");
 }

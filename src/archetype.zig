@@ -44,9 +44,9 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             }
         }
 
-        pub fn init(sig: Components) !@This() {
+        pub fn init(allocator: std.mem.Allocator, sig: Components) !@This() {
             return .{
-                .storage = try DenseStorage.init(sig),
+                .storage = try DenseStorage.init(allocator, sig),
                 .signature = sig,
             };
         }

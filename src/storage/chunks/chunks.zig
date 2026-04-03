@@ -3,6 +3,7 @@ const types = @import("../../types.zig");
 const ChunkFactory = @import("chunk.zig").ChunkFactory;
 
 pub const ChunksConfig = struct {
+    InitialNumChunks: usize = 0,
     ChunkSize: usize = 1024 * 16, // 16 KB
 };
 
@@ -125,15 +126,19 @@ pub fn ChunksFactory(comptime options: ChunksOptions) type {
 
         chunk_layout: ChunkLayout,
 
-        pub fn init(signature: Components) !@This() {
+        pub fn init(allocator: std.mem.Allocator, signature: Components) !@This() {
             const dense_sig = signature.applyStorageTypeMask(.Dense);
             const capacity_per_chunk = calculateCapacity(dense_sig);
             const chunk_layout = ChunkLayout.init(dense_sig, capacity_per_chunk);
-            return .{
+            var new = @This(){
                 .capacity_per_chunk = capacity_per_chunk,
                 .signature = dense_sig,
                 .chunk_layout = chunk_layout,
             };
+            if (comptime options.Config.InitialNumChunks != 0) {
+                new.chunks.ensureTotalCapacity(allocator, options.Config.InitialNumChunks);
+            }
+            return new;
         }
         pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
             for (self.chunks.items) |chunk| {
