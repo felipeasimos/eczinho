@@ -4,26 +4,29 @@ const archetype = @import("archetype.zig");
 const commands = @import("commands/commands.zig");
 const removed = @import("removed/removed.zig");
 const sparsesets = @import("storage/sparseset/sparsesets.zig");
+const dense_storage = @import("storage/dense_storage.zig");
 const Tick = @import("types.zig").Tick;
 
 pub const WorldOptions = struct {
     Components: type,
     Entity: type = entity.EntityTypeFactory(.medium),
+    DenseStorageConfig: ?dense_storage.DenseStorageConfig = null,
 };
 
 pub fn World(comptime options: WorldOptions) type {
     return struct {
         pub const Entity = options.Entity;
         pub const Components = options.Components;
+        pub const DenseStorageConfig: dense_storage.DenseStorageConfig = options.DenseStorageConfig orelse .{
+            .Tables = .{
+                .Entity = Entity,
+                .Components = Components,
+            },
+        };
         pub const Archetype = archetype.Archetype(.{
             .Entity = Entity,
             .Components = Components,
-            .DenseStorageConfig = .{
-                .Chunks = .{
-                    .Entity = Entity,
-                    .Components = Components,
-                },
-            },
+            .DenseStorageConfig = DenseStorageConfig,
         });
         pub const Storage = Archetype.DenseStorage;
         pub const EntityLocation = entity.EntityLocation(.{
@@ -114,6 +117,7 @@ pub fn World(comptime options: WorldOptions) type {
             }
             const arch_ptr = try self.allocator.create(Archetype);
             arch_ptr.* = try Archetype.init(signature);
+            arch_ptr.postInit();
             entry.value_ptr.* = arch_ptr;
             return arch_ptr;
         }

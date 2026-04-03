@@ -10,7 +10,9 @@ test "check if chunked component was just changed" {
         .addComponent(ComponentA)
         .addComponentWithConfig(ComponentB, .{
             .track_metadata = .{
+                .added = false,
                 .changed = true,
+                .removed = false,
             },
         })
         .addResource(ChangedTicks)

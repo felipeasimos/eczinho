@@ -49,6 +49,12 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             };
         }
 
+        pub inline fn postInit(self: *@This()) void {
+            if (comptime @hasDecl(DenseStorage, "postInit")) {
+                self.storage.postInit(self);
+            }
+        }
+
         pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
             self.storage.deinit(allocator);
             self.entities.deinit(allocator);

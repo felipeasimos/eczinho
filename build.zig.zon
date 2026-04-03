@@ -2,7 +2,7 @@
     .name = .eczinho,
     .version = "0.0.0",
     .fingerprint = 0xdaefa63a9e395e1,
-    .minimum_zig_version = "0.15.2",
+    .minimum_zig_version = "0.16.0-dev.3066+da78940dd",
     .dependencies = .{},
     .paths = .{
         "build.zig",

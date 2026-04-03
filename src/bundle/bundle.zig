@@ -122,11 +122,7 @@ pub const BundleContext = struct {
         pub fn addComponent(self: @This(), comptime Component: type) @This() {
             var new = self;
             new.components = new.components ++ .{Component};
-            var default_config = ComponentConfig{};
-            if (@sizeOf(Component) == 0) {
-                default_config.track_metadata.changed = false;
-            }
-            new.component_configs = new.component_configs ++ .{default_config};
+            new.component_configs = new.component_configs ++ .{ComponentConfig{}};
             return new;
         }
         pub fn addComponentWithConfig(self: @This(), comptime Component: type, comptime config: ComponentConfig) @This() {
