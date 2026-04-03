@@ -2,9 +2,12 @@ const std = @import("std");
 const Table = @import("table.zig").Table;
 const types = @import("../../types.zig");
 
+pub const TablesConfig = struct {};
+
 pub const TablesOptions = struct {
     Entity: type,
     Components: type,
+    Config: TablesConfig = .{},
 };
 
 fn CreateComponentArraysTupleType(

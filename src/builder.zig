@@ -6,7 +6,6 @@ const EntityOptions = @import("entity/entity.zig").EntityOptions;
 const EntityTypeFactory = @import("entity/entity.zig").EntityTypeFactory;
 const ComponentsFactory = @import("components.zig").Components;
 const ResourcesFactory = @import("resource/resources.zig").Resources;
-const WorldFactory = @import("world.zig").World;
 const TypeStoreFactory = @import("resource/type_store.zig").TypeStore;
 const EventStoreFactory = @import("event/event_store.zig").EventStore;
 const EventsFactory = @import("event/events.zig").Events;
@@ -15,12 +14,14 @@ const Bundle = @import("bundle/bundle.zig").Bundle;
 const app = @import("app.zig");
 const app_events = @import("app_events.zig");
 const ComponentConfig = @import("components.zig").ComponentConfig;
+const dense_storage = @import("storage/dense_storage.zig");
 
 pub const AppContextBuilder = struct {
     const ConfigOverride = struct { type, ComponentConfig };
     bundle_builder: BundleContext.Builder = BundleContext.Builder.init(),
     entity: type = EntityTypeFactory(.medium),
     config_overrides: []const ConfigOverride = &.{},
+    dense_storage_config: ?dense_storage.DenseStorageConfig = null,
     pub fn init() @This() {
         return .{};
     }
@@ -83,6 +84,11 @@ pub const AppContextBuilder = struct {
         new.entity = EntityTypeFactory(options);
         return new;
     }
+    pub fn setDenseStorageConfig(self: @This(), config: dense_storage.DenseStorageConfig) @This() {
+        var new = self;
+        new.dense_storage_config = config;
+        return new;
+    }
     /// duplicated bundles are silently ignored
     /// duplicated components, reosurces and events (in different bundles)
     /// will result in a compile time error
@@ -104,12 +110,15 @@ pub const AppContextBuilder = struct {
             }
         }
         const final_configs = configs;
+        const dense_storage_config = self.dense_storage_config orelse dense_storage.DenseStorageConfig{ .Tables = .{} };
+
         return app.AppContext(.{
             .Events = EventsFactory(validated_context.EventTypes ++ app_events.appEventsSlice),
             .Resources = ResourcesFactory(validated_context.ResourceTypes),
             .Components = ComponentsFactory(validated_context.ComponentTypes, &final_configs),
             .Bundles = validated_context.Bundles,
             .Entity = self.entity,
+            .DenseStorageConfig = dense_storage_config,
         });
     }
     /// recursively go through given bundles, to get a complete list of bundles
@@ -214,10 +223,7 @@ pub const AppBuilder = struct {
         return new;
     }
     pub fn build(comptime self: @This(), allocator: std.mem.Allocator, io: std.Io) app.App(self.options) {
-        const World = WorldFactory(.{
-            .Components = self.options.Context.Components,
-            .Entity = self.options.Context.Entity,
-        });
+        const World = self.options.Context.GetWorldType();
         const TypeStore = TypeStoreFactory(.{
             .TypeHasher = self.options.Context.Resources,
         });

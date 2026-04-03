@@ -18,9 +18,11 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
         pub const ComponentTypeId = options.Components.ComponentTypeId;
         pub const Components = options.Components;
         pub const Entity = options.Entity;
+        pub const DenseStorageConfig = options.DenseStorageConfig;
         pub const World = WorldFactory(.{
             .Components = Components,
             .Entity = Entity,
+            .DenseStorageConfig = DenseStorageConfig,
         });
         pub const EntityLocation = World.EntityLocation;
         pub const DenseStorage = dense_storage.DenseStorage(.{

@@ -11,6 +11,7 @@ const removed = @import("removed/removed.zig");
 const app_events = @import("app_events.zig");
 const Tick = @import("types.zig").Tick;
 const Bundle = @import("bundle/bundle.zig").Bundle;
+const dense_storage = @import("storage/dense_storage.zig");
 
 pub const AppContextOptions = struct {
     Components: type,
@@ -18,6 +19,7 @@ pub const AppContextOptions = struct {
     Events: type,
     Bundles: []const Bundle = &.{},
     Entity: type = EntityTypeFactory(.medium),
+    DenseStorageConfig: dense_storage.DenseStorageConfig,
 };
 
 pub fn AppContext(comptime options: AppContextOptions) type {
@@ -27,6 +29,7 @@ pub fn AppContext(comptime options: AppContextOptions) type {
         pub const Resources = options.Resources;
         pub const Events = options.Events;
         pub const Bundles = options.Bundles;
+        pub const DenseStorageConfig = options.DenseStorageConfig;
 
         /// use in systems to obtain access to the whole resource store
         /// fn systemExample(store: *ResourceStore(typeA), ...) !void {
@@ -45,6 +48,7 @@ pub fn AppContext(comptime options: AppContextOptions) type {
                 .request = req,
                 .Entity = Entity,
                 .Components = Components,
+                .World = GetWorldType(),
             });
         }
         /// use in systems to obtain a Commands object. System signature should be like:
@@ -98,6 +102,14 @@ pub fn AppContext(comptime options: AppContextOptions) type {
                 .Tick = Tick,
             });
         }
+
+        pub fn GetWorldType() type {
+            return WorldFactory(.{
+                .Entity = Entity,
+                .Components = Components,
+                .DenseStorageConfig = DenseStorageConfig,
+            });
+        }
     };
 }
 
@@ -123,6 +135,7 @@ pub fn App(comptime options: AppOptions) type {
         pub const World = WorldFactory(.{
             .Components = Components,
             .Entity = Entity,
+            .DenseStorageConfig = options.Context.DenseStorageConfig,
         });
         pub const TypeStore = resource.TypeStore(.{
             .TypeHasher = Resources,

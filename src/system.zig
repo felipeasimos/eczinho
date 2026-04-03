@@ -1,6 +1,5 @@
 const std = @import("std");
 
-const WorldFactory = @import("world.zig").World;
 const TypeStoreFactory = @import("resource/type_store.zig").TypeStore;
 const EventStoreFactory = @import("event/event_store.zig").EventStore;
 const RemovedLogFactory = @import("removed/removed_log.zig").RemovedComponentsLog;
@@ -20,10 +19,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
         pub const Resources = Context.Resources;
         pub const Events = Context.Events;
 
-        pub const World = WorldFactory(.{
-            .Components = Components,
-            .Entity = Entity,
-        });
+        pub const World = Context.GetWorldType();
         pub const TypeStore = TypeStoreFactory(.{
             .TypeHasher = Resources,
         });

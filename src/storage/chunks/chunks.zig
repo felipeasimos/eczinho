@@ -2,11 +2,14 @@ const std = @import("std");
 const types = @import("../../types.zig");
 const ChunkFactory = @import("chunk.zig").ChunkFactory;
 
+pub const ChunksConfig = struct {
+    ChunkSize: usize = 1024 * 16, // 16 KB
+};
+
 pub const ChunksOptions = struct {
     Entity: type,
     Components: type,
-    InitialNumChunks: usize = 0,
-    ChunkSize: usize = 1024 * 16, // 16 KB
+    Config: ChunksConfig,
 };
 
 /// Chunk layout:

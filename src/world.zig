@@ -10,19 +10,14 @@ const Tick = @import("types.zig").Tick;
 pub const WorldOptions = struct {
     Components: type,
     Entity: type = entity.EntityTypeFactory(.medium),
-    DenseStorageConfig: ?dense_storage.DenseStorageConfig = null,
+    DenseStorageConfig: dense_storage.DenseStorageConfig,
 };
 
 pub fn World(comptime options: WorldOptions) type {
     return struct {
         pub const Entity = options.Entity;
         pub const Components = options.Components;
-        pub const DenseStorageConfig: dense_storage.DenseStorageConfig = options.DenseStorageConfig orelse .{
-            .Tables = .{
-                .Entity = Entity,
-                .Components = Components,
-            },
-        };
+        pub const DenseStorageConfig = options.DenseStorageConfig;
         pub const Archetype = archetype.Archetype(.{
             .Entity = Entity,
             .Components = Components,

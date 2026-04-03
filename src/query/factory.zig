@@ -10,6 +10,7 @@ pub const QueryFactoryOptions = struct {
     request: Request,
     Entity: type,
     Components: type,
+    World: type,
 };
 
 const QueryTypes = struct { dense: Request = .{}, sparse: Request = .{} };
@@ -89,10 +90,7 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
         pub const CannotHave = CannotHave: {
             break :CannotHave request.without;
         };
-        pub const World = world.World(.{
-            .Entity = Entity,
-            .Components = Components,
-        });
+        pub const World = options.World;
         pub const Archetype = World.Archetype;
 
         archetypes: std.ArrayList(Components) = .empty,

@@ -4,8 +4,8 @@ pub const sparsesets = @import("sparseset/sparsesets.zig");
 const DenseStorageType = @import("storage_types.zig").DenseStorageType;
 
 pub const DenseStorageConfig = union(DenseStorageType) {
-    Chunks: chunks.ChunksOptions,
-    Tables: tables.TablesOptions,
+    Chunks: chunks.ChunksConfig,
+    Tables: tables.TablesConfig,
 };
 
 pub const DenseStorageOptions = struct {
@@ -15,8 +15,16 @@ pub const DenseStorageOptions = struct {
 
 pub fn DenseStorage(options: DenseStorageOptions) type {
     return switch (options.Config) {
-        .Chunks => |c| chunks.ChunksFactory(c),
-        .Tables => |t| tables.TablesFactory(t),
+        .Chunks => |c| chunks.ChunksFactory(.{
+            .Entity = options.World.Entity,
+            .Components = options.World.Components,
+            .Config = c,
+        }),
+        .Tables => |t| tables.TablesFactory(.{
+            .Entity = options.World.Entity,
+            .Components = options.World.Components,
+            .Config = t,
+        }),
     };
 }
 

@@ -1,5 +1,4 @@
 const std = @import("std");
-const WorldFactory = @import("world.zig").World;
 const TypeStoreFactory = @import("resource/type_store.zig").TypeStore;
 const EventStoreFactory = @import("event/event_store.zig").EventStore;
 const RemovedLogFactory = @import("removed/removed_log.zig").RemovedComponentsLog;
@@ -38,10 +37,7 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
         pub const Systems = options.Systems;
         pub const Labels = options.Labels;
         pub const SchedulerStages = initSchedulerStages(Systems, Labels);
-        pub const World = WorldFactory(.{
-            .Components = Components,
-            .Entity = Entity,
-        });
+        pub const World = options.Context.GetWorldType();
         pub const TypeStore = TypeStoreFactory(.{
             .TypeHasher = Resources,
         });
