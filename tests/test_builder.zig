@@ -42,7 +42,7 @@ test "AppBuilder" {
 
     const Query = Context.Query;
 
-    var test_app = eczinho.AppBuilder.init(Context)
+    var test_app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Update, struct {
             pub fn execute(_: Query(.{ .q = &.{ typeA, *typeB } })) void {}
         }.execute)

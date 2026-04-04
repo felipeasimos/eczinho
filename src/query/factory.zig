@@ -13,198 +13,168 @@ pub const QueryFactoryOptions = struct {
     World: type,
 };
 
-const QueryTypes = struct { dense: Request = .{}, sparse: Request = .{} };
+const QueryTypes = struct {
+    dense: Request = .{},
+    sparse: Request = .{},
+};
 
-/// use in systems to obtain a query. System signature should be like:
-/// fn systemExample(q: Query(.{.q = &.{typeA, *typeB}, .with = &.{typeC}}) !void {
-///     ...
-/// }
-/// checkout QueryRequest for more information
-pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
-    options.request.validate(options.Components);
-    const request = options.request;
-    const req = req: {
-        var req: QueryTypes = .{};
-        for (@typeInfo(Request).@"struct".fields) |Field| {
-            for (@field(options.request, Field.name)) |Type| {
-                if (Type == options.Entity) {
-                    @field(req.dense, Field.name) = @field(req.dense, Field.name) ++ .{Type};
-                    continue;
-                }
-                const CanonicalType = options.Components.getCanonicalType(Type);
-                const config = options.Components.getConfig(CanonicalType);
-                switch (config.storage_type) {
-                    .Dense => @field(req.dense, Field.name) = @field(req.dense, Field.name) ++ .{Type},
-                    .Sparse => @field(req.sparse, Field.name) = @field(req.sparse, Field.name) ++ .{Type},
-                }
+/// divide request between sparse and dense components
+/// Entity type is kept at the dense part
+fn DivideRequest(comptime options: QueryFactoryOptions) QueryTypes {
+    var req: QueryTypes = .{};
+    for (@typeInfo(Request).@"struct".fields) |Field| {
+        for (@field(options.request, Field.name)) |Type| {
+            if (Type == options.Entity) {
+                @field(req.dense, Field.name) = @field(req.dense, Field.name) ++ .{Type};
+                continue;
+            }
+            const CanonicalType = options.Components.getCanonicalType(Type);
+            const config = options.Components.getConfig(CanonicalType);
+            switch (config.storage_type) {
+                .Dense => @field(req.dense, Field.name) = @field(req.dense, Field.name) ++ .{Type},
+                .Sparse => @field(req.sparse, Field.name) = @field(req.sparse, Field.name) ++ .{Type},
             }
         }
-        break :req req;
+    }
+    return req;
+}
+
+const InnerQueryOptions = struct {
+    Options: QueryFactoryOptions,
+    MustHave: []const type,
+    CannotHave: []const type,
+    DividedRequest: QueryTypes,
+};
+
+inline fn hasValidTicksGeneral(entt: anytype, dense_storage_address: anytype, sparse_sets: anytype, last_run: Tick, comptime Added: []const type, comptime Changed: []const type, comptime Components: type) bool {
+    inline for (Added) |Type| {
+        const added_tick = switch (comptime Components.getStorageType(Type)) {
+            .Dense => dense_storage_address[0].getAddedArray(Type)[dense_storage_address[1]],
+            .Sparse => sparse_sets.getAddedConst(Type, entt),
+        };
+        if (added_tick < last_run) return false;
+    }
+    inline for (Changed) |Type| {
+        const changed_tick = switch (comptime Components.getStorageType(Type)) {
+            .Dense => dense_storage_address[0].getChangedArray(Type)[dense_storage_address[1]],
+            .Sparse => sparse_sets.getChangedConst(Type, entt),
+        };
+        if (changed_tick < last_run) return false;
+    }
+    return true;
+}
+
+inline fn getComponent(comptime Type: type, storage: anytype, index: anytype, current_run: Tick, comptime mark_change: bool, comptime Components: type) Type {
+    const CanonicalType = comptime Components.getCanonicalType(Type);
+    const AccessType = comptime Components.getAccessType(Type);
+    const return_value: Type = switch (comptime AccessType) {
+        .Const => storage.getConst(CanonicalType, index),
+        .PointerConst => @ptrCast(storage.getConst(CanonicalType, index)),
+        .PointerMut => storage.get(CanonicalType, index),
+        .OptionalConst => storage.getConst(CanonicalType, index),
+        .OptionalPointerMut => storage.get(CanonicalType, index),
+        .OptionalPointerConst => @ptrCast(storage.getConst(CanonicalType, index)),
     };
-    var field_types: [request.q.len]type = undefined;
-    for (request.q, 0..) |AccessibleType, i| {
-        if (comptime AccessibleType != options.Entity) {
-            const T = options.Components.getCanonicalType(AccessibleType);
-            options.Components.checkSize(T);
-        }
-        field_types[i] = AccessibleType;
-    }
-    const ResultTuple = @Tuple(&field_types);
-    // check if all changed types are not zst
-    for (request.changed) |Type| {
-        if (@sizeOf(Type) == 0) {
-            @compileError("zero size components types don't have Changed metadata");
+    if (comptime (mark_change and Components.hasChangedMetadata(CanonicalType))) {
+        if (comptime (AccessType == .PointerMut)) {
+            storage.getChanged(CanonicalType, index).* = current_run;
+        } else if (comptime (AccessType == .OptionalPointerMut)) {
+            if (return_value != null) {
+                storage.getChanged(CanonicalType, index).* = current_run;
+            }
         }
     }
-    return struct {
-        /// used to acknowledge that this type came from QueryFactory()
-        pub const Marker = QueryFactory;
-        pub const Entity = options.Entity;
-        pub const Components = options.Components;
-        pub const Tuple = ResultTuple;
-        pub const CanonicalTypes = CanonicalTypes: {
-            var data: []const type = &.{};
-            for (request.q) |AccessibleType| {
-                if (Entity == AccessibleType) continue;
-                const CanonicalType = Components.getCanonicalType(AccessibleType);
-                if (@sizeOf(CanonicalType) == 0) {
-                    @compileError("Can't return a zero-sized type ++ (" ++ @typeName(CanonicalType) ++ ") in query");
-                }
-                options.Components.checkSize(CanonicalType);
-                data = data ++ .{CanonicalType};
-            }
-            break :CanonicalTypes data;
-        };
-        pub const MustHave = MustHave: {
-            var data: []const type = &.{};
-            for (request.q) |Type| {
-                if (Entity == Type) continue;
-                if (@typeInfo(Type) != .optional) {
-                    const CanonicalType = Components.getCanonicalType(Type);
-                    data = data ++ .{CanonicalType};
-                }
-            }
-            data = data ++ request.with ++ request.added ++ request.changed;
-            break :MustHave data;
-        };
-        pub const CannotHave = CannotHave: {
-            break :CannotHave request.without;
-        };
-        pub const World = options.World;
-        pub const Archetype = World.Archetype;
+    return return_value;
+}
 
-        archetypes: std.ArrayList(Components) = .empty,
+inline fn getResultTupleGeneral(entt: anytype, dense_storage_address: anytype, sparse_sets: anytype, current_run: Tick, comptime ResultTypes: []const type, comptime mark_change: bool) @Tuple(ResultTypes) {
+    const Entity = @TypeOf(entt);
+    const Components = @TypeOf(sparse_sets.*).Components;
+    const ResultTuple = @Tuple(ResultTypes);
+
+    const dense_storage, const dense_index = dense_storage_address;
+    var tuple: ResultTuple = undefined;
+    inline for (ResultTypes, 0..) |Type, i| {
+        if (comptime Type == Entity) {
+            tuple[i] = entt;
+        } else {
+            const CanonicalType = comptime Components.getCanonicalType(Type);
+            const StorageType = comptime Components.getStorageType(CanonicalType);
+            tuple[i] = switch (comptime StorageType) {
+                .Dense => getComponent(Type, dense_storage, dense_index, current_run, mark_change, Components),
+                .Sparse => getComponent(Type, sparse_sets, entt, current_run, mark_change, Components),
+            };
+        }
+    }
+    return tuple;
+}
+
+fn SparseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOptions) type {
+    const Components = options.Options.Components;
+    const Entity = options.Options.Entity;
+    const World = options.Options.World;
+    const MustHave = options.MustHave;
+    const CannotHave = options.CannotHave;
+    const ResultTypes = options.Options.request.q;
+    const request = options.Options.request;
+    const ResultTupleType = @Tuple(ResultTypes);
+    const DenseStorage = World.DenseStorage;
+
+    return struct {
+        pub const Marker = mark;
+        const Query = @This();
+        archetypes: std.ArrayList(Components),
         world: *World,
         system_data: *SystemData,
-
-        inline fn checkSignature(sig: Components) bool {
-            const must_have = comptime Components.init(MustHave);
-            const cannot_have = comptime Components.init(CannotHave);
-            return must_have.isSubsetOf(sig) and !cannot_have.hasIntersection(sig);
-        }
-
-        fn updateArchetypeSignatureList(self: *@This()) !std.ArrayList(Components) {
-            var key_iter = self.world.archetypes.keyIterator();
-            var arr: std.ArrayList(Components) = .empty;
-            while (key_iter.next()) |key| {
-                const sig = key.*;
-                if (checkSignature(sig)) {
-                    try arr.append(self.world.allocator, key.*);
-                }
-            }
-            return arr;
-        }
-        pub fn init(reg: *World, system_data: *SystemData) !@This() {
-            var new: @This() = .{
-                .world = reg,
+        pub fn init(w: *World, system_data: *SystemData) !@This() {
+            return .{
+                .world = w,
                 .system_data = system_data,
+                .archetypes = try w.archetype_store.createArchetypeSignatureList(
+                    w.allocator,
+                    comptime MustHave,
+                    comptime CannotHave,
+                ),
             };
-            new.archetypes = try new.updateArchetypeSignatureList();
-            return new;
         }
         pub fn deinit(self: *@This()) void {
             self.archetypes.deinit(self.world.allocator);
         }
-        pub fn iter(self: @This()) Iterator {
-            return Iterator.init(self.world, self.archetypes, self.system_data.last_run);
-        }
-        inline fn archetypeIterator(self: @This(), arch: *Archetype) Archetype.Iterator(
-            req.dense.q,
-            req.dense.added,
-            req.dense.changed,
-        ) {
-            return arch.iterator(
-                req.dense.q,
-                req.dense.added,
-                req.dense.changed,
+        pub inline fn hasValidTicks(self: *const @This(), entt: Entity, dense_storage_address: anytype) bool {
+            return hasValidTicksGeneral(
+                entt,
+                dense_storage_address,
+                &self.world.sparse_sets,
                 self.system_data.last_run,
-                self.world.getTick(),
+                request.added,
+                request.changed,
+                Components,
             );
         }
-        fn sparseEnttIsValid(self: @This(), entt: Entity) bool {
-            inline for (req.sparse.added) |Added| {
-                const added_tick = self.world.sparse_sets.getAddedConst(Added, entt);
-                if (added_tick < self.system_data.last_run) return false;
-            }
-            inline for (req.sparse.changed) |Changed| {
-                const changed_tick = self.world.sparse_sets.getChangedConst(Changed, entt);
-                if (changed_tick < self.system_data.last_run) return false;
-            }
-            return true;
+        pub inline fn getResultTuple(self: *const @This(), entt: anytype, dense_storage_address: anytype, comptime mark_change: bool) @Tuple(ResultTypes) {
+            return getResultTupleGeneral(
+                entt,
+                dense_storage_address,
+                &self.world.sparse_sets,
+                self.world.getTick(),
+                ResultTypes,
+                mark_change,
+            );
         }
-        fn addToDenseTuple(self: @This(), entt: Entity, dense_tuple: @Tuple(req.dense.q), comptime mark_change: bool) Tuple {
-            var tuple: Tuple = undefined;
-            comptime var dense_counter = 0;
-            comptime var tuple_counter = 0;
-            inline for (request.q) |Q| {
-                if (comptime Q == Entity) {
-                    tuple[tuple_counter] = entt;
-                    tuple_counter += 1;
-                    continue;
-                }
-                const CanonicalType = Components.getCanonicalType(Q);
-                switch (comptime Components.getStorageType(CanonicalType)) {
-                    .Dense => {
-                        tuple[tuple_counter] = dense_tuple[dense_counter];
-                        dense_counter += 1;
-                    },
-                    .Sparse => {
-                        const AccessType = comptime Components.getAccessType(Q);
-                        const value: Q = switch (comptime AccessType) {
-                            .Const => self.world.sparse_sets.getConst(CanonicalType, entt),
-                            .PointerConst => @ptrCast(self.world.sparse_sets.get(CanonicalType, entt)),
-                            .PointerMut => self.world.sparse_sets.get(CanonicalType, entt),
-                            .OptionalConst => self.world.sparse_sets.getConst(CanonicalType, entt),
-                            .OptionalPointerMut => self.world.sparse_sets.get(CanonicalType, entt),
-                            .OptionalPointerConst => @ptrCast(self.world.sparse_sets.getConst(CanonicalType, entt)),
-                        };
-                        if (comptime (mark_change and Components.hasChangedMetadata(CanonicalType))) {
-                            if (comptime (AccessType == .PointerMut)) {
-                                self.world.sparse_sets.getChanged(CanonicalType, entt).* = self.world.getTick();
-                            } else if (comptime (AccessType == .OptionalPointerMut)) {
-                                if (value != null) {
-                                    self.world.sparse_sets.getChanged(CanonicalType, entt).* = self.world.getTick();
-                                }
-                            }
-                        }
-                        tuple[tuple_counter] = value;
-                    },
-                }
-                tuple_counter += 1;
-            }
-            return tuple;
-        }
+        /// get number of entities in query
         pub fn len(self: @This()) usize {
             var count: usize = 0;
             for (self.archetypes.items) |sig| {
-                const arch = self.world.getArchetypeFromSignature(sig);
+                const arch = self.world.archetype_store.getArchetypeFromSignature(sig);
                 if (comptime request.added.len == 0 and request.changed.len == 0) {
                     count += arch.len();
                 } else {
-                    var arch_iter = self.archetypeIterator(arch);
-                    while (arch_iter.nextWithoutMarkingChange()) |res| {
-                        const entt, _ = res;
-                        count += @intFromBool(self.sparseEnttIsValid(entt));
+                    var arch_iter = @TypeOf(arch.*).Iterator.init(arch);
+                    while (arch_iter.next()) |entt| {
+                        const dense_storage_address = self.world.getDenseStorageAddress(entt);
+                        if (self.hasValidTicks(entt, dense_storage_address)) {
+                            count += 1;
+                        }
                     }
                 }
             }
@@ -212,137 +182,350 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
         }
         pub fn empty(self: @This()) bool {
             for (self.archetypes.items) |sig| {
-                var arch = self.world.getArchetypeFromSignature(sig);
+                const arch = self.world.archetype_store.getArchetypeFromSignature(sig);
                 if (comptime request.added.len == 0 and request.changed.len == 0) {
                     if (arch.len() != 0) return false;
                 } else if (arch.len() != 0) {
-                    var arch_iter = self.archetypeIterator(arch);
-                    const arch_is_empty = arch_iter.nextWithoutMarkingChange() == null;
-                    if (!arch_is_empty) return false;
+                    var arch_iter = @TypeOf(arch.*).Iterator.init(arch);
+                    while (arch_iter.next()) |entt| {
+                        const dense_storage_address = self.world.getDenseStorageAddress(entt);
+                        if (self.hasValidTicks(entt, dense_storage_address)) {
+                            return false;
+                        }
+                    }
                 }
             }
             return true;
         }
-        /// get next tuple, returning null if query is empty
-        pub fn peek(self: @This()) ?Tuple {
+        pub fn peek(self: @This()) ?ResultTupleType {
             for (self.archetypes.items) |sig| {
-                const arch = self.world.getArchetypeFromSignature(sig);
-                var inner_arch_iter = self.archetypeIterator(arch);
-                while (inner_arch_iter.nextWithoutMarkingChange()) |res| {
-                    const entt, const dense_tuple = res;
-                    if (self.sparseEnttIsValid(entt)) {
-                        return self.addToDenseTuple(entt, dense_tuple, false);
+                const arch = self.world.archetype_store.getArchetypeFromSignature(sig);
+                var arch_iter = @TypeOf(arch.*).Iterator.init(arch);
+                while (arch_iter.next()) |entt| {
+                    const dense_storage_address = self.world.getDenseStorageAddress(entt);
+                    if (self.hasValidTicks(entt, dense_storage_address)) {
+                        return self.getResultTuple(entt, dense_storage_address, false);
                     }
                 }
             }
             return null;
         }
         /// get next tuple, panicking if there is more than one tuple in the query. Returns null if query is empty
-        pub fn optSingle(self: @This()) ?Tuple {
+        pub fn optSingle(self: @This()) ?ResultTupleType {
             if (self.empty()) return null;
-            var result: ?Tuple = null;
+            var result: ?ResultTupleType = null;
             for (self.archetypes.items) |sig| {
-                var arch = self.world.getArchetypeFromSignature(sig);
-                if (arch.len() != 0) {
-                    var inner_arch_iter = self.archetypeIterator(arch);
-                    while (inner_arch_iter.peek()) |res| {
-                        if (result != null) @panic("optSingle found more than one valid tuple");
-                        const entt, const dense_tuple = res;
-                        if (self.sparseEnttIsValid(entt)) {
-                            _ = inner_arch_iter.next();
-                            result = self.addToDenseTuple(entt, dense_tuple, true);
-                        } else {
-                            _ = inner_arch_iter.nextWithoutMarkingChange();
-                        }
-                    }
-                    if (inner_arch_iter.next() != null) {
-                        @panic("optSingle found more than one valid tuple");
+                const arch = self.world.archetype_store.getArchetypeFromSignature(sig);
+                if (arch.len() == 0) continue;
+                var arch_iter = @TypeOf(arch.*).Iterator.init(arch);
+                while (arch_iter.next()) |entt| {
+                    const dense_storage_address = self.world.getDenseStorageAddress(entt);
+                    if (self.hasValidTicks(entt, dense_storage_address)) {
+                        if (result != null) @panic("optSingle() found more than one valid tuple");
+                        result = self.getResultTuple(entt, dense_storage_address, true);
                     }
                 }
             }
             return result;
         }
         /// get next tuple, asserting that there is exactly one tuple in the query. Panics if query is empty.
-        pub fn single(self: @This()) Tuple {
+        pub fn single(self: @This()) ResultTupleType {
             std.debug.assert(!self.empty() and self.len() == 1);
             for (self.archetypes.items) |sig| {
-                var arch = self.world.getArchetypeFromSignature(sig);
-                if (arch.len() != 0) {
-                    var inner_arch_iter = self.archetypeIterator(arch);
-                    while (inner_arch_iter.peek()) |res| {
-                        const entt, const dense_tuple = res;
-                        if (self.sparseEnttIsValid(entt)) {
-                            _ = inner_arch_iter.next();
-                            return self.addToDenseTuple(entt, dense_tuple, true);
-                        } else {
-                            _ = inner_arch_iter.nextWithoutMarkingChange();
-                        }
+                const arch = self.world.archetype_store.getArchetypeFromSignature(sig);
+                if (arch.len() == 0) continue;
+                var arch_iter = @TypeOf(arch.*).Iterator.init(arch);
+                while (arch_iter.next()) |entt| {
+                    const dense_storage_address = self.world.getDenseStorageAddress(entt);
+                    if (self.hasValidTicks(entt, dense_storage_address)) {
+                        return self.getResultTuple(entt, dense_storage_address, true);
                     }
                 }
             }
-            @panic("no tuple found");
+            @panic("single() found no valid tuple");
+        }
+
+        pub fn iter(self: *const @This()) Iterator {
+            return Iterator.init(self, self.archetypes.items, self.system_data.last_run);
         }
 
         pub const Iterator = struct {
-            world: *World,
-            archetypes: std.ArrayList(Components),
+            query: *const Query,
+            archetypes: []Components,
             last_system_run: Tick,
-            current_iter: ?Archetype.Iterator(request.q, request.added, request.changed),
-            pub fn init(reg: *World, archs: std.ArrayList(Components), last_system_run: Tick) @This() {
-                var new: @This() = .{
-                    .world = reg,
-                    .archetypes = archs,
+            archetype_iter: ?DenseStorage.Iterator = null,
+            pub fn init(query: *const Query, archetypes: []Components, last_system_run: Tick) @This() {
+                var new = @This(){
+                    .query = query,
+                    .archetypes = archetypes,
                     .last_system_run = last_system_run,
-                    .current_iter = null,
                 };
-                new.current_iter = new.nextArchetypeIterator();
+                if (archetypes.len == 0) return new;
+                const archetype = query.world.storage_store.getStorageFromSignature(archetypes[0]);
+                new.archetype_iter = @TypeOf(archetype.*).Iterator.init(archetype);
+                new.archetypes = archetypes[1..];
                 return new;
             }
-            inline fn archetypeIterator(self: @This(), arch: *Archetype) Archetype.Iterator(
-                req.dense.q,
-                req.dense.added,
-                req.dense.changed,
-            ) {
-                return arch.iterator(
-                    req.dense.q,
-                    req.dense.added,
-                    req.dense.changed,
-                    self.last_system_run,
-                    self.world.getTick(),
-                );
-            }
-
-            inline fn nextArchetypeIterator(self: *@This()) ?Archetype.Iterator(request.q, request.added, request.changed) {
-                while (self.archetypes.pop()) |sig| {
-                    const arch = self.world.getArchetypeFromSignature(sig);
-                    var iterator = self.archetypeIterator(arch);
-                    if (iterator.peek()) |_| {
-                        return iterator;
+            pub fn next(self: *@This()) ?ResultTupleType {
+                if (self.archetype_iter) |_| {
+                    while (self.archetype_iter.?.next()) |entt| {
+                        const dense_storage_address = self.world.getDenseStorageAddress(entt);
+                        if (self.query.hasValidTicks(entt, dense_storage_address)) {
+                            return self.query.getResultTuple(entt, dense_storage_address, true);
+                        }
                     }
-                }
-                return null;
-            }
-            pub fn next(self: *@This()) ?Tuple {
-                if (self.current_iter == null) {
-                    return null;
-                }
-                if (self.current_iter.?.next()) |iter_result| {
-                    _, const tuple = iter_result;
-                    return tuple;
-                }
-                // if nothing is returned from the current iter
-                if (self.nextArchetypeIterator()) |iterator| {
-                    self.current_iter = iterator;
-                    if (self.current_iter.?.next()) |iter_result| {
-                        _, const tuple = iter_result;
-                        return tuple;
+                    if (self.archetypes.len == 0) {
+                        self.archetype_iter = null;
+                        return null;
                     }
-                    return null;
+                    const archetype = self.query.world.archetype_store.getArchetypeFromSignature(self.archetypes[0]);
+                    self.archetype_iter = @TypeOf(archetype.*).Iterator.init(archetype);
+                    self.archetypes = self.archetypes[1..];
+                    return self.next();
                 }
                 return null;
             }
         };
     };
+}
+
+fn DenseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOptions) type {
+    const Components = options.Options.Components;
+    const Entity = options.Options.Entity;
+    const World = options.Options.World;
+    const MustHave = options.MustHave;
+    const CannotHave = options.CannotHave;
+    const ResultTypes = options.Options.request.q;
+    const request = options.Options.request;
+    const ResultTupleType = @Tuple(ResultTypes);
+    const DenseStorage = World.DenseStorage;
+
+    return struct {
+        pub const Marker = mark;
+        const Query = @This();
+        storages: std.ArrayList(Components),
+        world: *World,
+        system_data: *SystemData,
+        pub fn init(w: *World, system_data: *SystemData) !@This() {
+            return .{
+                .world = w,
+                .system_data = system_data,
+                .storages = try w.storage_store.createStorageSignatureList(
+                    w.allocator,
+                    comptime MustHave,
+                    comptime CannotHave,
+                ),
+            };
+        }
+        pub fn deinit(self: *@This()) void {
+            self.storages.deinit(self.world.allocator);
+        }
+        inline fn hasValidTicks(self: *const @This(), dense_storage_address: anytype) bool {
+            return hasValidTicksGeneral(
+                void, // will not be used for dense query
+                dense_storage_address,
+                void, // will not be used for dense query
+                self.system_data.last_run,
+                request.added,
+                request.changed,
+                Components,
+            );
+        }
+        pub inline fn getResultTuple(self: *const @This(), entt: anytype, dense_storage_address: anytype, comptime mark_change: bool) @Tuple(ResultTypes) {
+            return getResultTupleGeneral(
+                entt,
+                dense_storage_address,
+                &self.world.sparse_sets,
+                self.world.getTick(),
+                ResultTypes,
+                mark_change,
+            );
+        }
+        /// get number of entities in query
+        pub fn len(self: @This()) usize {
+            var count: usize = 0;
+            for (self.storages.items) |sig| {
+                const stor = self.world.storage_store.getStorageFromSignature(sig);
+                if (comptime request.added.len == 0 and request.changed.len == 0) {
+                    count += stor.len();
+                } else {
+                    var stor_iter = @TypeOf(stor.*).Iterator.init(stor);
+                    while (stor_iter.next()) |dense_storage_address| {
+                        if (self.hasValidTicks(dense_storage_address)) {
+                            count += 1;
+                        }
+                    }
+                }
+            }
+            return count;
+        }
+        pub fn empty(self: @This()) bool {
+            for (self.storages.items) |sig| {
+                const stor = self.world.storage_store.getStorageFromSignature(sig);
+                if (comptime request.added.len == 0 and request.changed.len == 0) {
+                    if (stor.len() != 0) return false;
+                } else if (stor.len() != 0) {
+                    var stor_iter = @TypeOf(stor.*).Iterator.init(stor);
+                    while (stor_iter.next()) |dense_storage_address| {
+                        if (self.hasValidTicks(dense_storage_address)) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+        pub fn peek(self: @This()) ?ResultTupleType {
+            for (self.storages.items) |sig| {
+                const stor = self.world.storage_store.getStorageFromSignature(sig);
+                var stor_iter = @TypeOf(stor.*).Iterator.init(stor);
+                while (stor_iter.next()) |dense_storage_address| {
+                    if (self.hasValidTicks(dense_storage_address)) {
+                        const dense_storage, const dense_index = dense_storage_address;
+                        const entt = dense_storage.getConst(Entity, dense_index);
+                        return self.getResultTuple(entt, dense_storage_address, false);
+                    }
+                }
+            }
+            return null;
+        }
+        /// get next tuple, panicking if there is more than one tuple in the query. Returns null if query is empty
+        pub fn optSingle(self: @This()) ?ResultTupleType {
+            if (self.empty()) return null;
+            var result: ?ResultTupleType = null;
+            for (self.storages.items) |sig| {
+                const stor = self.world.storage_store.getStorageFromSignature(sig);
+                if (stor.len() == 0) continue;
+                var stor_iter = @TypeOf(stor.*).Iterator.init(stor);
+                while (stor_iter.next()) |dense_storage_address| {
+                    if (self.hasValidTicks(dense_storage_address)) {
+                        if (result != null) @panic("optSingle() found more than one valid tuple");
+                        const dense_storage, const dense_index = dense_storage_address;
+                        const entt = dense_storage.getConst(Entity, dense_index);
+                        result = self.getResultTuple(entt, dense_storage_address, true);
+                    }
+                }
+            }
+            return result;
+        }
+        /// get next tuple, asserting that there is exactly one tuple in the query. Panics if query is empty.
+        pub fn single(self: @This()) ResultTupleType {
+            std.debug.assert(!self.empty() and self.len() == 1);
+            for (self.storages.items) |sig| {
+                const stor = self.world.storage_store.getStorageFromSignature(sig);
+                if (stor.len() == 0) continue;
+                var stor_iter = @TypeOf(stor.*).Iterator.init(stor);
+                while (stor_iter.next()) |dense_storage_address| {
+                    if (self.hasValidTicks(dense_storage_address)) {
+                        const dense_storage, const dense_index = dense_storage_address;
+                        const entt = dense_storage.getConst(Entity, dense_index);
+                        return self.getResultTuple(entt, dense_storage_address, true);
+                    }
+                }
+            }
+            @panic("single() found no valid tuple");
+        }
+
+        pub fn iter(self: *const @This()) Iterator {
+            return Iterator.init(self, self.storages.items, self.system_data.last_run);
+        }
+
+        pub const Iterator = struct {
+            query: *const Query,
+            storages: []Components,
+            last_system_run: Tick,
+            storage_iter: ?DenseStorage.Iterator = null,
+            pub fn init(query: *const Query, storages: []Components, last_system_run: Tick) @This() {
+                var new = @This(){
+                    .query = query,
+                    .storages = storages,
+                    .last_system_run = last_system_run,
+                };
+                if (storages.len == 0) return new;
+                const storage = query.world.storage_store.getStorageFromSignature(storages[0]);
+                new.storage_iter = DenseStorage.Iterator.init(storage);
+                new.storages = storages[1..];
+                return new;
+            }
+            pub fn next(self: *@This()) ?ResultTupleType {
+                if (self.storage_iter) |_| {
+                    while (self.storage_iter.?.next()) |dense_storage_address| {
+                        if (self.query.hasValidTicks(dense_storage_address)) {
+                            const dense_storage, const dense_index = dense_storage_address;
+                            const entt = dense_storage.getConst(Entity, dense_index);
+                            return self.query.getResultTuple(entt, dense_storage_address, true);
+                        }
+                    }
+                    if (self.storages.len == 0) {
+                        self.storage_iter = null;
+                        return null;
+                    }
+                    const storage = self.query.world.storage_store.getStorageFromSignature(self.storages[0]);
+                    self.storage_iter = DenseStorage.Iterator.init(storage);
+                    self.storages = self.storages[1..];
+                    return self.next();
+                }
+                return null;
+            }
+        };
+    };
+}
+
+/// use in systems to obtain a query. System signature should be like:
+/// fn systemExample(q: Query(.{.q = &.{typeA, *typeB}, .with = &.{typeC}}) !void {
+///     ...
+/// }
+/// checkout QueryRequest for more information
+pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
+    options.request.validate(options.Components, options.Entity);
+    const request = options.request;
+
+    const divided_request = DivideRequest(options);
+
+    const is_only_dense = divided_request.sparse.isEmpty();
+
+    const Entity = options.Entity;
+    const Components = options.Components;
+
+    const CanonicalTypes = CanonicalTypes: {
+        var data: []const type = &.{};
+        for (request.q) |AccessibleType| {
+            if (Entity == AccessibleType) continue;
+            const CanonicalType = Components.getCanonicalType(AccessibleType);
+            data = data ++ .{CanonicalType};
+        }
+        break :CanonicalTypes data;
+    };
+
+    const MustHave = MustHave: {
+        var data: []const type = &.{};
+        for (CanonicalTypes) |CanonicalType| {
+            if (Entity == CanonicalType) continue;
+            if (@typeInfo(CanonicalType) != .optional) {
+                data = data ++ .{CanonicalType};
+            }
+        }
+        data = data ++ request.with ++ request.added ++ request.changed;
+        break :MustHave data;
+    };
+
+    const CannotHave = CannotHave: {
+        break :CannotHave request.without;
+    };
+
+    const Marker = QueryFactory;
+
+    const inner_query_options: InnerQueryOptions = .{
+        .Options = options,
+        .MustHave = MustHave,
+        .CannotHave = CannotHave,
+        .DividedRequest = divided_request,
+    };
+
+    return if (is_only_dense)
+        DenseQueryFactory(Marker, inner_query_options)
+    else
+        SparseQueryFactory(Marker, inner_query_options);
 }
 
 test QueryFactory {

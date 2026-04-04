@@ -61,23 +61,21 @@ pub fn TablesFactory(comptime options: TablesOptions) type {
         };
         pub const Tables = @This();
         tables: ComponentArrays = EmptyArrays,
-        /// read only pointer to the entities array in the archetype
-        entities: *const std.ArrayList(Entity),
+        entities: std.ArrayList(Entity) = .empty,
         signature: Components,
         count: usize = 0,
 
         pub inline fn init(allocator: std.mem.Allocator, signature: Components) !@This() {
             var new = @This(){
                 .signature = signature.intersection(comptime Components.DenseOccupiesSpaceComponents),
-                // SAFETY: set in `postInit`
-                .entities = undefined,
             };
             if (comptime options.Config.InitialSize != 0) {
+                new.entities.ensureTotalCapacity(allocator, options.Config.InitialSize);
                 comptime var iter = Components.DenseOccupiesSpaceComponents.iterator();
 
                 inline while (comptime iter.nextTypeId()) |tid| {
                     const Component = comptime Components.getType(tid);
-                    if (new.signaturesig.has(Component)) {
+                    if (new.signature.has(Component)) {
                         const table_index = comptime getTableIndex(Component);
                         const table = &new.tables[table_index];
                         try table.ensureTotalCapacity(allocator, options.Config.InitialSize);
@@ -86,20 +84,19 @@ pub fn TablesFactory(comptime options: TablesOptions) type {
             }
             return new;
         }
-        pub inline fn postInit(self: *@This(), archetype_ptr: anytype) void {
-            self.entities = &archetype_ptr.entities;
-        }
         pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
             inline for (0..ComponentArraysLen) |i| {
                 self.tables[i].deinit(allocator);
             }
+            self.entities.deinit(allocator);
         }
 
         fn getTableIndex(tid_or_component: anytype) usize {
             if (comptime @TypeOf(tid_or_component) == type) {
-                if (!Components.DenseOccupiesSpaceComponents.has(tid_or_component)) {
-                    @compileError("Shouldn't reach this code line during comptime:" ++
-                        " Component is not dense, or is a ZST with no metadata attached");
+                if (!comptime Components.DenseOccupiesSpaceComponents.has(tid_or_component)) {
+                    @compileError("Shouldn't reach this code line during comptime: '" ++
+                        @typeName(tid_or_component) ++
+                        "' Component is not dense, or is a ZST with no metadata attached");
                 }
             }
             return Components.DenseOccupiesSpaceComponents.getIndexInSet(tid_or_component);
@@ -113,10 +110,11 @@ pub fn TablesFactory(comptime options: TablesOptions) type {
             return &self.tables[index];
         }
         pub fn len(self: *const @This()) usize {
-            return self.count;
+            return self.entities.items.len;
         }
-        pub fn reserve(self: *@This(), allocator: std.mem.Allocator, _: Entity) !StorageAddress {
+        pub fn reserve(self: *@This(), allocator: std.mem.Allocator, entt: Entity) !StorageAddress {
             const index = self.len();
+            try self.entities.append(allocator, entt);
             comptime var iter = Components.DenseOccupiesSpaceComponents.iterator();
             inline while (comptime iter.nextTypeId()) |tid| {
                 const Component = comptime Components.getType(tid);
@@ -125,10 +123,10 @@ pub fn TablesFactory(comptime options: TablesOptions) type {
                     try table.reserve(allocator);
                 }
             }
-            self.count += 1;
             return .{ self, index };
         }
         pub fn remove(self: *@This(), allocator: std.mem.Allocator, index: usize) !?RemovalResult {
+            std.debug.assert(index < self.len());
             _ = allocator;
             if (comptime Components.Len == 0) return null;
             comptime var iter = Components.DenseOccupiesSpaceComponents.iterator();
@@ -140,9 +138,11 @@ pub fn TablesFactory(comptime options: TablesOptions) type {
                     table.remove(index);
                 }
             }
-            self.count -= 1;
-            if (index == self.entities.items.len - 1) return null;
+
+            defer _ = self.entities.swapRemove(index);
+
             const swapped_entt = self.entities.items[self.entities.items.len - 1];
+            if (index == self.entities.items.len - 1) {}
             return .{ swapped_entt.index, index };
         }
         pub inline fn getComponentWithTypeId(self: *@This(), tid: Components.ComponentTypeId, index: usize) []u8 {
@@ -169,7 +169,7 @@ pub fn TablesFactory(comptime options: TablesOptions) type {
             std.debug.assert(table.contains(index));
             return table.getConst(index);
         }
-        pub fn getAddedArray(self: *@This(), tid: Components.ComponentTypeId) []types.Tick {
+        pub fn getAddedArray(self: *@This(), tid: anytype) []types.Tick {
             if (comptime ComponentArraysLen == 0) return &.{};
             const table_index = getTableIndex(tid);
             return switch (table_index) {
@@ -184,7 +184,10 @@ pub fn TablesFactory(comptime options: TablesOptions) type {
                 else => @panic("invalid component type id for table storage"),
             };
         }
-        pub fn getChangedArray(self: *@This(), tid: Components.ComponentTypeId) []types.Tick {
+        pub inline fn getAdded(self: *@This(), tid: anytype, index: usize) *types.Tick {
+            return &self.getAddedArray(tid)[index];
+        }
+        pub fn getChangedArray(self: *@This(), tid: anytype) []types.Tick {
             if (comptime ComponentArraysLen == 0) return &.{};
             const table_index = getTableIndex(tid);
             return switch (table_index) {
@@ -198,6 +201,9 @@ pub fn TablesFactory(comptime options: TablesOptions) type {
                 },
                 else => @panic("invalid component type id for table storage"),
             };
+        }
+        pub inline fn getChanged(self: *@This(), tid: anytype, index: usize) *types.Tick {
+            return &self.getChangedArray(tid)[index];
         }
 
         pub const Iterator = struct {

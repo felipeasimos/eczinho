@@ -26,7 +26,7 @@ test "check if tabled component was just changed" {
     const Query = Context.Query;
     const Entity = Context.Entity;
 
-    var app = eczinho.AppBuilder.init(Context)
+    var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
             pub fn addResource(store: *ResourceStore) !void {
                 store.insert(@as(ChangedTicks, 0));
@@ -122,7 +122,7 @@ test "check if chunked component was just changed" {
     const Query = Context.Query;
     const Entity = Context.Entity;
 
-    var app = eczinho.AppBuilder.init(Context)
+    var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
             pub fn addResource(store: *ResourceStore) !void {
                 store.insert(@as(ChangedTicks, 0));
@@ -225,7 +225,7 @@ test "check if sparse component was just changed" {
     const Query = Context.Query;
     const Entity = Context.Entity;
 
-    var app = eczinho.AppBuilder.init(Context)
+    var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
             pub fn addResource(store: *ResourceStore) !void {
                 store.insert(@as(ChangedTicks, 0));

@@ -71,15 +71,13 @@ pub fn EntityRegistry(comptime options: EntityRegistryOptions) type {
                 };
             };
             // SAFETY: set right afterwards
-            var location: EntityLocation = undefined;
-            const storage, const slot_index = try empty_arch.reserve(allocator, entity_id, &location);
-            self.entities_to_locations.items[@intCast(entity_id.index)] = EntityLocation{
-                .arch = empty_arch,
-                .version = entity_id.version,
-                .storage = storage,
-                .dense_index = @intCast(slot_index),
-                .archetype_vec_index = location.archetype_vec_index,
-            };
+            var location_ptr: *EntityLocation = &self.entities_to_locations.items[@intCast(entity_id.index)];
+            try empty_arch.addEntity(allocator, entity_id, location_ptr);
+            const storage, const slot_index = try empty_arch.reserve(allocator, entity_id);
+            location_ptr.arch = empty_arch;
+            location_ptr.version = entity_id.version;
+            location_ptr.storage = storage;
+            location_ptr.dense_index = slot_index;
 
             return entity_id;
         }

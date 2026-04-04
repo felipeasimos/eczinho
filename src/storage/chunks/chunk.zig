@@ -32,6 +32,9 @@ pub fn ChunkFactory(comptime options: ChunksOptions) type {
             const slice = self.memory[offset .. offset + @sizeOf(types.Tick) * self.count];
             return @alignCast(std.mem.bytesAsSlice(types.Tick, slice));
         }
+        pub inline fn getAdded(self: *@This(), tid_or_component: anytype, index: usize) *types.Tick {
+            return &self.getAddedArray(tid_or_component)[index];
+        }
         pub inline fn getChangedArray(self: *@This(), tid_or_component: anytype) []types.Tick {
             const tid = if (comptime @TypeOf(tid_or_component) == type)
                 comptime Components.hash(tid_or_component)
@@ -40,6 +43,9 @@ pub fn ChunkFactory(comptime options: ChunksOptions) type {
             const offset = self.chunks.chunk_layout.component_changed_offsets.get(tid).?;
             const slice = self.memory[offset .. offset + @sizeOf(types.Tick) * self.count];
             return @alignCast(std.mem.bytesAsSlice(types.Tick, slice));
+        }
+        pub inline fn getChanged(self: *@This(), tid_or_component: anytype, index: usize) *types.Tick {
+            return &self.getChangedArray(tid_or_component)[index];
         }
         pub inline fn getComponentWithTypeId(self: *@This(), tid: Components.ComponentTypeId, index: usize) []u8 {
             std.debug.assert(index < self.len());
