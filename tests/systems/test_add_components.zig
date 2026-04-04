@@ -12,7 +12,7 @@ test "add dense tabled components in system" {
     const Commands = Context.Commands;
     const Query = Context.Query;
 
-    var app = eczinho.AppBuilder.init(Context)
+    var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Update, (struct {
             pub fn testSystemA(comms: Commands) !void {
                 _ = comms.spawn().add(@as(u64, 1)).add(@as(u32, 2));
@@ -75,7 +75,7 @@ test "add dense tabled components in system without metadata" {
     const Commands = Context.Commands;
     const Query = Context.Query;
 
-    var app = eczinho.AppBuilder.init(Context)
+    var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Update, (struct {
             pub fn testSystemA(comms: Commands) !void {
                 _ = comms.spawn().add(@as(u64, 1)).add(@as(u32, 2));
@@ -123,7 +123,7 @@ test "add dense chunked components in system" {
     const Commands = Context.Commands;
     const Query = Context.Query;
 
-    var app = eczinho.AppBuilder.init(Context)
+    var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Update, (struct {
             pub fn testSystemA(comms: Commands) !void {
                 _ = comms.spawn().add(@as(u64, 1)).add(@as(u32, 2));
@@ -186,7 +186,7 @@ test "add dense chunked components in system without metadata" {
     const Commands = Context.Commands;
     const Query = Context.Query;
 
-    var app = eczinho.AppBuilder.init(Context)
+    var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Update, (struct {
             pub fn testSystemA(comms: Commands) !void {
                 _ = comms.spawn().add(@as(u64, 1)).add(@as(u32, 2));
@@ -248,7 +248,7 @@ test "add sparse components in system without metadata" {
     const Commands = Context.Commands;
     const Query = Context.Query;
 
-    var app = eczinho.AppBuilder.init(Context)
+    var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Update, (struct {
             pub fn testSystemA(comms: Commands) !void {
                 _ = comms.spawn().add(@as(u64, 1)).add(@as(u32, 2));
@@ -310,7 +310,7 @@ test "add dense chunked components in system with metadata" {
     const Commands = Context.Commands;
     const Query = Context.Query;
 
-    var app = eczinho.AppBuilder.init(Context)
+    var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Update, (struct {
             pub fn testSystemA(comms: Commands) !void {
                 _ = comms.spawn().add(@as(u64, 1)).add(@as(u32, 2));

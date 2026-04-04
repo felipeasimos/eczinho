@@ -1,9 +1,9 @@
 const std = @import("std");
-const entity = @import("entity/entity.zig");
-const components = @import("components.zig");
-const Tick = @import("types.zig").Tick;
-const WorldFactory = @import("world.zig").World;
-const dense_storage = @import("storage/dense_storage.zig");
+const entity = @import("../entity/entity.zig");
+const components = @import("../components.zig");
+const Tick = @import("../types.zig").Tick;
+const WorldFactory = @import("../world.zig").World;
+const dense_storage = @import("../storage/dense_storage.zig");
 
 pub const ArchetypeOptions = struct {
     Components: type,
@@ -206,125 +206,24 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             };
         }
 
-        pub fn iterator(
-            self: *@This(),
-            comptime ReturnTypes: []const type,
-            comptime Added: []const type,
-            comptime Changed: []const type,
-            last_run: Tick,
-            current_run: Tick,
-        ) Iterator(ReturnTypes, Added, Changed) {
-            return Iterator(ReturnTypes, Added, Changed).init(self, last_run, current_run);
+        pub fn iterator(self: *@This()) Iterator {
+            return Iterator.init(self);
         }
 
-        pub fn Iterator(
-            comptime ReturnTypes: []const type,
-            comptime Added: []const type,
-            comptime Changed: []const type,
-        ) type {
-            for (ReturnTypes) |Type| {
-                if (@sizeOf(Type) == 0) {
-                    @compileError("Can't iterate over zero sized component array");
-                }
+        pub const Iterator = struct {
+            entities: []Entity,
+            pub fn init(arch: *Self) @This() {
+                return .{
+                    .entities = arch.entities.items,
+                };
             }
-            const Tuple = @Tuple(ReturnTypes);
-            return struct {
-                last_run: Tick,
-                current_run: Tick,
-                iter: DenseStorage.Iterator,
-                pub fn init(archetype: *Self, last_run: Tick, current_run: Tick) @This() {
-                    return .{
-                        .iter = DenseStorage.Iterator.init(archetype.storage),
-                        .last_run = last_run,
-                        .current_run = current_run,
-                    };
-                }
-                pub fn peek(self: *@This()) ?struct { Entity, Tuple } {
-                    const old_iter = self.iter;
-                    defer self.iter = old_iter;
-                    return self.nextWithoutMarkingChange();
-                }
-                pub fn next(self: *@This()) ?struct { Entity, Tuple } {
-                    return self.nextInner(true);
-                }
-                pub fn nextWithoutMarkingChange(self: *@This()) ?struct { Entity, Tuple } {
-                    return self.nextInner(false);
-                }
-                fn nextInner(self: *@This(), comptime mark_change: bool) ?struct { Entity, Tuple } {
-                    if (self.nextValidEntity()) |iter_result| {
-                        const storage, const index = iter_result;
-                        // SAFETY: immediatly filled in the following lines
-                        var tuple: Tuple = undefined;
-                        const entt = storage.getConst(Entity, index);
-                        inline for (ReturnTypes, 0..) |Type, i| {
-                            if (comptime Type == Entity) {
-                                tuple[i] = entt;
-                            } else {
-                                tuple[i] = self.getComponent(Type, iter_result, mark_change);
-                            }
-                        }
-                        return .{ entt, tuple };
-                    }
-                    return null;
-                }
-                /// iterate until we get a valid entity, or return null
-                fn nextValidEntity(self: *@This()) ?StorageAddress {
-                    while (self.iter.next()) |iter_result| {
-                        if (self.hasValidTicks(iter_result)) {
-                            return iter_result;
-                        }
-                    }
-                    return null;
-                }
-                inline fn hasValidTicks(self: *@This(), storage_address: StorageAddress) bool {
-                    inline for (Added) |Type| {
-                        const tid = comptime Components.hash(Type);
-                        const added_tick = storage_address[0].getAddedArray(tid)[storage_address[1]];
-                        if (added_tick < self.last_run) return false;
-                    }
-                    inline for (Changed) |Type| {
-                        if (comptime @sizeOf(Type) != 0) {
-                            const tid = comptime Components.hash(Type);
-                            const changed_tick = storage_address[0].getChangedArray(tid)[storage_address[1]];
-                            if (changed_tick < self.last_run) return false;
-                        }
-                    }
-                    return true;
-                }
-                fn getComponent(
-                    self: *@This(),
-                    comptime Type: type,
-                    storage_address: StorageAddress,
-                    comptime mark_change: bool,
-                ) Type {
-                    const CanonicalType = comptime Components.getCanonicalType(Type);
-                    const access_type = comptime Components.getAccessType(Type);
-                    if (comptime @sizeOf(CanonicalType) == 0) {
-                        @compileError("Cannot get access to zero size component " ++ @typeName(CanonicalType));
-                    }
-                    const return_value: Type = switch (comptime access_type) {
-                        .Const => storage_address[0].getConst(CanonicalType, storage_address[1]),
-                        .PointerConst => @ptrCast(storage_address[0].getConst(CanonicalType, storage_address[1])),
-                        .PointerMut => storage_address[0].get(CanonicalType, storage_address[1]),
-                        .OptionalConst => storage_address[0].getConst(CanonicalType, storage_address[1]),
-                        .OptionalPointerMut => storage_address[0].get(CanonicalType, storage_address[1]),
-                        .OptionalPointerConst => @ptrCast(storage_address[0].getConst(CanonicalType, storage_address[1])),
-                    };
-                    if (comptime (mark_change and Components.hasChangedMetadata(CanonicalType))) {
-                        if (comptime (access_type == .PointerMut)) {
-                            const tid = Components.hash(CanonicalType);
-                            storage_address[0].getChangedArray(tid)[storage_address[1]] = self.current_run;
-                        } else if (comptime (access_type == .OptionalPointerMut)) {
-                            if (return_value != null) {
-                                const tid = Components.hash(CanonicalType);
-                                storage_address[0].getChangedArray(tid)[storage_address[1]] = self.current_run;
-                            }
-                        }
-                    }
-                    return return_value;
-                }
-            };
-        }
+            pub fn next(self: *@This()) ?Entity {
+                if (self.entities.len == 0) return null;
+                const ret = self.entities[0];
+                self.entities = self.entities[1..];
+                return ret;
+            }
+        };
     };
 }
 

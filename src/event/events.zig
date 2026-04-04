@@ -11,7 +11,6 @@ pub fn Events(comptime EventTypes: []const type) type {
         pub const getAlignment = Hasher.getAlignment;
         pub const getSize = Hasher.getSize;
         pub const getIndex = Hasher.getIndex;
-        pub const checkSize = Hasher.checkSize;
         pub const checkType = Hasher.checkType;
         pub const getAsUnion = Hasher.getAsUnion;
         pub const isEvent = Hasher.isRegisteredType;

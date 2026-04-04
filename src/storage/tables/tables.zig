@@ -93,9 +93,10 @@ pub fn TablesFactory(comptime options: TablesOptions) type {
 
         fn getTableIndex(tid_or_component: anytype) usize {
             if (comptime @TypeOf(tid_or_component) == type) {
-                if (!Components.DenseOccupiesSpaceComponents.has(tid_or_component)) {
-                    @compileError("Shouldn't reach this code line during comptime:" ++
-                        " Component is not dense, or is a ZST with no metadata attached");
+                if (!comptime Components.DenseOccupiesSpaceComponents.has(tid_or_component)) {
+                    @compileError("Shouldn't reach this code line during comptime: '" ++
+                        @typeName(tid_or_component) ++
+                        "' Component is not dense, or is a ZST with no metadata attached");
                 }
             }
             return Components.DenseOccupiesSpaceComponents.getIndexInSet(tid_or_component);
@@ -166,7 +167,7 @@ pub fn TablesFactory(comptime options: TablesOptions) type {
             std.debug.assert(table.contains(index));
             return table.getConst(index);
         }
-        pub fn getAddedArray(self: *@This(), tid: Components.ComponentTypeId) []types.Tick {
+        pub fn getAddedArray(self: *@This(), tid: anytype) []types.Tick {
             if (comptime ComponentArraysLen == 0) return &.{};
             const table_index = getTableIndex(tid);
             return switch (table_index) {
@@ -181,7 +182,10 @@ pub fn TablesFactory(comptime options: TablesOptions) type {
                 else => @panic("invalid component type id for table storage"),
             };
         }
-        pub fn getChangedArray(self: *@This(), tid: Components.ComponentTypeId) []types.Tick {
+        pub inline fn getAdded(self: *@This(), tid: anytype, index: usize) *types.Tick {
+            return &self.getAddedArray(tid)[index];
+        }
+        pub fn getChangedArray(self: *@This(), tid: anytype) []types.Tick {
             if (comptime ComponentArraysLen == 0) return &.{};
             const table_index = getTableIndex(tid);
             return switch (table_index) {
@@ -195,6 +199,9 @@ pub fn TablesFactory(comptime options: TablesOptions) type {
                 },
                 else => @panic("invalid component type id for table storage"),
             };
+        }
+        pub inline fn getChanged(self: *@This(), tid: anytype, index: usize) *types.Tick {
+            return &self.getChangedArray(tid)[index];
         }
 
         pub const Iterator = struct {

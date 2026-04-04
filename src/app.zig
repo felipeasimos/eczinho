@@ -154,7 +154,7 @@ pub fn App(comptime options: AppOptions) type {
         });
 
         allocator: std.mem.Allocator,
-        world: World,
+        world: *World,
         resource_store: TypeStore,
         event_store: EventStore,
         scheduler: ?Scheduler = null,
@@ -175,7 +175,7 @@ pub fn App(comptime options: AppOptions) type {
 
         pub fn startup(self: *@This()) !void {
             self.scheduler = try Scheduler.init(
-                &self.world,
+                self.world,
                 &self.resource_store,
                 &self.event_store,
             );

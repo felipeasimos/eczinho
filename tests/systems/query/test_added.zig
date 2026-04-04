@@ -27,7 +27,7 @@ test "check if tabled component was just added" {
     const Query = Context.Query;
     const Entity = Context.Entity;
 
-    var app = eczinho.AppBuilder.init(Context)
+    var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
             pub fn addResource(store: *ResourceStore) !void {
                 store.insert(@as(AddedTicks, 0));
@@ -123,7 +123,7 @@ test "check if chunked component was just added" {
     const Query = Context.Query;
     const Entity = Context.Entity;
 
-    var app = eczinho.AppBuilder.init(Context)
+    var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
             pub fn addResource(store: *ResourceStore) !void {
                 store.insert(@as(AddedTicks, 0));
@@ -225,7 +225,7 @@ test "check if sparse component was just added" {
     const Query = Context.Query;
     const Entity = Context.Entity;
 
-    var app = eczinho.AppBuilder.init(Context)
+    var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
             pub fn addResource(store: *ResourceStore) !void {
                 store.insert(@as(AddedTicks, 0));
