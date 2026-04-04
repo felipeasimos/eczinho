@@ -138,9 +138,11 @@ pub fn TablesFactory(comptime options: TablesOptions) type {
                     table.remove(index);
                 }
             }
-            if (index == self.entities.items.len - 1) return null;
+
+            defer _ = self.entities.swapRemove(index);
+
             const swapped_entt = self.entities.items[self.entities.items.len - 1];
-            _ = self.entities.swapRemove(index);
+            if (index == self.entities.items.len - 1) {}
             return .{ swapped_entt.index, index };
         }
         pub inline fn getComponentWithTypeId(self: *@This(), tid: Components.ComponentTypeId, index: usize) []u8 {
