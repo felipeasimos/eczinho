@@ -75,7 +75,7 @@ pub fn TablesFactory(comptime options: TablesOptions) type {
 
                 inline while (comptime iter.nextTypeId()) |tid| {
                     const Component = comptime Components.getType(tid);
-                    if (new.signaturesig.has(Component)) {
+                    if (new.signature.has(Component)) {
                         const table_index = comptime getTableIndex(Component);
                         const table = &new.tables[table_index];
                         try table.ensureTotalCapacity(allocator, options.Config.InitialSize);

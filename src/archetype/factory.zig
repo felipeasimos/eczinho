@@ -165,8 +165,8 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                 }
             }
 
-            const removed_result = try old_storage.remove(allocator, @intCast(location.dense_index)) orelse null;
-            location.dense_index = @intCast(new_slot_index);
+            const removed_result = try old_storage.remove(allocator, location.dense_index) orelse null;
+            location.dense_index = new_slot_index;
             location.storage = new_storage;
             return removed_result;
         }

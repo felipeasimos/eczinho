@@ -151,7 +151,7 @@ fn SparseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOption
                 Components,
             );
         }
-        pub inline fn getResultTuple(self: @This(), entt: anytype, dense_storage_address: anytype, comptime mark_change: bool) @Tuple(ResultTypes) {
+        pub inline fn getResultTuple(self: *const @This(), entt: anytype, dense_storage_address: anytype, comptime mark_change: bool) @Tuple(ResultTypes) {
             return getResultTupleGeneral(
                 entt,
                 dense_storage_address,
@@ -245,27 +245,30 @@ fn SparseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOption
             @panic("single() found no valid tuple");
         }
 
-        pub fn iter(self: *@This()) Iterator {
+        pub fn iter(self: *const @This()) Iterator {
             return Iterator.init(self, self.archetypes.items, self.system_data.last_run);
         }
 
         pub const Iterator = struct {
-            query: *Query,
+            query: *const Query,
             archetypes: []Components,
             last_system_run: Tick,
-            archetype_iter: ?DenseStorage.Iterator,
-            pub fn init(query: *Query, archetypes: []Components, last_system_run: Tick) @This() {
-                const current_iter = if (archetypes.len > 0) DenseStorage.Iterator.init(archetypes[0]) else null;
-                return .{
+            archetype_iter: ?DenseStorage.Iterator = null,
+            pub fn init(query: *const Query, archetypes: []Components, last_system_run: Tick) @This() {
+                var new = @This(){
                     .query = query,
-                    .storages = archetypes[1..],
+                    .archetypes = archetypes,
                     .last_system_run = last_system_run,
-                    .storage_iter = current_iter,
                 };
+                if (archetypes.len == 0) return new;
+                const archetype = query.world.storage_store.getStorageFromSignature(archetypes[0]);
+                new.archetype_iter = @TypeOf(archetype.*).Iterator.init(archetype);
+                new.archetypes = archetypes[1..];
+                return new;
             }
             pub fn next(self: *@This()) ?ResultTupleType {
-                if (self.archetype_iter) |arch_iter| {
-                    while (arch_iter.next()) |entt| {
+                if (self.archetype_iter) |_| {
+                    while (self.archetype_iter.?.next()) |entt| {
                         const dense_storage_address = self.world.getDenseStorageAddress(entt);
                         if (self.query.hasValidTicks(entt, dense_storage_address)) {
                             return self.query.getResultTuple(entt, dense_storage_address, true);
@@ -275,7 +278,8 @@ fn SparseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOption
                         self.archetype_iter = null;
                         return null;
                     }
-                    self.archetype_iter = DenseStorage.Iterator.init(self.archetypes[0]);
+                    const archetype = self.query.world.archetype_store.getArchetypeFromSignature(self.archetypes[0]);
+                    self.archetype_iter = @TypeOf(archetype.*).Iterator.init(archetype);
                     self.archetypes = self.archetypes[1..];
                     return self.next();
                 }
@@ -316,7 +320,7 @@ fn DenseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOptions
         pub fn deinit(self: *@This()) void {
             self.storages.deinit(self.world.allocator);
         }
-        pub inline fn hasValidTicks(self: *const @This(), dense_storage_address: anytype) bool {
+        inline fn hasValidTicks(self: *const @This(), dense_storage_address: anytype) bool {
             return hasValidTicksGeneral(
                 void, // will not be used for dense query
                 dense_storage_address,
@@ -327,7 +331,7 @@ fn DenseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOptions
                 Components,
             );
         }
-        pub inline fn getResultTuple(self: @This(), entt: anytype, dense_storage_address: anytype, comptime mark_change: bool) @Tuple(ResultTypes) {
+        pub inline fn getResultTuple(self: *const @This(), entt: anytype, dense_storage_address: anytype, comptime mark_change: bool) @Tuple(ResultTypes) {
             return getResultTupleGeneral(
                 entt,
                 dense_storage_address,
@@ -422,27 +426,30 @@ fn DenseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOptions
             @panic("single() found no valid tuple");
         }
 
-        pub fn iter(self: *@This()) Iterator {
+        pub fn iter(self: *const @This()) Iterator {
             return Iterator.init(self, self.storages.items, self.system_data.last_run);
         }
 
         pub const Iterator = struct {
-            query: *Query,
+            query: *const Query,
             storages: []Components,
             last_system_run: Tick,
-            storage_iter: ?DenseStorage.Iterator,
-            pub fn init(query: *Query, storages: []Components, last_system_run: Tick) @This() {
-                const current_iter = if (storages.len > 0) DenseStorage.Iterator.init(storages[0]) else null;
-                return .{
+            storage_iter: ?DenseStorage.Iterator = null,
+            pub fn init(query: *const Query, storages: []Components, last_system_run: Tick) @This() {
+                var new = @This(){
                     .query = query,
-                    .storages = storages[1..],
+                    .storages = storages,
                     .last_system_run = last_system_run,
-                    .storage_iter = current_iter,
                 };
+                if (storages.len == 0) return new;
+                const storage = query.world.storage_store.getStorageFromSignature(storages[0]);
+                new.storage_iter = DenseStorage.Iterator.init(storage);
+                new.storages = storages[1..];
+                return new;
             }
             pub fn next(self: *@This()) ?ResultTupleType {
-                if (self.storage_iter) |stor_iter| {
-                    while (stor_iter.next()) |dense_storage_address| {
+                if (self.storage_iter) |_| {
+                    while (self.storage_iter.?.next()) |dense_storage_address| {
                         if (self.query.hasValidTicks(dense_storage_address)) {
                             const dense_storage, const dense_index = dense_storage_address;
                             const entt = dense_storage.getConst(Entity, dense_index);
@@ -453,7 +460,8 @@ fn DenseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOptions
                         self.storage_iter = null;
                         return null;
                     }
-                    self.storage_iter = DenseStorage.Iterator.init(self.storages[0]);
+                    const storage = self.query.world.storage_store.getStorageFromSignature(self.storages[0]);
+                    self.storage_iter = DenseStorage.Iterator.init(storage);
                     self.storages = self.storages[1..];
                     return self.next();
                 }
@@ -514,7 +522,10 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
         .DividedRequest = divided_request,
     };
 
-    return if (is_only_dense) DenseQueryFactory(Marker, inner_query_options) else SparseQueryFactory(Marker, inner_query_options);
+    return if (is_only_dense)
+        DenseQueryFactory(Marker, inner_query_options)
+    else
+        SparseQueryFactory(Marker, inner_query_options);
 }
 
 test QueryFactory {

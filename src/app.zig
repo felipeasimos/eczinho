@@ -186,12 +186,12 @@ pub fn App(comptime options: AppOptions) type {
         }
 
         pub fn deinit(self: *@This()) void {
-            self.world.deinit();
             self.resource_store.deinit();
             self.event_store.deinit();
             if (self.scheduler) |sch| {
-                sch.deinit();
+                sch.deinit(self.world.allocator);
             }
+            self.world.deinit();
         }
     };
 }
