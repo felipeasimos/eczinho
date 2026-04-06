@@ -17,11 +17,11 @@ zig build --build-file examples/pong/build.zig
 
 # TODO
 
-- [ ] let components choose between archetype and sparseset
-- [ ] tables storage type (default)
-- [ ] opt-in metadata (off by default, compile error when using in queries)
+- [x] let components choose between archetype and sparseset
+- [x] tables storage type (default)
+- [x] opt-in metadata (off by default, compile error when using in queries)
 - [ ] determine specific archetypes to be stored as chunks or tables
-- [ ] expose storage options to app creation (chunk size, table growth rate)
+- [x] expose storage options to app creation (chunk size, initial table size)
 - [ ] multithreading
 - [ ] bulk operations
 - [ ] time and delta time
@@ -34,14 +34,15 @@ zig build --build-file examples/pong/build.zig
 - [x] bundling!
    * Even though the component universe is closed, bundling is possible by merging bundle's universes and defining them through functions for dependency injection of the final app context
 - [ ] optional per-archetype dense storage strategy (Chunking or Table) (bevy currently doesn't have!)
+   * will use runtime interfaces for dense storage structs (another level of indirection)
    * define specific dense signatures that should use an specific strategy
+      * will change which struct is initialized during dense storage creation
    * set a default (for example, Table storage) and define a list of dense signatures that would use another
 - [ ] adding/removing sparse components doesn't move dense components
    * changes entity's archetype (with proper signature), but the archetype data will be pointing to the same data
 - [x] opt-in addition / removal / changed tracking for certain components (bevy currently doesn't have)
    * don't pay for what you don't use!
    * don't worry about it being off by default! Queries that use metadata for components without it will show a helpful compile error message to remind you!
-      * always off for the "changed" metadata for ZSTs
 - [ ] scheduling
    * with chunking: work unit is each chunk (better for high cpu counts!)
    * with table and sparse sets storage: work unit is systems

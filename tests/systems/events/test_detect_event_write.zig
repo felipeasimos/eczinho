@@ -18,7 +18,7 @@ test "check if event was written" {
     const EventWriter = Context.EventWriter;
     const EventReader = Context.EventReader;
 
-    var app = eczinho.AppBuilder.init(Context)
+    var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
             pub fn insertResources(store: *ResourceStore) !void {
                 store.insert(ReadCounter{});

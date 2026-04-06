@@ -1,7 +1,9 @@
+const DenseStorageType = @import("storage_types.zig").DenseStorageType;
+
 pub const chunks = @import("chunks/chunks.zig");
 pub const tables = @import("tables/tables.zig");
 pub const sparsesets = @import("sparseset/sparsesets.zig");
-const DenseStorageType = @import("storage_types.zig").DenseStorageType;
+pub const DenseStorageStore = @import("dense_storage_store.zig").DenseStorageStore;
 
 pub const DenseStorageConfig = union(DenseStorageType) {
     Chunks: chunks.ChunksConfig,
@@ -13,7 +15,7 @@ pub const DenseStorageOptions = struct {
     Config: DenseStorageConfig,
 };
 
-pub fn DenseStorage(options: DenseStorageOptions) type {
+pub fn DenseStorageFactory(options: DenseStorageOptions) type {
     return switch (options.Config) {
         .Chunks => |c| chunks.ChunksFactory(.{
             .Entity = options.World.Entity,
@@ -28,7 +30,7 @@ pub fn DenseStorage(options: DenseStorageOptions) type {
     };
 }
 
-pub fn DenseStorageUnit(options: DenseStorageOptions) type {
+pub fn DenseStorageUnitFactory(options: DenseStorageOptions) type {
     return switch (options.Config) {
         .Chunks => |c| chunks.ChunksFactory(c).Chunk,
         .Tables => |t| tables.TablesFactory(t),

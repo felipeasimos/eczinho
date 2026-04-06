@@ -1,6 +1,6 @@
 const std = @import("std");
 const entity = @import("entity/entity.zig");
-const archetype = @import("archetype.zig");
+const archetype = @import("archetype/archetype.zig");
 const commands = @import("commands/commands.zig");
 const removed = @import("removed/removed.zig");
 const sparsesets = @import("storage/sparseset/sparsesets.zig");
@@ -22,6 +22,15 @@ pub fn World(comptime options: WorldOptions) type {
             .Entity = Entity,
             .Components = Components,
             .DenseStorageConfig = DenseStorageConfig,
+        });
+        pub const DenseStorage = Archetype.DenseStorage;
+        pub const DenseStorageStore = dense_storage.DenseStorageStore(.{
+            .World = @This(),
+            .Config = DenseStorageConfig,
+        });
+        pub const ArchetypeStore = archetype.ArchetypeStore(.{
+            .Archetype = Archetype,
+            .DenseStorageStore = DenseStorageStore,
         });
         pub const Storage = Archetype.DenseStorage;
         pub const EntityLocation = entity.EntityLocation(.{
@@ -47,33 +56,35 @@ pub fn World(comptime options: WorldOptions) type {
 
         allocator: std.mem.Allocator,
         entity_registry: EntityRegistry,
-        archetypes: std.AutoHashMap(Components, *Archetype),
+        storage_store: DenseStorageStore,
+        archetype_store: ArchetypeStore,
         sparse_sets: SparseSets = .empty,
         queues: std.ArrayList(CommandsQueue) = .empty,
         removed: RemovedLog,
         global_tick: Tick = 0,
 
-        pub fn init(allocator: std.mem.Allocator) @This() {
-            return .{
+        pub fn init(allocator: std.mem.Allocator) !*@This() {
+            const new = try allocator.create(@This());
+            new.* = @This(){
                 .allocator = allocator,
-                .archetypes = @FieldType(@This(), "archetypes").init(allocator),
+                .storage_store = @FieldType(@This(), "storage_store").init(allocator),
+                // SAFETY: set right after, using storage_store address
+                .archetype_store = undefined,
                 .entity_registry = EntityRegistry.init(),
                 .removed = RemovedLog.init(allocator),
             };
+            new.archetype_store = @FieldType(@This(), "archetype_store").init(allocator, &new.storage_store);
+            return new;
         }
 
         pub fn deinit(self: *@This()) void {
-            var iter = self.archetypes.valueIterator();
-            while (iter.next()) |arch| {
-                const arch_ptr = arch.*;
-                arch_ptr.deinit(self.allocator);
-                self.allocator.destroy(arch_ptr);
-            }
+            self.archetype_store.deinit(self.allocator);
+            self.storage_store.deinit(self.allocator);
             self.sparse_sets.deinit(self.allocator);
-            self.archetypes.deinit();
             self.entity_registry.deinit(self.allocator);
             self.deinitQueues();
             self.removed.deinit();
+            self.allocator.destroy(self);
         }
 
         fn deinitQueues(self: *@This()) void {
@@ -93,7 +104,7 @@ pub fn World(comptime options: WorldOptions) type {
 
         pub fn len(self: *@This()) usize {
             var count: usize = 0;
-            var iter = self.archetypes.valueIterator();
+            var iter = self.archetype_store.iterator();
             while (iter.next()) |arch| {
                 const arch_ptr = arch.*;
                 count += arch_ptr.len();
@@ -101,25 +112,9 @@ pub fn World(comptime options: WorldOptions) type {
             return count;
         }
 
-        pub fn getArchetypeFromSignature(self: *@This(), signature: Components) *Archetype {
-            return self.archetypes.get(signature).?;
-        }
-
-        pub fn tryGetArchetypeFromSignature(self: *@This(), signature: Components) !*Archetype {
-            const entry = try self.archetypes.getOrPut(signature);
-            if (entry.found_existing) {
-                return entry.value_ptr.*;
-            }
-            const arch_ptr = try self.allocator.create(Archetype);
-            arch_ptr.* = try Archetype.init(self.allocator, signature);
-            arch_ptr.postInit();
-            entry.value_ptr.* = arch_ptr;
-            return arch_ptr;
-        }
-
         /// Create a new entity and return it
         pub fn create(self: *@This()) !Entity {
-            const empty_arch = try self.tryGetArchetypeFromSignature(Components.init(&.{}));
+            const empty_arch = try self.archetype_store.tryGetArchetypeFromSignature(self.allocator, Components.init(&.{}));
             return self.entity_registry.create(self.allocator, empty_arch);
         }
 
@@ -177,8 +172,8 @@ pub fn World(comptime options: WorldOptions) type {
             const old_arch_sig = self.entity_registry.getEntitySignature(entt);
             var new_signature = old_arch_sig;
             new_signature.remove(Component);
-            const new_arch = self.getArchetypeFromSignature(new_signature);
-            const old_arch = self.getArchetypeFromSignature(old_arch_sig);
+            const new_arch = try self.archetype_store.tryGetArchetypeFromSignature(self.allocator, new_signature);
+            const old_arch = self.archetype_store.getArchetypeFromSignature(old_arch_sig);
 
             // change archetype (and thus the signature) of this entity
             // will also move dense component data ONLY if added component is dense
@@ -197,8 +192,8 @@ pub fn World(comptime options: WorldOptions) type {
             var new_signature = old_arch_sig;
             new_signature.add(Component);
 
-            const new_arch = try self.tryGetArchetypeFromSignature(new_signature);
-            const old_arch = self.getArchetypeFromSignature(old_arch_sig);
+            const new_arch = try self.archetype_store.tryGetArchetypeFromSignature(self.allocator, new_signature);
+            const old_arch = self.archetype_store.getArchetypeFromSignature(old_arch_sig);
 
             // change archetype (and thus the signature) of this entity
             // will also move dense component data ONLY if added component is dense
@@ -238,6 +233,11 @@ pub fn World(comptime options: WorldOptions) type {
                 },
                 .Sparse => self.sparse_sets.getConst(entt.index),
             };
+        }
+
+        pub fn getDenseStorageAddress(self: *@This(), entt: Entity) DenseStorage.StorageAddress {
+            const location = self.entity_registry.getEntityLocation(entt).*;
+            return .{ location.storage, location.dense_index };
         }
 
         pub fn createQueue(self: *@This()) !*CommandsQueue {
@@ -314,7 +314,7 @@ pub fn World(comptime options: WorldOptions) type {
 }
 
 test "all" {
-    _ = @import("archetype.zig");
+    _ = @import("archetype/archetype.zig");
     _ = @import("array.zig");
     _ = @import("components.zig");
     _ = @import("entity/entity.zig");

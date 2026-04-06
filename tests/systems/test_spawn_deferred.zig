@@ -7,7 +7,7 @@ test "spawn deferred without component" {
 
     const Commands = Context.Commands;
 
-    var app = eczinho.AppBuilder.init(Context)
+    var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
             pub fn spawnEntity(commands: Commands) void {
                 _ = commands.spawn();
