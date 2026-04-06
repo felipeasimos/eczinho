@@ -1,5 +1,4 @@
 const std = @import("std");
-const archetype = @import("archetype.zig");
 
 pub const ArchetypeStoreOptions = struct {
     Archetype: type,
@@ -32,7 +31,12 @@ pub fn ArchetypeStore(options: ArchetypeStoreOptions) type {
             }
             self.archetypes.deinit();
         }
-        pub fn createArchetypeSignatureList(self: *@This(), allocator: std.mem.Allocator, comptime MustHave: []const type, comptime CannotHave: []const type) !std.ArrayList(Components) {
+        pub fn createArchetypeSignatureList(
+            self: *@This(),
+            allocator: std.mem.Allocator,
+            comptime MustHave: []const type,
+            comptime CannotHave: []const type,
+        ) !std.ArrayList(Components) {
             const must_have_components = comptime Components.init(MustHave);
             const cannot_have_components = comptime Components.init(CannotHave);
 

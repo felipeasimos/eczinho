@@ -23,7 +23,12 @@ pub fn DenseStorageStore(options: dense_storage.DenseStorageOptions) type {
             }
             self.storages.deinit();
         }
-        pub fn createStorageSignatureList(self: *@This(), allocator: std.mem.Allocator, comptime MustHave: []const type, comptime CannotHave: []const type) !std.ArrayList(Components) {
+        pub fn createStorageSignatureList(
+            self: *@This(),
+            allocator: std.mem.Allocator,
+            comptime MustHave: []const type,
+            comptime CannotHave: []const type,
+        ) !std.ArrayList(Components) {
             const must_have_components = comptime Components.init(MustHave);
             const cannot_have_components = comptime Components.init(CannotHave);
 
@@ -42,7 +47,11 @@ pub fn DenseStorageStore(options: dense_storage.DenseStorageOptions) type {
             std.debug.assert(!dense_signature.hasIntersection(Components.SparseStorageMask));
             return self.storages.get(dense_signature).?;
         }
-        pub fn tryGetStorageFromSignature(self: *@This(), allocator: std.mem.Allocator, dense_signature: Components) !*DenseStorage {
+        pub fn tryGetStorageFromSignature(
+            self: *@This(),
+            allocator: std.mem.Allocator,
+            dense_signature: Components,
+        ) !*DenseStorage {
             std.debug.assert(!dense_signature.hasIntersection(Components.SparseStorageMask));
             const entry = try self.storages.getOrPut(dense_signature);
             if (entry.found_existing) {

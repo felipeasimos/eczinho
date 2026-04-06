@@ -83,7 +83,15 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             dense_removal_result: ?DenseStorage.RemovalResult,
         };
 
-        fn moveStorageData(self: *@This(), allocator: std.mem.Allocator, entt: Entity, location: *EntityLocation, new_arch: *@This(), current_tick: Tick, removed_logs: anytype) !?DenseStorage.RemovalResult {
+        fn moveStorageData(
+            self: *@This(),
+            allocator: std.mem.Allocator,
+            entt: Entity,
+            location: *EntityLocation,
+            new_arch: *@This(),
+            current_tick: Tick,
+            removed_logs: anytype,
+        ) !?DenseStorage.RemovalResult {
             const old_dense_signature = self.signature.applyStorageTypeMask(.Dense);
             const new_dense_signature = new_arch.signature.applyStorageTypeMask(.Dense);
 

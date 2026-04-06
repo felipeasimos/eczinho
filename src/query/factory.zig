@@ -1,8 +1,6 @@
 const std = @import("std");
 const Request = @import("request.zig").QueryRequest;
 const ComponentsFactory = @import("../components.zig").Components;
-const EntityFactory = @import("../entity/entity.zig").EntityTypeFactory;
-const world = @import("../world.zig");
 const SystemData = @import("../system_data.zig").SystemData;
 const Tick = @import("../types.zig").Tick;
 
@@ -20,7 +18,7 @@ const QueryTypes = struct {
 
 /// divide request between sparse and dense components
 /// Entity type is kept at the dense part
-fn DivideRequest(comptime options: QueryFactoryOptions) QueryTypes {
+fn divideRequest(comptime options: QueryFactoryOptions) QueryTypes {
     var req: QueryTypes = .{};
     for (@typeInfo(Request).@"struct".fields) |Field| {
         for (@field(options.request, Field.name)) |Type| {
@@ -46,7 +44,15 @@ const InnerQueryOptions = struct {
     DividedRequest: QueryTypes,
 };
 
-inline fn hasValidTicksGeneral(entt: anytype, dense_storage_address: anytype, sparse_sets: anytype, last_run: Tick, comptime Added: []const type, comptime Changed: []const type, comptime Components: type) bool {
+inline fn hasValidTicksGeneral(
+    entt: anytype,
+    dense_storage_address: anytype,
+    sparse_sets: anytype,
+    last_run: Tick,
+    comptime Added: []const type,
+    comptime Changed: []const type,
+    comptime Components: type,
+) bool {
     inline for (Added) |Type| {
         const added_tick = switch (comptime Components.getStorageType(Type)) {
             .Dense => dense_storage_address[0].getAddedArray(Type)[dense_storage_address[1]],
@@ -64,7 +70,14 @@ inline fn hasValidTicksGeneral(entt: anytype, dense_storage_address: anytype, sp
     return true;
 }
 
-inline fn getComponent(comptime Type: type, storage: anytype, index: anytype, current_run: Tick, comptime mark_change: bool, comptime Components: type) Type {
+inline fn getComponent(
+    comptime Type: type,
+    storage: anytype,
+    index: anytype,
+    current_run: Tick,
+    comptime mark_change: bool,
+    comptime Components: type,
+) Type {
     const CanonicalType = comptime Components.getCanonicalType(Type);
     const AccessType = comptime Components.getAccessType(Type);
     const return_value: Type = switch (comptime AccessType) {
@@ -87,12 +100,20 @@ inline fn getComponent(comptime Type: type, storage: anytype, index: anytype, cu
     return return_value;
 }
 
-inline fn getResultTupleGeneral(entt: anytype, dense_storage_address: anytype, sparse_sets: anytype, current_run: Tick, comptime ResultTypes: []const type, comptime mark_change: bool) @Tuple(ResultTypes) {
+inline fn getResultTupleGeneral(
+    entt: anytype,
+    dense_storage_address: anytype,
+    sparse_sets: anytype,
+    current_run: Tick,
+    comptime ResultTypes: []const type,
+    comptime mark_change: bool,
+) @Tuple(ResultTypes) {
     const Entity = @TypeOf(entt);
     const Components = @TypeOf(sparse_sets.*).Components;
     const ResultTuple = @Tuple(ResultTypes);
 
     const dense_storage, const dense_index = dense_storage_address;
+    // SAFETY: filled immediatly after
     var tuple: ResultTuple = undefined;
     inline for (ResultTypes, 0..) |Type, i| {
         if (comptime Type == Entity) {
@@ -151,7 +172,12 @@ fn SparseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOption
                 Components,
             );
         }
-        pub inline fn getResultTuple(self: *const @This(), entt: anytype, dense_storage_address: anytype, comptime mark_change: bool) @Tuple(ResultTypes) {
+        pub inline fn getResultTuple(
+            self: *const @This(),
+            entt: anytype,
+            dense_storage_address: anytype,
+            comptime mark_change: bool,
+        ) @Tuple(ResultTypes) {
             return getResultTupleGeneral(
                 entt,
                 dense_storage_address,
@@ -331,7 +357,12 @@ fn DenseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOptions
                 Components,
             );
         }
-        pub inline fn getResultTuple(self: *const @This(), entt: anytype, dense_storage_address: anytype, comptime mark_change: bool) @Tuple(ResultTypes) {
+        pub inline fn getResultTuple(
+            self: *const @This(),
+            entt: anytype,
+            dense_storage_address: anytype,
+            comptime mark_change: bool,
+        ) @Tuple(ResultTypes) {
             return getResultTupleGeneral(
                 entt,
                 dense_storage_address,
@@ -480,7 +511,7 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
     options.request.validate(options.Components, options.Entity);
     const request = options.request;
 
-    const divided_request = DivideRequest(options);
+    const divided_request = divideRequest(options);
 
     const is_only_dense = divided_request.sparse.isEmpty();
 
@@ -529,6 +560,7 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
 }
 
 test QueryFactory {
+    const entity = @import("../entity/entity.zig");
     const camelCase1 = u31;
     const camelCase2 = u32;
     const camelCase3 = u33;
@@ -568,7 +600,7 @@ test QueryFactory {
             PascalCase4,
             PascalCase5,
         }),
-        .Entity = EntityFactory(.medium),
+        .Entity = entity.EntityFactory(.medium),
     });
     try std.testing.expectEqual(u31, @FieldType(Query.Tuple, "0"));
     try std.testing.expectEqual(*u32, @FieldType(Query.Tuple, "1"));
