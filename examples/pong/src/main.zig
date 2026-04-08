@@ -362,7 +362,7 @@ pub fn main() !void {
     defer rl.closeWindow();
     rl.setTargetFPS(60);
 
-    var app = ecs.AppBuilder.init(Context)
+    var app = try ecs.AppBuilder.init(Context)
         .addSystem(.Startup, createPlayerPaddle)
         .addSystem(.Startup, createEnemyPaddle)
         .addSystem(.Startup, createBall)

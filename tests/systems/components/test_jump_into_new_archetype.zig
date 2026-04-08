@@ -14,7 +14,7 @@ test "jump dense tabled components into new archetype" {
     const Commands = Context.Commands;
     const Query = Context.Query;
 
-    var app = eczinho.AppBuilder.init(Context)
+    var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Update, (struct {
             pub fn testSystemA(comms: Commands) !void {
                 _ = comms.spawn()
@@ -48,28 +48,28 @@ test "jump dense tabled components into new archetype" {
     try std.testing.expectEqual(0, app.world.len());
 
     try std.testing.expectEqual(null, app
-        .world.archetypes.get(Context.Components.init(&.{typeA})));
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{typeA})));
     try std.testing.expectEqual(null, app
-        .world.archetypes.get(Context.Components.init(&.{ typeA, typeB })));
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{ typeA, typeB })));
     try std.testing.expectEqual(null, app
-        .world.archetypes.get(Context.Components.init(&.{ typeA, typeB, typeC })));
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{ typeA, typeB, typeC })));
     try std.testing.expectEqual(null, app
-        .world.archetypes.get(Context.Components.init(&.{ typeA, typeB, typeC, typeD })));
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{ typeA, typeB, typeC, typeD })));
 
     // syncs last run's changes and apply new deferred changes
     try app.runOne();
     try std.testing.expectEqual(1, app.world.len());
 
     try std.testing.expectEqual(0, app
-        .world.archetypes.get(Context.Components.init(&.{})).?.len());
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{})).?.len());
     try std.testing.expectEqual(null, app
-        .world.archetypes.get(Context.Components.init(&.{typeA})));
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{typeA})));
     try std.testing.expectEqual(null, app
-        .world.archetypes.get(Context.Components.init(&.{ typeA, typeB })));
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{ typeA, typeB })));
     try std.testing.expectEqual(null, app
-        .world.archetypes.get(Context.Components.init(&.{ typeA, typeB, typeC })));
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{ typeA, typeB, typeC })));
     try std.testing.expectEqual(1, app
-        .world.archetypes.get(Context.Components.init(&.{ typeA, typeB, typeC, typeD })).?.len());
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{ typeA, typeB, typeC, typeD })).?.len());
 
     // uncommenting this would panic, since 'optSingle' would find more than one entity that
     // matches the query
@@ -90,7 +90,7 @@ test "jump dense chunked components into new archetype" {
     const Commands = Context.Commands;
     const Query = Context.Query;
 
-    var app = eczinho.AppBuilder.init(Context)
+    var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Update, (struct {
             pub fn testSystemA(comms: Commands) !void {
                 _ = comms.spawn()
@@ -124,28 +124,28 @@ test "jump dense chunked components into new archetype" {
     try std.testing.expectEqual(0, app.world.len());
 
     try std.testing.expectEqual(null, app
-        .world.archetypes.get(Context.Components.init(&.{typeA})));
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{typeA})));
     try std.testing.expectEqual(null, app
-        .world.archetypes.get(Context.Components.init(&.{ typeA, typeB })));
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{ typeA, typeB })));
     try std.testing.expectEqual(null, app
-        .world.archetypes.get(Context.Components.init(&.{ typeA, typeB, typeC })));
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{ typeA, typeB, typeC })));
     try std.testing.expectEqual(null, app
-        .world.archetypes.get(Context.Components.init(&.{ typeA, typeB, typeC, typeD })));
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{ typeA, typeB, typeC, typeD })));
 
     // syncs last run's changes and apply new deferred changes
     try app.runOne();
     try std.testing.expectEqual(1, app.world.len());
 
     try std.testing.expectEqual(0, app
-        .world.archetypes.get(Context.Components.init(&.{})).?.len());
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{})).?.len());
     try std.testing.expectEqual(null, app
-        .world.archetypes.get(Context.Components.init(&.{typeA})));
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{typeA})));
     try std.testing.expectEqual(null, app
-        .world.archetypes.get(Context.Components.init(&.{ typeA, typeB })));
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{ typeA, typeB })));
     try std.testing.expectEqual(null, app
-        .world.archetypes.get(Context.Components.init(&.{ typeA, typeB, typeC })));
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{ typeA, typeB, typeC })));
     try std.testing.expectEqual(1, app
-        .world.archetypes.get(Context.Components.init(&.{ typeA, typeB, typeC, typeD })).?.len());
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{ typeA, typeB, typeC, typeD })).?.len());
 
     // uncommenting this would panic, since 'optSingle' would find more than one entity that
     // matches the query
@@ -197,7 +197,7 @@ test "jump sparse components into new archetype" {
     const Commands = Context.Commands;
     const Query = Context.Query;
 
-    var app = eczinho.AppBuilder.init(Context)
+    var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Update, (struct {
             pub fn testSystemA(comms: Commands) !void {
                 _ = comms.spawn()
@@ -231,28 +231,28 @@ test "jump sparse components into new archetype" {
     try std.testing.expectEqual(0, app.world.len());
 
     try std.testing.expectEqual(null, app
-        .world.archetypes.get(Context.Components.init(&.{typeA})));
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{typeA})));
     try std.testing.expectEqual(null, app
-        .world.archetypes.get(Context.Components.init(&.{ typeA, typeB })));
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{ typeA, typeB })));
     try std.testing.expectEqual(null, app
-        .world.archetypes.get(Context.Components.init(&.{ typeA, typeB, typeC })));
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{ typeA, typeB, typeC })));
     try std.testing.expectEqual(null, app
-        .world.archetypes.get(Context.Components.init(&.{ typeA, typeB, typeC, typeD })));
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{ typeA, typeB, typeC, typeD })));
 
     // syncs last run's changes and apply new deferred changes
     try app.runOne();
     try std.testing.expectEqual(1, app.world.len());
 
     try std.testing.expectEqual(0, app
-        .world.archetypes.get(Context.Components.init(&.{})).?.len());
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{})).?.len());
     try std.testing.expectEqual(null, app
-        .world.archetypes.get(Context.Components.init(&.{typeA})));
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{typeA})));
     try std.testing.expectEqual(null, app
-        .world.archetypes.get(Context.Components.init(&.{ typeA, typeB })));
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{ typeA, typeB })));
     try std.testing.expectEqual(null, app
-        .world.archetypes.get(Context.Components.init(&.{ typeA, typeB, typeC })));
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{ typeA, typeB, typeC })));
     try std.testing.expectEqual(1, app
-        .world.archetypes.get(Context.Components.init(&.{ typeA, typeB, typeC, typeD })).?.len());
+        .world.archetype_store.archetypes.get(Context.Components.init(&.{ typeA, typeB, typeC, typeD })).?.len());
 
     // uncommenting this would panic, since 'optSingle' would find more than one entity that
     // matches the query

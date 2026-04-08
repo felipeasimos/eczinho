@@ -70,9 +70,9 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
             return new;
         }
 
-        pub fn deinit(self: *const @This()) void {
+        pub fn deinit(self: *const @This(), allocator: std.mem.Allocator) void {
             for (self.system_data) |data| {
-                data.deinit(self.world.allocator);
+                data.deinit(allocator);
             }
         }
 

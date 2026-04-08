@@ -34,7 +34,6 @@ pub fn Components(comptime ComponentTypes: []const type, comptime Configs: []con
         pub const getIndex = Hasher.getIndex;
         pub const getIdFromIndex = Hasher.getIdFromIndex;
         pub const getName = Hasher.getName;
-        pub const checkSize = Hasher.checkSize;
         pub const checkType = Hasher.checkType;
         pub const getAsUnion = Hasher.getAsUnion;
         pub const isComponent = Hasher.isRegisteredType;
@@ -74,6 +73,7 @@ pub fn Components(comptime ComponentTypes: []const type, comptime Configs: []con
             }
             break :DenseStorageMask sig;
         };
+        pub const SparseStorageMask = DenseStorageMask.complement();
         pub const AddedMetadataMask = AddedMetadataMask: {
             var sig: @This() = .{
                 .bitset = BitSet.initEmpty(),

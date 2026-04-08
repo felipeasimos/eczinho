@@ -229,17 +229,6 @@ pub fn TypeHasher(comptime Types: []const type) type {
             }
         }
 
-        pub inline fn checkSize(tid_or_type: anytype) void {
-            checkType(tid_or_type);
-            if (comptime @TypeOf(tid_or_type) == TypeId) {
-                std.debug.assert(@This().getSize(tid_or_type) != 0);
-            } else if (comptime @This().isRegisteredType(tid_or_type)) {
-                if (comptime @sizeOf(tid_or_type) == 0) {
-                    @compileError("function called with zero-sized type '" ++ @typeName(tid_or_type) ++ "' as argument!");
-                }
-            }
-        }
-
         pub inline fn getSize(tid_or_type: anytype) usize {
             if (comptime Len == 0) return 0;
             if (comptime @TypeOf(tid_or_type) == TypeId) {

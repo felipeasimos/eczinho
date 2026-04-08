@@ -7,7 +7,7 @@ test "close application" {
 
     const EventWriter = Context.EventWriter;
 
-    var app = eczinho.AppBuilder.init(Context)
+    var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Update, (struct {
             pub fn spawnEntity(writer: EventWriter(eczinho.AppEvents.AppExit)) void {
                 writer.write(eczinho.AppEvents.AppExit{});

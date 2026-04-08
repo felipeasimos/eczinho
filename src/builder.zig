@@ -222,7 +222,7 @@ pub const AppBuilder = struct {
         }
         return new;
     }
-    pub fn build(comptime self: @This(), allocator: std.mem.Allocator, io: std.Io) app.App(self.options) {
+    pub fn build(comptime self: @This(), allocator: std.mem.Allocator, io: std.Io) !app.App(self.options) {
         const World = self.options.Context.GetWorldType();
         const TypeStore = TypeStoreFactory(.{
             .TypeHasher = self.options.Context.Resources,
@@ -232,7 +232,7 @@ pub const AppBuilder = struct {
         });
         return app.App(self.options){
             .allocator = allocator,
-            .world = World.init(allocator),
+            .world = try World.init(allocator),
             .resource_store = TypeStore.init(),
             .event_store = EventStore.init(allocator),
             .scheduler = null,
