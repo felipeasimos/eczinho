@@ -32,6 +32,7 @@ pub fn Components(comptime ComponentTypes: []const type, comptime Configs: []con
         pub const MaxAlignment = Hasher.MaxAlignment;
         pub const getSize = Hasher.getSize;
         pub const getIndex = Hasher.getIndex;
+        pub const getIdFromIndex = Hasher.getIdFromIndex;
         pub const getName = Hasher.getName;
         pub const checkSize = Hasher.checkSize;
         pub const checkType = Hasher.checkType;
@@ -221,8 +222,8 @@ pub fn Components(comptime ComponentTypes: []const type, comptime Configs: []con
             return self.bitset.count();
         }
 
-        pub fn getType(comptime tid: ComponentTypeId) type {
-            return ComponentTypes[getIndex(tid)];
+        pub fn getType(tid_or_component: anytype) type {
+            return ComponentTypes[getIndex(tid_or_component)];
         }
 
         pub fn format(self: *const @This(), w: *std.Io.Writer) !void {
@@ -286,6 +287,16 @@ pub fn Components(comptime ComponentTypes: []const type, comptime Configs: []con
             var only_left = self.bitset;
             only_left.setRangeValue(.{ .start = index, .end = ComponentTypes.len }, false);
             return only_left.count();
+        }
+
+        pub fn getGlobalIndex(self: @This(), index_in_set: usize) ?usize {
+            var iter = self.bitset.iterator(.{ .kind = .set, .direction = .forward });
+            var i: usize = 0;
+            while (iter.next()) |global_idx| {
+                if (i == index_in_set) return global_idx;
+                i += 1;
+            }
+            return null;
         }
 
         pub fn iterator(self: *const @This()) Iterator {

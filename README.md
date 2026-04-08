@@ -15,18 +15,6 @@ Eczinho is a little hybrid ECS built in pure Zig with a bevy-flavored API.
 zig build --build-file examples/pong/build.zig
 ```
 
-# TODO
-
-- [ ] let components choose between archetype and sparseset
-- [ ] tables storage type (default)
-- [ ] opt-in metadata (off by default, compile error when using in queries)
-- [ ] determine specific archetypes to be stored as chunks or tables
-- [ ] expose storage options to app creation (chunk size, table growth rate)
-- [ ] multithreading
-- [ ] bulk operations
-- [ ] time and delta time
-- [ ] better core bundles
-
 ## Implementation goals and bevy comparison
 
 - [x] closed-universe component design
@@ -36,28 +24,31 @@ zig build --build-file examples/pong/build.zig
 - [ ] optional per-archetype dense storage strategy (Chunking or Table) (bevy currently doesn't have!)
    * define specific dense signatures that should use an specific strategy
    * set a default (for example, Table storage) and define a list of dense signatures that would use another
-- [ ] adding/removing sparse components doesn't move dense components
+- [x] adding/removing sparse components doesn't move dense components
    * changes entity's archetype (with proper signature), but the archetype data will be pointing to the same data
 - [x] opt-in addition / removal / changed tracking for certain components (bevy currently doesn't have)
    * don't pay for what you don't use!
    * don't worry about it being off by default! Queries that use metadata for components without it will show a helpful compile error message to remind you!
       * always off for the "changed" metadata for ZSTs
-- [ ] scheduling
+- [ ] multithreading & scheduling
    * with chunking: work unit is each chunk (better for high cpu counts!)
    * with table and sparse sets storage: work unit is systems
    * scheduling strategy resolved at comptime
       * optinal optimizations at runtime using run data? (idk)
 - [ ] conditional systems
    * only run if query is not empty
+- [ ] optional world logging
 - [ ] system explicit ordering
 - [ ] hooks
 - [ ] bulk operations
-- [ ] chunking options
+- [ ] time and delta time (bundle)
+- [ ] storage options
    * chunk size (16KB)
       * metadata is kept separately
-   * compactation strategy:
+   * compactation chunk strategy:
       * add to `free_list` when empty
       * on removal, distribute remanining entities in the chunk if the chunk is below a certain threshold
+   * sparse set page size
 
 ## Different Storage Options (not implemented yet)
 

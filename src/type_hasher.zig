@@ -277,6 +277,10 @@ pub fn TypeHasher(comptime Types: []const type) type {
             @compileError("invalid type " ++ @typeName(Type) ++ ": must be a TypeId or a type in the registered list");
         }
 
+        pub inline fn getIdFromIndex(index: usize) TypeId {
+            return @as(TypeId, @enumFromInt(index));
+        }
+
         pub inline fn getName(tid_or_type: anytype) [:0]const u8 {
             if (comptime @TypeOf(tid_or_type) == TypeId) {
                 return TypeIdNameMap.get(tid_or_type);

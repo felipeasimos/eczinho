@@ -189,6 +189,37 @@ pub fn World(comptime options: WorldOptions) type {
             }
         }
 
+        /// using a slice of component type ids or component types, move entt to new archetype
+        fn setNewSignature(self: *@This(), entt: Entity, new_signature: Components) !void {
+            std.debug.assert(self.valid(entt));
+            const old_arch_sig = self.entity_registry.getEntitySignature(entt);
+
+            const new_arch = try self.tryGetArchetypeFromSignature(new_signature);
+            const old_arch = self.getArchetypeFromSignature(old_arch_sig);
+
+            // change archetype (and thus the signature) of this entity
+            // will also move dense component data ONLY if added component is dense
+            try self.moveToArchetype(entt, old_arch, new_arch);
+
+            // remove from these old sparse sets
+            var iter = old_arch_sig
+                .difference(new_signature)
+                .applyStorageTypeMask(.Sparse)
+                .iterator();
+            while (iter.nextTypeId()) |tid| {
+                try self.sparse_sets.remove(tid, entt, self.getTick(), &self.removed);
+            }
+
+            // reserve at these new sparse sets
+            iter = new_signature
+                .difference(old_arch_sig)
+                .applyStorageTypeMask(.Sparse)
+                .iterator();
+            while (iter.nextTypeId()) |tid| {
+                try self.sparse_sets.reserve(self.allocator, tid, entt);
+                self.sparse_sets.setMetadataToCurrentTick(tid, entt, self.getTick());
+            }
+        }
         pub fn add(self: *@This(), entt: Entity, value: anytype) !void {
             std.debug.assert(self.valid(entt));
             const Component = @TypeOf(value);
@@ -206,12 +237,7 @@ pub fn World(comptime options: WorldOptions) type {
 
             if (comptime Components.getStorageType(@TypeOf(value)) == .Sparse) {
                 try self.sparse_sets.reserve(self.allocator, @TypeOf(value), entt);
-                if (comptime Components.hasAddedMetadata(@TypeOf(value))) {
-                    self.sparse_sets.getAdded(@TypeOf(value), entt).* = self.getTick();
-                }
-                if (comptime Components.hasChangedMetadata(@TypeOf(value))) {
-                    self.sparse_sets.getChanged(@TypeOf(value), entt).* = self.getTick();
-                }
+                self.sparse_sets.setMetadataToCurrentTick(Component, entt, self.getTick());
             }
             if (comptime @sizeOf(Component) != 0) {
                 self.get(Component, entt).* = value;
@@ -257,55 +283,56 @@ pub fn World(comptime options: WorldOptions) type {
         }
 
         fn syncQueue(self: *@This(), queue: *CommandsQueue) !void {
-            std.debug.assert(queue.commands.items.len == 0 or
-                queue.commands.items[0] == .context or
-                queue.commands.items[0] == .despawn);
-
-            // deal with despawn case
-            if (queue.commands.items.len == 1 and queue.commands.items[0] == .despawn) {
-                const despawn = queue.commands.items[0].despawn;
-                try self.destroy(despawn.entt);
-                return;
-            }
             var iter = queue.iterator();
-            while (iter.next()) |ctx| {
-                const entt = switch (ctx.context.id) {
-                    .entity => |e| e,
-                    .placeholder => try self.create(),
+            main_command_loop: while (iter.next()) |ctx_or_despawn| {
+                const entt, var signature = switch (ctx_or_despawn) {
+                    .despawn => |d| {
+                        try self.destroy(d.entt);
+                        continue :main_command_loop;
+                    },
+                    .context => |ctx| switch (ctx.id) {
+                        .entity => |e| .{ e, self.entity_registry.getEntitySignature(e) },
+                        .placeholder => .{ try self.create(), Components.initEmpty() },
+                    },
+                    else => @panic("command queue has invalid order"),
                 };
-                context_loop: while (iter.next()) |comm| {
-                    switch (comm) {
+                if (comptime Components.Len == 0) continue :main_command_loop;
+
+                const context_slice = queue.getContextSlice(&iter);
+                var sig_change: bool = false;
+                // setup new signature
+                for (context_slice) |command| {
+                    switch (command) {
                         .add => |a| {
-                            if (comptime Components.Len != 0) {
-                                switch (a) {
-                                    inline else => |v| {
-                                        try self.add(entt, v);
-                                    },
-                                }
+                            sig_change = true;
+                            const tid: Components.ComponentTypeId = std.meta.activeTag(a);
+                            signature.add(tid);
+                        },
+                        .remove => |tid| {
+                            sig_change = true;
+                            signature.remove(tid);
+                        },
+                        else => @panic("This shouldn't be part of the context slice"),
+                    }
+                }
+                // populate with values
+                try self.setNewSignature(entt, signature);
+                if (!sig_change) continue :main_command_loop;
+
+                for (context_slice) |command| {
+                    switch (command) {
+                        .add => |a| {
+                            switch (a) {
+                                inline else => |v| {
+                                    if (comptime @sizeOf(@TypeOf(v)) != 0) {
+                                        self.get(@TypeOf(v), entt).* = v;
+                                    }
+                                },
                             }
                         },
-                        .remove => |type_id| {
-                            if (comptime Components.Len != 0) {
-                                switch (type_id) {
-                                    inline else => |tid| {
-                                        try self.remove(
-                                            comptime Components.getType(tid),
-                                            entt,
-                                        );
-                                    },
-                                }
-                            }
-                        },
-                        .despawn => |d| {
-                            try self.destroy(d.entt);
-                            break :context_loop;
-                        },
-                        .context => {
-                            // rollback so the outer loop iteration catches
-                            // and use this context
-                            iter.rollback();
-                            break :context_loop;
-                        },
+                        // was already removed
+                        .remove => {},
+                        else => @panic("This shouldn't be part of the context slice"),
                     }
                 }
             }

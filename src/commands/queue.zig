@@ -89,6 +89,15 @@ pub fn CommandsQueueFactory(comptime options: CommandsQueueOptions) type {
             try self.commands.append(self.allocator, .{ .despawn = .{ .entt = context_id.entity } });
         }
 
+        /// can be called after iterating over a context start to get the full slice
+        /// will skip the entire context for the iterator
+        pub fn getContextSlice(self: *@This(), iter: *Iterator) []Command {
+            const ctx = self.commands.items[iter.index - 1].context;
+            const current_iter_index = iter.index;
+            iter.index += ctx.size;
+            const result = self.commands.items[current_iter_index .. current_iter_index + ctx.size];
+            return result;
+        }
         pub fn iterator(self: *@This()) Iterator {
             return Iterator.init(self.commands.items);
         }
