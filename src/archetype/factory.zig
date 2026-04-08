@@ -92,8 +92,6 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             current_tick: Tick,
             removed_logs: anytype,
         ) !?DenseStorage.RemovalResult {
-            const new_storage, const new_slot_index = try new_arch.reserve(allocator, entt);
-
             const old_slot_index = location.dense_index;
 
             const old_dense_signature = self.signature.applyStorageTypeMask(.Dense);
@@ -105,6 +103,8 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                 return null;
             }
             std.debug.assert(new_arch.storage != self.storage);
+
+            const new_storage, const new_slot_index = try new_arch.reserve(allocator, entt);
 
             const old_storage = location.storage;
 
