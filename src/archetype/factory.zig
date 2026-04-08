@@ -92,6 +92,8 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
             current_tick: Tick,
             removed_logs: anytype,
         ) !?DenseStorage.RemovalResult {
+            const old_slot_index = location.dense_index;
+
             const old_dense_signature = self.signature.applyStorageTypeMask(.Dense);
             const new_dense_signature = new_arch.signature.applyStorageTypeMask(.Dense);
 
@@ -113,7 +115,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                     .applyNonEmptyMask();
                 var iter_intersection = intersection.iterator();
                 while (iter_intersection.nextTypeId()) |tid| {
-                    const old_addr = old_storage.getComponentWithTypeId(tid, location.dense_index);
+                    const old_addr = old_storage.getComponentWithTypeId(tid, old_slot_index);
                     const new_addr = new_storage.getComponentWithTypeId(tid, new_slot_index);
                     @memcpy(new_addr, old_addr);
                 }
@@ -137,7 +139,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                 while (iter.nextTypeId()) |tid| {
                     new_storage
                         .getAddedArray(tid)[new_slot_index] = old_storage
-                        .getAddedArray(tid)[location.dense_index];
+                        .getAddedArray(tid)[old_slot_index];
                 }
             }
             // already existing non empty components with changed metadata -> copy metadata
@@ -149,7 +151,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                 while (iter.nextTypeId()) |tid| {
                     new_storage
                         .getChangedArray(tid)[new_slot_index] = old_storage
-                        .getChangedArray(tid)[location.dense_index];
+                        .getChangedArray(tid)[old_slot_index];
                 }
             }
             // newly added components with added metadata -> update metadata
@@ -172,8 +174,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                     new_storage.getChangedArray(tid)[new_slot_index] = current_tick;
                 }
             }
-
-            const removed_result = try old_storage.remove(allocator, location.dense_index) orelse null;
+            const removed_result = try old_storage.remove(allocator, old_slot_index) orelse null;
             location.dense_index = new_slot_index;
             location.storage = new_storage;
             return removed_result;
