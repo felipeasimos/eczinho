@@ -342,7 +342,6 @@ pub fn World(comptime options: WorldOptions) type {
 
 test "all" {
     _ = @import("archetype/archetype.zig");
-    _ = @import("array.zig");
     _ = @import("components.zig");
     _ = @import("entity/entity.zig");
 }

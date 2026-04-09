@@ -178,6 +178,7 @@ pub fn App(comptime options: AppOptions) type {
                 self.world,
                 &self.resource_store,
                 &self.event_store,
+                self.io,
             );
         }
 
