@@ -26,18 +26,20 @@ pub fn EventStore(comptime options: EventStoreOptions) type {
         };
         pub const BuffersTuple = CreateBuffersTupleType(Events);
 
+        allocator: std.mem.Allocator,
         buffers: BuffersTuple,
 
-        pub fn init(alloc: std.mem.Allocator) @This() {
+        pub fn init(allocator: std.mem.Allocator) @This() {
             comptime var iter = Events.Iterator.init();
             comptime var i = 0;
             // SAFETY: immediatly filled in the following lines
             var buffers: BuffersTuple = undefined;
             inline while (iter.nextType()) |Type| {
-                buffers[i] = EventBuffer(Type).init(alloc);
+                buffers[i] = EventBuffer(Type).init();
                 i += 1;
             }
             return .{
+                .allocator = allocator,
                 .buffers = buffers,
             };
         }
@@ -45,21 +47,21 @@ pub fn EventStore(comptime options: EventStoreOptions) type {
             comptime var iter = Events.Iterator.init();
             comptime var i = 0;
             inline while (iter.nextType()) |_| {
-                self.buffers[i].deinit();
+                self.buffers[i].deinit(self.allocator);
                 i += 1;
             }
         }
         pub fn swap(self: *@This()) void {
             comptime var iter = Events.Iterator.init();
             inline while (iter.nextType()) |Type| {
-                self.buffers[Events.getIndex(Type)].swap();
+                self.buffers[Events.getIndex(Type)].swap(self.allocator);
             }
         }
         fn getBuffer(self: *@This(), comptime T: type) *EventBuffer(T) {
             return &self.buffers[Events.getIndex(T)];
         }
         pub fn write(self: *@This(), value: anytype) !void {
-            return self.getBuffer(@TypeOf(value)).write(value);
+            return self.getBuffer(@TypeOf(value)).write(self.allocator, value);
         }
         pub fn readOne(self: *@This(), comptime T: type, index_ptr: *usize) ?T {
             return self.getBuffer(T).readOne(index_ptr);

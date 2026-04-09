@@ -127,7 +127,7 @@ pub fn Archetype(comptime options: ArchetypeOptions) type {
                     .applyRemovedMask();
                 var iter_removed = removed.iterator();
                 while (iter_removed.nextTypeId()) |tid| {
-                    try removed_logs.addRemoved(tid, entt, current_tick);
+                    try removed_logs.addRemoved(allocator, tid, entt, current_tick);
                 }
             }
             // already existing components with added metadata -> copy metadata

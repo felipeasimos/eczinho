@@ -110,6 +110,8 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             event_store: *EventStore,
             system_data: *SystemData,
             removed_logs: *RemovedLog,
+            allocator: std.mem.Allocator,
+            io: std.Io,
         };
         inline fn initArg(comptime ArgType: type, deps: Dependencies) !ArgType {
             const InitFunc = @TypeOf(ArgType.init);
@@ -148,11 +150,12 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             var args: ArgsTuple = undefined;
             inline for (ParamsSlice, 0..) |param, i| {
                 const ArgType = param.type.?;
-                if (ArgType == *TypeStore) {
-                    args[i] = deps.type_store;
-                } else {
-                    args[i] = try initArg(ArgType, deps);
-                }
+                args[i] = switch (ArgType) {
+                    *TypeStore => deps.type_store,
+                    std.mem.Allocator => deps.world.allocator,
+                    std.Io => deps.io,
+                    else => try initArg(ArgType, deps),
+                };
             }
             return args;
         }

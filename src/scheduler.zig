@@ -53,14 +53,16 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
         resource_store: *TypeStore,
         event_store: *EventStore,
         system_data: [Systems.len]SystemData,
+        io: std.Io,
 
-        pub fn init(reg: *World, resource_store: *TypeStore, event_store: *EventStore) !@This() {
+        pub fn init(reg: *World, resource_store: *TypeStore, event_store: *EventStore, io: std.Io) !@This() {
             var new: @This() = .{
                 .resource_store = resource_store,
                 .world = reg,
                 .event_store = event_store,
                 // SAFETY: immediatly populated in the following lines
                 .system_data = undefined,
+                .io = io,
             };
             inline for (Systems, 0..) |System, i| {
                 new.system_data[i] = try System.initData(reg.allocator);
@@ -104,6 +106,8 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
                     .type_store = self.resource_store,
                     .event_store = self.event_store,
                     .removed_logs = &self.world.removed,
+                    .io = self.io,
+                    .allocator = self.world.allocator,
                     .system_data = system_data_ptr,
                 });
                 system_data_ptr.last_run = self.world.getTick();

@@ -6,28 +6,25 @@ pub fn Messages(comptime T: type) type {
         source_buffer: std.ArrayList(T) = .empty,
         /// we write only to this buffer
         sink_buffer: std.ArrayList(T) = .empty,
-        allocator: std.mem.Allocator,
         /// number of events of type T ever written
         count: usize = 0,
 
-        pub fn init(alloc: std.mem.Allocator) @This() {
-            return .{
-                .allocator = alloc,
-            };
+        pub fn init() @This() {
+            return .{};
         }
-        pub fn deinit(self: *@This()) void {
-            self.source_buffer.deinit(self.allocator);
-            self.sink_buffer.deinit(self.allocator);
+        pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+            self.source_buffer.deinit(allocator);
+            self.sink_buffer.deinit(allocator);
         }
         /// swap buffers, logically making the previous writes readable and
         /// clearing the write buffer
-        pub fn swap(self: *@This()) void {
-            self.source_buffer.deinit(self.allocator);
+        pub fn swap(self: *@This(), allocator: std.mem.Allocator) void {
+            self.source_buffer.deinit(allocator);
             self.source_buffer = self.sink_buffer;
             self.sink_buffer = .empty;
         }
-        pub fn write(self: *@This(), event: T) !void {
-            try self.sink_buffer.append(self.allocator, event);
+        pub fn write(self: *@This(), allocator: std.mem.Allocator, event: T) !void {
+            try self.sink_buffer.append(allocator, event);
             self.count += 1;
         }
         inline fn firstReadableId(self: *@This()) usize {
@@ -69,15 +66,15 @@ test Messages {
     try std.testing.expectEqual(0, buf.sink_buffer.items.len);
     try std.testing.expectEqual(0, buf.source_buffer.items.len);
     try std.testing.expectEqual(0, buf.count);
-    try buf.write(56);
+    try buf.write(std.testing.allocator, 56);
     try std.testing.expectEqual(1, buf.sink_buffer.items.len);
     try std.testing.expectEqual(0, buf.source_buffer.items.len);
     try std.testing.expectEqual(1, buf.count);
-    try buf.write(560);
+    try buf.write(std.testing.allocator, 560);
     try std.testing.expectEqual(2, buf.sink_buffer.items.len);
     try std.testing.expectEqual(0, buf.source_buffer.items.len);
     try std.testing.expectEqual(2, buf.count);
-    buf.swap();
+    buf.swap(std.testing.allocator);
     try std.testing.expectEqual(0, buf.sink_buffer.items.len);
     try std.testing.expectEqual(2, buf.source_buffer.items.len);
     try std.testing.expectEqual(2, buf.count);
@@ -85,7 +82,7 @@ test Messages {
     try std.testing.expectEqual(56, buf.readOne(&i));
     try std.testing.expectEqual(560, buf.readOne(&i));
     try std.testing.expectEqual(null, buf.readOne(&i));
-    buf.swap();
+    buf.swap(std.testing.allocator);
     try std.testing.expectEqual(0, buf.sink_buffer.items.len);
     try std.testing.expectEqual(0, buf.source_buffer.items.len);
     try std.testing.expectEqual(2, buf.count);

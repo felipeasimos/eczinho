@@ -71,7 +71,7 @@ pub fn World(comptime options: WorldOptions) type {
                 // SAFETY: set right after, using storage_store address
                 .archetype_store = undefined,
                 .entity_registry = EntityRegistry.init(),
-                .removed = RemovedLog.init(allocator),
+                .removed = RemovedLog.init(),
             };
             new.archetype_store = @FieldType(@This(), "archetype_store").init(allocator, &new.storage_store);
             return new;
@@ -83,7 +83,7 @@ pub fn World(comptime options: WorldOptions) type {
             self.sparse_sets.deinit(self.allocator);
             self.entity_registry.deinit(self.allocator);
             self.deinitQueues();
-            self.removed.deinit();
+            self.removed.deinit(self.allocator);
             self.allocator.destroy(self);
         }
 
@@ -180,7 +180,7 @@ pub fn World(comptime options: WorldOptions) type {
             try self.moveToArchetype(entt, old_arch, new_arch);
 
             if (comptime Components.getStorageType(Component) == .Sparse) {
-                try self.sparse_sets.remove(Component, entt, self.getTick(), &self.removed);
+                try self.sparse_sets.remove(self.allocator, Component, entt, self.getTick(), &self.removed);
             }
         }
 
@@ -202,7 +202,7 @@ pub fn World(comptime options: WorldOptions) type {
                 .applyStorageTypeMask(.Sparse)
                 .iterator();
             while (iter.nextTypeId()) |tid| {
-                try self.sparse_sets.remove(tid, entt, self.getTick(), &self.removed);
+                try self.sparse_sets.remove(self.allocator, tid, entt, self.getTick(), &self.removed);
             }
 
             // reserve at these new sparse sets
@@ -273,7 +273,7 @@ pub fn World(comptime options: WorldOptions) type {
 
         pub fn sync(self: *@This()) !void {
             // swap removed
-            self.removed.swap();
+            self.removed.swap(self.allocator);
             // sync queues
             for (self.queues.items) |*queue| {
                 try self.syncQueue(queue);
@@ -342,7 +342,6 @@ pub fn World(comptime options: WorldOptions) type {
 
 test "all" {
     _ = @import("archetype/archetype.zig");
-    _ = @import("array.zig");
     _ = @import("components.zig");
     _ = @import("entity/entity.zig");
 }

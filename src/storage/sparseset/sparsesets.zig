@@ -109,6 +109,7 @@ pub fn SparseSets(comptime options: SparseSetsOptions) type {
         }
         pub fn remove(
             self: *@This(),
+            allocator: std.mem.Allocator,
             tid_or_component: anytype,
             entt: Entity,
             current_tick: types.Tick,
@@ -123,7 +124,7 @@ pub fn SparseSets(comptime options: SparseSetsOptions) type {
                     std.debug.assert(sparse_set.contains(entt.index));
                     _ = sparse_set.remove(entt.index);
                     if (comptime Components.hasRemovedMetadata(Component)) {
-                        try removed_logs.addRemoved(comptime Components.hash(Component), entt, current_tick);
+                        try removed_logs.addRemoved(allocator, comptime Components.hash(Component), entt, current_tick);
                     }
                 },
             }
