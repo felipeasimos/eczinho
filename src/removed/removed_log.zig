@@ -20,22 +20,22 @@ pub fn RemovedComponentsLog(comptime options: RemovedComponentsLogOptions) type 
         const RemovedLen = Components.RemovedMetadataMask.len();
         logs: [RemovedLen]RemovedComponentLogType,
 
-        pub fn init(alloc: std.mem.Allocator) @This() {
+        pub fn init() @This() {
             // SAFETY: populated right away
             var new: @This() = undefined;
             for (0..RemovedLen) |i| {
-                new.logs[i] = RemovedComponentLogType.init(alloc);
+                new.logs[i] = RemovedComponentLogType.init();
             }
             return new;
         }
-        pub fn deinit(self: *@This()) void {
+        pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
             for (0..RemovedLen) |i| {
-                self.logs[i].deinit();
+                self.logs[i].deinit(allocator);
             }
         }
-        pub fn swap(self: *@This()) void {
+        pub fn swap(self: *@This(), allocator: std.mem.Allocator) void {
             for (0..RemovedLen) |i| {
-                self.logs[i].swap();
+                self.logs[i].swap(allocator);
             }
         }
         fn getRemovedLog(self: *@This(), tid_or_component: anytype) *RemovedComponentLogType {
@@ -57,9 +57,15 @@ pub fn RemovedComponentsLog(comptime options: RemovedComponentsLogOptions) type 
             if (comptime RemovedLen == 0) return 0;
             return self.getRemovedLog(T).count;
         }
-        pub fn addRemoved(self: *@This(), tid_or_component: anytype, entt: Entity, current_tick: Tick) !void {
+        pub fn addRemoved(
+            self: *@This(),
+            allocator: std.mem.Allocator,
+            tid_or_component: anytype,
+            entt: Entity,
+            current_tick: Tick,
+        ) !void {
             if (comptime RemovedLen == 0) return;
-            try self.getRemovedLog(tid_or_component).write(.{
+            try self.getRemovedLog(tid_or_component).write(allocator, .{
                 .entity = entt,
                 .tick = current_tick,
             });

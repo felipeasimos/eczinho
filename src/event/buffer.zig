@@ -18,17 +18,21 @@ fn EventIndexBuffer(comptime T: type) type {
         last_readable_count: usize = 0,
         // first avaiable readable event
         first_readable_id: usize = 0,
-        pub inline fn init(_: std.mem.Allocator) @This() {
+        pub inline fn init() @This() {
             return .{};
         }
-        pub inline fn deinit(self: *@This()) void {
+        pub inline fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+            _ = allocator;
             _ = self;
         }
-        pub inline fn swap(self: *@This()) void {
+        pub inline fn swap(self: *@This(), allocator: std.mem.Allocator) void {
+            _ = allocator;
             self.first_readable_id = self.last_readable_count;
             self.last_readable_count = self.count;
         }
-        pub inline fn write(self: *@This(), _: T) !void {
+        pub inline fn write(self: *@This(), allocator: std.mem.Allocator, v: T) !void {
+            _ = allocator;
+            _ = v;
             self.count += 1;
         }
         inline fn normalize(self: *@This(), index_ptr: *usize) void {
