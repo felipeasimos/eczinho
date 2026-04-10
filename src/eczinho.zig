@@ -14,3 +14,4 @@ pub const Bundle = @import("bundle/bundle.zig").Bundle;
 pub const BundleContext = @import("bundle/bundle.zig").BundleContext;
 pub const ComponentConfig = @import("components.zig").ComponentConfig;
 pub const DenseStorageConfig = @import("storage/dense_storage.zig").DenseStorageConfig;
+pub const Tick = @import("types.zig").Tick;

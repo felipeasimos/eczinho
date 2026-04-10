@@ -58,14 +58,14 @@ inline fn hasValidTicksGeneral(
             .Dense => dense_storage_address[0].getAddedArray(Type)[dense_storage_address[1]],
             .Sparse => sparse_sets.getAddedConst(Type, entt),
         };
-        if (added_tick < last_run) return false;
+        if (added_tick.lessThan(last_run)) return false;
     }
     inline for (Changed) |Type| {
         const changed_tick = switch (comptime Components.getStorageType(Type)) {
             .Dense => dense_storage_address[0].getChangedArray(Type)[dense_storage_address[1]],
             .Sparse => sparse_sets.getChangedConst(Type, entt),
         };
-        if (changed_tick < last_run) return false;
+        if (changed_tick.lessThan(last_run)) return false;
     }
     return true;
 }
@@ -77,16 +77,27 @@ inline fn getComponent(
     current_run: Tick,
     comptime mark_change: bool,
     comptime Components: type,
+    entt: anytype,
 ) Type {
+    // if true, index is entt
     const CanonicalType = comptime Components.getCanonicalType(Type);
     const AccessType = comptime Components.getAccessType(Type);
     const return_value: Type = switch (comptime AccessType) {
         .Const => storage.getConst(CanonicalType, index),
-        .PointerConst => @ptrCast(storage.getConst(CanonicalType, index)),
+        .PointerConst => @ptrCast(storage.get(CanonicalType, index)),
         .PointerMut => storage.get(CanonicalType, index),
-        .OptionalConst => storage.getConst(CanonicalType, index),
-        .OptionalPointerMut => storage.get(CanonicalType, index),
-        .OptionalPointerConst => @ptrCast(storage.getConst(CanonicalType, index)),
+        .OptionalConst => if (storage.contains(CanonicalType, entt, index))
+            storage.getConst(CanonicalType, index)
+        else
+            null,
+        .OptionalPointerMut => if (storage.contains(CanonicalType, entt, index))
+            storage.get(CanonicalType, index)
+        else
+            null,
+        .OptionalPointerConst => if (storage.contains(CanonicalType, entt, index))
+            @ptrCast(storage.get(CanonicalType, index))
+        else
+            null,
     };
     if (comptime (mark_change and Components.hasChangedMetadata(CanonicalType))) {
         if (comptime (AccessType == .PointerMut)) {
@@ -122,8 +133,8 @@ inline fn getResultTupleGeneral(
             const CanonicalType = comptime Components.getCanonicalType(Type);
             const StorageType = comptime Components.getStorageType(CanonicalType);
             tuple[i] = switch (comptime StorageType) {
-                .Dense => getComponent(Type, dense_storage, dense_index, current_run, mark_change, Components),
-                .Sparse => getComponent(Type, sparse_sets, entt, current_run, mark_change, Components),
+                .Dense => getComponent(Type, dense_storage, dense_index, current_run, mark_change, Components, entt),
+                .Sparse => getComponent(Type, sparse_sets, entt, current_run, mark_change, Components, entt),
             };
         }
     }
@@ -256,7 +267,8 @@ fn SparseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOption
         }
         /// get next tuple, asserting that there is exactly one tuple in the query. Panics if query is empty.
         pub fn single(self: @This()) ResultTupleType {
-            std.debug.assert(!self.empty() and self.len() == 1);
+            std.debug.assert(!self.empty());
+            std.debug.assert(self.len() == 1);
             for (self.archetypes.items) |sig| {
                 const arch = self.world.archetype_store.getArchetypeFromSignature(sig);
                 if (arch.len() == 0) continue;
@@ -441,7 +453,8 @@ fn DenseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOptions
         }
         /// get next tuple, asserting that there is exactly one tuple in the query. Panics if query is empty.
         pub fn single(self: @This()) ResultTupleType {
-            std.debug.assert(!self.empty() and self.len() == 1);
+            std.debug.assert(!self.empty());
+            std.debug.assert(self.len() == 1);
             for (self.storages.items) |sig| {
                 const stor = self.world.storage_store.getStorageFromSignature(sig);
                 if (stor.len() == 0) continue;
@@ -518,26 +531,29 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
     const Entity = options.Entity;
     const Components = options.Components;
 
-    const CanonicalTypes = CanonicalTypes: {
-        var data: []const type = &.{};
-        for (request.q) |AccessibleType| {
-            if (Entity == AccessibleType) continue;
-            const CanonicalType = Components.getCanonicalType(AccessibleType);
-            data = data ++ .{CanonicalType};
-        }
-        break :CanonicalTypes data;
-    };
-
     const MustHave = MustHave: {
         var data: []const type = &.{};
-        for (CanonicalTypes) |CanonicalType| {
-            if (Entity == CanonicalType) continue;
-            if (@typeInfo(CanonicalType) != .optional) {
+        for (request.q) |Q| {
+            if (Entity == Q) continue;
+            const CanonicalType = Components.getCanonicalType(Q);
+            if (@typeInfo(Q) != .optional) {
                 data = data ++ .{CanonicalType};
             }
         }
-        data = data ++ request.with ++ request.added ++ request.changed;
-        break :MustHave data;
+        break :MustHave data ++
+            request.with ++
+            request.added ++
+            request.changed;
+    };
+
+    const HasOptionals = HasOptionas: {
+        for (request.q) |Q| {
+            if (Entity == Q) continue;
+            if (@typeInfo(Q) == .optional) {
+                break :HasOptionas true;
+            }
+        }
+        break :HasOptionas false;
     };
 
     const CannotHave = CannotHave: {
@@ -553,10 +569,10 @@ pub fn QueryFactory(comptime options: QueryFactoryOptions) type {
         .DividedRequest = divided_request,
     };
 
-    return if (is_only_dense)
-        DenseQueryFactory(Marker, inner_query_options)
+    return if (!is_only_dense or HasOptionals)
+        SparseQueryFactory(Marker, inner_query_options)
     else
-        SparseQueryFactory(Marker, inner_query_options);
+        DenseQueryFactory(Marker, inner_query_options);
 }
 
 test QueryFactory {

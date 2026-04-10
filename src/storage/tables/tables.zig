@@ -161,6 +161,12 @@ pub fn TablesFactory(comptime options: TablesOptions) type {
             std.debug.assert(table.contains(index));
             return table.get(index);
         }
+        pub inline fn contains(self: *@This(), comptime Component: type, entt: Entity, index: usize) bool {
+            if (index < self.entities.items.len and self.signature.has(Component)) {
+                return self.entities.items[index] == entt;
+            }
+            return false;
+        }
         pub fn getConst(self: *@This(), comptime Component: type, index: usize) Component {
             if (comptime Component == Entity) {
                 return self.entities.items[index];

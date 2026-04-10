@@ -3,6 +3,7 @@ const std = @import("std");
 const TypeStoreFactory = @import("resource/type_store.zig").TypeStore;
 const EventStoreFactory = @import("event/event_store.zig").EventStore;
 const RemovedLogFactory = @import("removed/removed_log.zig").RemovedComponentsLog;
+const types = @import("types.zig");
 const event = @import("event/event.zig");
 const removed = @import("removed/removed.zig");
 const commands = @import("commands/commands.zig");
@@ -150,7 +151,8 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             var args: ArgsTuple = undefined;
             inline for (ParamsSlice, 0..) |param, i| {
                 const ArgType = param.type.?;
-                args[i] = switch (ArgType) {
+                args[i] = switch (comptime ArgType) {
+                    types.Tick => deps.world.getTick(),
                     *TypeStore => deps.type_store,
                     std.mem.Allocator => deps.world.allocator,
                     std.Io => deps.io,

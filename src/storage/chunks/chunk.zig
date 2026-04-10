@@ -76,6 +76,12 @@ pub fn ChunkFactory(comptime options: ChunksOptions) type {
             const offset = arr_offset + @sizeOf(Component) * index;
             return @alignCast(std.mem.bytesAsValue(Component, self.memory[offset .. offset + @sizeOf(Component)]));
         }
+        pub inline fn contains(self: *@This(), comptime Component: type, entt: Entity, index: usize) bool {
+            if (index < self.count and self.chunks.signature.has(Component)) {
+                return self.get(Entity, index).* == entt;
+            }
+            return false;
+        }
         pub fn getConst(self: *@This(), comptime Component: type, index: usize) Component {
             std.debug.assert(index < self.len());
             return self.get(Component, index).*;

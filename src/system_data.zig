@@ -7,7 +7,7 @@ const Tick = @import("types.zig").Tick;
 pub const SystemData = struct {
     event_reader_next_indices: []usize,
     removed_log_reader_next_indices: []usize,
-    last_run: Tick = 0,
+    last_run: Tick = .zero,
     pub fn init(alloc: std.mem.Allocator, num_event_readers: usize, num_removed_readers: usize) !@This() {
         const event_next_indices_ptr = try alloc.alloc(usize, num_event_readers);
         @memset(event_next_indices_ptr, 0);
