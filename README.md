@@ -3,9 +3,10 @@
 Eczinho is a little hybrid ECS built in pure Zig with a bevy-flavored API.
 
 * Features:
-   * customization without runtime overhead, thanks to zig's comptime
+   * bundling without runtime overhead, thanks to zig's comptime
    * closed-universe component set, without getting in the way of creating and using bundles
    * optional metadata tracking (Added/Changed/Remove) for queries. Only pay for what you use!
+   * multiple storage options: sparse sets, tables and chunks!
 
 
 ## Running examples

@@ -158,6 +158,13 @@ pub fn TypeHasher(comptime Types: []const type) type {
             OptionalConst,
             OptionalPointerMut,
             OptionalPointerConst,
+
+            pub fn isOptional(self: @This()) bool {
+                return switch (self) {
+                    .OptionalConst, .OptionalPointerMut, .OptionalPointerConst => true,
+                    else => false,
+                };
+            }
         };
         pub fn getAccessType(comptime T: type) AccessType {
             if (isRegisteredType(T)) return .Const;

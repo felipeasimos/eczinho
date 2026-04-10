@@ -103,9 +103,9 @@ pub fn SparseSets(comptime options: SparseSetsOptions) type {
                 },
             }
         }
-        pub fn contains(self: *@This(), comptime Component: type, entt: Entity) bool {
+        pub inline fn contains(self: *@This(), comptime Component: type, entt: Entity, _: anytype) bool {
             const sparse_set = self.getSparseSet(Component);
-            return sparse_set.contains(entt.index, "data");
+            return sparse_set.contains(entt.index);
         }
         pub fn remove(
             self: *@This(),

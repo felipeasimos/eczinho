@@ -61,7 +61,7 @@ pub fn World(comptime options: WorldOptions) type {
         sparse_sets: SparseSets = .empty,
         queues: std.ArrayList(CommandsQueue) = .empty,
         removed: RemovedLog,
-        global_tick: Tick = 0,
+        global_tick: Tick = .zero,
 
         pub fn init(allocator: std.mem.Allocator) !*@This() {
             const new = try allocator.create(@This());
@@ -96,7 +96,7 @@ pub fn World(comptime options: WorldOptions) type {
         }
 
         pub fn tick(self: *@This()) void {
-            self.global_tick +%= 1;
+            self.global_tick.increment();
         }
         pub fn getTick(self: *const @This()) Tick {
             return self.global_tick;
