@@ -5,8 +5,8 @@ pub const EventWriter = @import("factory.zig").EventWriter;
 
 test "event" {
     const std = @import("std");
-    const SystemData = @import("../system_data.zig").SystemData;
-    const ParameterData = @import("../parameter_data.zig").ParameterData;
+    const SystemData = @import("../system/system_data.zig").SystemData;
+    const ParameterData = @import("../system/parameter_data.zig").ParameterData;
     const EmptyType = struct {};
     const TestEvents = @import("events.zig").Events(&.{ u64, EmptyType });
     const TestEventStore = EventStore(.{

@@ -1,8 +1,8 @@
 const std = @import("std");
-const TypeStoreFactory = @import("resource/type_store.zig").TypeStore;
-const EventStoreFactory = @import("event/event_store.zig").EventStore;
-const RemovedLogFactory = @import("removed/removed_log.zig").RemovedComponentsLog;
-const SystemData = @import("system_data.zig").SystemData;
+const TypeStoreFactory = @import("../resource/type_store.zig").TypeStore;
+const EventStoreFactory = @import("../event/event_store.zig").EventStore;
+const RemovedLogFactory = @import("../removed/removed_log.zig").RemovedComponentsLog;
+const SystemData = @import("../system/system_data.zig").SystemData;
 const StageLabel = @import("stage_label.zig").StageLabel;
 
 pub const SchedulerOptions = struct {

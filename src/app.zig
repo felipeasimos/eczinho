@@ -1,8 +1,8 @@
 const std = @import("std");
 const WorldFactory = @import("world.zig").World;
-const SchedulerFactory = @import("scheduler.zig").Scheduler;
+const SchedulerFactory = @import("scheduler/scheduler.zig").Scheduler;
 const EntityTypeFactory = @import("entity/entity.zig").EntityTypeFactory;
-const StageLabel = @import("stage_label.zig").StageLabel;
+const StageLabel = @import("scheduler/stage_label.zig").StageLabel;
 const query = @import("query/query.zig");
 const commands = @import("commands/commands.zig");
 const resource = @import("resource/resource.zig");
@@ -39,7 +39,7 @@ pub fn AppContext(comptime options: AppContextOptions) type {
             .TypeHasher = Resources,
         });
         /// use in systems to obtain a query. System signature should be like:
-        /// fn systemExample(q: Query(.{.q = &.{typeA, *typeB}, .with = &.{typeC}}), ...) !void {
+        /// fn systemExample(q: Query(.{.q = &.{typeA, *const typeB}, .with = &.{typeC}}), ...) !void {
         ///     ...
         /// }
         /// checkout QueryRequest for more information

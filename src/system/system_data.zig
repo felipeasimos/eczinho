@@ -1,5 +1,5 @@
 const std = @import("std");
-const Tick = @import("types.zig").Tick;
+const Tick = @import("../types.zig").Tick;
 
 /// per-system persistent data, store in the scheduler struct.
 /// Notice this isn't a custom created type. This is necessary to get proper pointers
