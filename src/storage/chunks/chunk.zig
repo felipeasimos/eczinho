@@ -9,6 +9,7 @@ pub fn ChunkFactory(comptime options: ChunksOptions) type {
         pub const Entity = options.Entity;
         pub const CountInt = std.math.IntFittingRange(0, options.Config.ChunkSize);
         pub const Chunks = ChunksFactory(options);
+        pub const StorageAddress = Chunks.StorageAddress;
         chunks: *Chunks,
         count: CountInt,
         memory: [options.Config.ChunkSize]u8 align(Chunks.MaxAlignment),

@@ -1,6 +1,6 @@
 const EventStoreFactory = @import("event_store.zig").EventStore;
-const SystemData = @import("../system_data.zig").SystemData;
-const ParameterData = @import("../parameter_data.zig").ParameterData;
+const SystemData = @import("../system/system_data.zig").SystemData;
+const ParameterData = @import("../system/parameter_data.zig").ParameterData;
 
 pub const EventOptions = struct {
     Events: type,

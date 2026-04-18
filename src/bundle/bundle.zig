@@ -1,6 +1,6 @@
 // zlint-disable case-convention
 const std = @import("std");
-const StageLabel = @import("../stage_label.zig").StageLabel;
+const StageLabel = @import("../scheduler/stage_label.zig").StageLabel;
 const ComponentConfig = @import("../components.zig").ComponentConfig;
 
 pub const Bundle = struct {

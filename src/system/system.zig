@@ -1,12 +1,12 @@
 const std = @import("std");
 
-const TypeStoreFactory = @import("resource/type_store.zig").TypeStore;
-const EventStoreFactory = @import("event/event_store.zig").EventStore;
-const RemovedLogFactory = @import("removed/removed_log.zig").RemovedComponentsLog;
-const types = @import("types.zig");
-const event = @import("event/event.zig");
-const removed = @import("removed/removed.zig");
-const commands = @import("commands/commands.zig");
+const TypeStoreFactory = @import("../resource/type_store.zig").TypeStore;
+const EventStoreFactory = @import("../event/event_store.zig").EventStore;
+const RemovedLogFactory = @import("../removed/removed_log.zig").RemovedComponentsLog;
+const types = @import("../types.zig");
+const event = @import("../event/event.zig");
+const removed = @import("../removed/removed.zig");
+const commands = @import("../commands/commands.zig");
 const SystemData = @import("system_data.zig").SystemData;
 const ParameterData = @import("parameter_data.zig").ParameterData;
 

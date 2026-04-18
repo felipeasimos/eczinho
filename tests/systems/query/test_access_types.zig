@@ -40,8 +40,8 @@ test "add dense tabled components in system" {
             pub fn testPointerMut(q: Query(.{ .q = &.{ *typeA, *typeB } })) !void {
                 if (q.optSingle()) |tuple| {
                     const _u64, const _u32 = tuple;
-                    try std.testing.expectEqual(1, _u64.*);
-                    try std.testing.expectEqual(2, _u32.*);
+                    try std.testing.expectEqual(1, _u64.clone());
+                    try std.testing.expectEqual(2, _u32.clone());
                 }
             }
         }).testPointerMut)
@@ -75,8 +75,8 @@ test "add dense tabled components in system" {
                 if (current_tick.eql(3)) {
                     if (q.optSingle()) |tuple| {
                         const _u64, const _u32 = tuple;
-                        try std.testing.expectEqual(1, _u64.?.*);
-                        try std.testing.expectEqual(2, _u32.?.*);
+                        try std.testing.expectEqual(1, _u64.?.clone());
+                        try std.testing.expectEqual(2, _u32.?.clone());
                     }
                 }
             }
@@ -157,8 +157,8 @@ test "add dense tabled components in system without metadata" {
             pub fn testPointerMut(q: Query(.{ .q = &.{ *typeA, *typeB } })) !void {
                 if (q.optSingle()) |tuple| {
                     const _u64, const _u32 = tuple;
-                    try std.testing.expectEqual(1, _u64.*);
-                    try std.testing.expectEqual(2, _u32.*);
+                    try std.testing.expectEqual(1, _u64.clone());
+                    try std.testing.expectEqual(2, _u32.clone());
                 }
             }
         }).testPointerMut)
@@ -192,8 +192,8 @@ test "add dense tabled components in system without metadata" {
                 if (current_tick.eql(3)) {
                     if (q.optSingle()) |tuple| {
                         const _u64, const _u32 = tuple;
-                        try std.testing.expectEqual(1, _u64.?.*);
-                        try std.testing.expectEqual(2, _u32.?.*);
+                        try std.testing.expectEqual(1, _u64.?.clone());
+                        try std.testing.expectEqual(2, _u32.?.clone());
                     }
                 }
             }
@@ -259,8 +259,8 @@ test "add dense chunked components in system" {
             pub fn testPointerMut(q: Query(.{ .q = &.{ *typeA, *typeB } })) !void {
                 if (q.optSingle()) |tuple| {
                     const _u64, const _u32 = tuple;
-                    try std.testing.expectEqual(1, _u64.*);
-                    try std.testing.expectEqual(2, _u32.*);
+                    try std.testing.expectEqual(1, _u64.clone());
+                    try std.testing.expectEqual(2, _u32.clone());
                 }
             }
         }).testPointerMut)
@@ -294,8 +294,8 @@ test "add dense chunked components in system" {
                 if (current_tick.eql(3)) {
                     if (q.optSingle()) |tuple| {
                         const _u64, const _u32 = tuple;
-                        try std.testing.expectEqual(1, _u64.?.*);
-                        try std.testing.expectEqual(2, _u32.?.*);
+                        try std.testing.expectEqual(1, _u64.?.clone());
+                        try std.testing.expectEqual(2, _u32.?.clone());
                     }
                 }
             }
@@ -376,8 +376,8 @@ test "add dense chunked components in system without metadata" {
             pub fn testPointerMut(q: Query(.{ .q = &.{ *typeA, *typeB } })) !void {
                 if (q.optSingle()) |tuple| {
                     const _u64, const _u32 = tuple;
-                    try std.testing.expectEqual(1, _u64.*);
-                    try std.testing.expectEqual(2, _u32.*);
+                    try std.testing.expectEqual(1, _u64.clone());
+                    try std.testing.expectEqual(2, _u32.clone());
                 }
             }
         }).testPointerMut)
@@ -411,8 +411,8 @@ test "add dense chunked components in system without metadata" {
                 if (current_tick.eql(3)) {
                     if (q.optSingle()) |tuple| {
                         const _u64, const _u32 = tuple;
-                        try std.testing.expectEqual(1, _u64.?.*);
-                        try std.testing.expectEqual(2, _u32.?.*);
+                        try std.testing.expectEqual(1, _u64.?.clone());
+                        try std.testing.expectEqual(2, _u32.?.clone());
                     }
                 }
             }
@@ -492,8 +492,8 @@ test "add sparse components in system without metadata" {
             pub fn testPointerMut(q: Query(.{ .q = &.{ *typeA, *typeB } })) !void {
                 if (q.optSingle()) |tuple| {
                     const _u64, const _u32 = tuple;
-                    try std.testing.expectEqual(1, _u64.*);
-                    try std.testing.expectEqual(2, _u32.*);
+                    try std.testing.expectEqual(1, _u64.clone());
+                    try std.testing.expectEqual(2, _u32.clone());
                 }
             }
         }).testPointerMut)
@@ -527,8 +527,8 @@ test "add sparse components in system without metadata" {
                 if (current_tick.eql(3)) {
                     if (q.optSingle()) |tuple| {
                         const _u64, const _u32 = tuple;
-                        try std.testing.expectEqual(1, _u64.?.*);
-                        try std.testing.expectEqual(2, _u32.?.*);
+                        try std.testing.expectEqual(1, _u64.?.clone());
+                        try std.testing.expectEqual(2, _u32.?.clone());
                     }
                 }
             }
@@ -608,8 +608,8 @@ test "add dense chunked components in system with metadata" {
             pub fn testPointerMut(q: Query(.{ .q = &.{ *typeA, *typeB } })) !void {
                 if (q.optSingle()) |tuple| {
                     const _u64, const _u32 = tuple;
-                    try std.testing.expectEqual(1, _u64.*);
-                    try std.testing.expectEqual(2, _u32.*);
+                    try std.testing.expectEqual(1, _u64.clone());
+                    try std.testing.expectEqual(2, _u32.clone());
                 }
             }
         }).testPointerMut)
@@ -646,8 +646,8 @@ test "add dense chunked components in system with metadata" {
                 if (current_tick.eql(3)) {
                     if (q.optSingle()) |tuple| {
                         const _u64, const _u32 = tuple;
-                        try std.testing.expectEqual(1, _u64.?.*);
-                        try std.testing.expectEqual(2, _u32.?.*);
+                        try std.testing.expectEqual(1, _u64.?.clone());
+                        try std.testing.expectEqual(2, _u32.?.clone());
                     }
                 }
             }

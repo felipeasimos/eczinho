@@ -76,6 +76,7 @@ pub fn DisjointSparseSet(comptime options: DisjointSparseSetOptions) type {
         pub const DisjointDataArrays = CreateValueArrays(Vs);
         pub const DisjointDataTuple = CreateValueTuple(Vs);
         pub const DisjointDataStruct = CreateValueStruct(Vs);
+        pub const StorageAddress = struct { *@This(), K };
 
         const Null = std.math.maxInt(K);
 

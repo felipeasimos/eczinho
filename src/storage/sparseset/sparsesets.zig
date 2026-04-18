@@ -47,6 +47,10 @@ pub fn SparseSets(comptime options: SparseSetsOptions) type {
     return struct {
         pub const Components = options.Components;
         pub const Entity = options.Entity;
+        pub const StorageAddress = struct {
+            *@This(),
+            Entity,
+        };
         pub const empty: @This() = .{};
         sparse_sets: ComponentArrays = EmptySets,
 
@@ -62,7 +66,7 @@ pub fn SparseSets(comptime options: SparseSetsOptions) type {
         fn GetComponentFromSparseSetIndex(comptime index: usize) type {
             return Components.getType(Components.getIdFromIndex(SparseComponents.getGlobalIndex(index).?));
         }
-        fn GetSparseSetResultType(comptime Component: type) type {
+        pub fn GetSparseSetResultType(comptime Component: type) type {
             const index = getSparseSetIndex(Component);
             return @typeInfo(ComponentArrays).@"struct".fields[index].type;
         }

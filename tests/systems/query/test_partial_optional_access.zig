@@ -5,7 +5,22 @@ test "add dense tabled components in system" {
     const typeA = u64;
     const typeB = u32;
     const Context = eczinho.AppContextBuilder.init()
-        .addComponents(&.{ typeA, typeB })
+        .addComponentWithConfig(typeA, .{
+            .storage_type = .Dense,
+            .track_metadata = .{
+                .added = true,
+                .changed = true,
+                .removed = true,
+            },
+        })
+        .addComponentWithConfig(typeB, .{
+            .storage_type = .Dense,
+            .track_metadata = .{
+                .added = true,
+                .changed = true,
+                .removed = true,
+            },
+        })
         .setDenseStorageConfig(.{ .Tables = .{} })
         .build();
 
@@ -48,7 +63,7 @@ test "add dense tabled components in system" {
                 if (current_tick.eql(3)) {
                     if (q.optSingle()) |tuple| {
                         const _u64, const _u32 = tuple;
-                        try std.testing.expectEqual(1, _u64.?.*);
+                        try std.testing.expectEqual(1, _u64.?.clone());
                         try std.testing.expectEqual(null, _u32);
                     }
                 }
@@ -133,7 +148,7 @@ test "add dense tabled components in system without metadata" {
                 if (current_tick.eql(3)) {
                     if (q.optSingle()) |tuple| {
                         const _u64, const _u32 = tuple;
-                        try std.testing.expectEqual(1, _u64.?.*);
+                        try std.testing.expectEqual(1, _u64.?.clone());
                         try std.testing.expectEqual(null, _u32);
                     }
                 }
@@ -160,7 +175,22 @@ test "add dense chunked components in system" {
     const typeA = u64;
     const typeB = u32;
     const Context = eczinho.AppContextBuilder.init()
-        .addComponents(&.{ typeA, typeB })
+        .addComponentWithConfig(typeB, .{
+            .storage_type = .Dense,
+            .track_metadata = .{
+                .added = true,
+                .changed = true,
+                .removed = true,
+            },
+        })
+        .addComponentWithConfig(typeA, .{
+            .storage_type = .Dense,
+            .track_metadata = .{
+                .added = true,
+                .changed = true,
+                .removed = true,
+            },
+        })
         .setDenseStorageConfig(.{ .Chunks = .{} })
         .build();
 
@@ -203,7 +233,7 @@ test "add dense chunked components in system" {
                 if (current_tick.eql(3)) {
                     if (q.optSingle()) |tuple| {
                         const _u64, const _u32 = tuple;
-                        try std.testing.expectEqual(1, _u64.?.*);
+                        try std.testing.expectEqual(1, _u64.?.clone());
                         try std.testing.expectEqual(null, _u32);
                     }
                 }
@@ -287,7 +317,7 @@ test "add dense chunked components in system without metadata" {
                 if (current_tick.eql(3)) {
                     if (q.optSingle()) |tuple| {
                         const _u64, const _u32 = tuple;
-                        try std.testing.expectEqual(1, _u64.?.*);
+                        try std.testing.expectEqual(1, _u64.?.clone());
                         try std.testing.expectEqual(null, _u32);
                     }
                 }
@@ -371,7 +401,7 @@ test "add sparse components in system without metadata" {
                 if (current_tick.eql(3)) {
                     if (q.optSingle()) |tuple| {
                         const _u64, const _u32 = tuple;
-                        try std.testing.expectEqual(1, _u64.?.*);
+                        try std.testing.expectEqual(1, _u64.?.clone());
                         try std.testing.expectEqual(null, _u32);
                     }
                 }
@@ -454,7 +484,7 @@ test "add dense chunked components in system with metadata" {
                 if (current_tick.eql(3)) {
                     if (q.optSingle()) |tuple| {
                         const _u64, const _u32 = tuple;
-                        try std.testing.expectEqual(1, _u64.?.*);
+                        try std.testing.expectEqual(1, _u64.?.clone());
                         try std.testing.expectEqual(null, _u32);
                     }
                 }

@@ -1,7 +1,7 @@
 // zlint-disable case-convention
 const std = @import("std");
-const System = @import("system.zig").System;
-const StageLabel = @import("stage_label.zig").StageLabel;
+const System = @import("system/system.zig").System;
+const StageLabel = @import("scheduler/stage_label.zig").StageLabel;
 const EntityOptions = @import("entity/entity.zig").EntityOptions;
 const EntityTypeFactory = @import("entity/entity.zig").EntityTypeFactory;
 const ComponentsFactory = @import("components.zig").Components;

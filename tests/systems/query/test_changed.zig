@@ -65,7 +65,7 @@ test "check if tabled component was just changed" {
             ) void {
                 if (q_read.peek() == null) {
                     const comp_b = q_write.single();
-                    _ = comp_b;
+                    comp_b[0].set(0);
                 }
             }
         }).changeIfNotChanged)
@@ -161,7 +161,7 @@ test "check if chunked component was just changed" {
             ) void {
                 if (q_read.peek() == null) {
                     const comp_b = q_write.single();
-                    _ = comp_b;
+                    comp_b[0].set(0);
                 }
             }
         }).changeIfNotChanged)
@@ -264,7 +264,7 @@ test "check if sparse component was just changed" {
             ) void {
                 if (q_read.peek() == null) {
                     const comp_b = q_write.single();
-                    _ = comp_b;
+                    comp_b[0].set(0);
                 }
             }
         }).changeIfNotChanged)

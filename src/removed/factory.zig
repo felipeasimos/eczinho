@@ -1,6 +1,6 @@
 const RemovedLogFactory = @import("removed_log.zig").RemovedComponentsLog;
-const SystemData = @import("../system_data.zig").SystemData;
-const ParameterData = @import("../parameter_data.zig").ParameterData;
+const SystemData = @import("../system/system_data.zig").SystemData;
+const ParameterData = @import("../system/parameter_data.zig").ParameterData;
 
 pub const RemovedOptions = struct {
     Components: type,

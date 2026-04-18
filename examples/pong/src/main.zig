@@ -81,8 +81,8 @@ fn updatePositions(q: Query(.{ .q = &.{ *Position, Velocity } })) void {
     var iter = q.iter();
     while (iter.next()) |tuple| {
         const pos_ptr, const vel = tuple;
-        pos_ptr.x += vel.x;
-        pos_ptr.y += vel.y;
+        pos_ptr.get().x += vel.x;
+        pos_ptr.get().y += vel.y;
     }
 }
 
@@ -149,15 +149,15 @@ fn checkPaddleBallCollision(b: ball_ptr, e: enemy, p: player) !void {
     const enemy_info = e.single();
     const player_info = p.single();
     const result: ?struct { f32, f32 } = collision_result: {
-        if (checkCollision(.{ ball_rect, ball_pos_ptr }, enemy_info)) {
+        if (checkCollision(.{ ball_rect, ball_pos_ptr.clone() }, enemy_info)) {
             const enemy_half = enemy_info[1].y + (enemy_info[0].height / 2);
-            const ball_half = ball_pos_ptr.y + (ball_rect.height / 2);
+            const ball_half = ball_pos_ptr.clone().y + (ball_rect.height / 2);
             const safe_x = @as(f32, @floatFromInt(rl.getScreenWidth())) - enemy_info[0].width - ball_rect.width;
             const center_diff = (ball_half - enemy_half) / enemy_half;
             break :collision_result .{ safe_x, center_diff };
-        } else if (checkCollision(.{ ball_rect, ball_pos_ptr }, player_info)) {
+        } else if (checkCollision(.{ ball_rect, ball_pos_ptr.clone() }, player_info)) {
             const player_half = player_info[1].y + (player_info[0].height / 2);
-            const ball_half = ball_pos_ptr.y + (ball_rect.height / 2);
+            const ball_half = ball_pos_ptr.clone().y + (ball_rect.height / 2);
 
             const safe_x = player_info[0].width;
             const center_diff = (ball_half - player_half) / player_half;
@@ -167,22 +167,22 @@ fn checkPaddleBallCollision(b: ball_ptr, e: enemy, p: player) !void {
     };
     if (result) |collision_info| {
         const safe_x, const center_diff = collision_info;
-        ball_vel_ptr.x *= -1.2;
-        ball_pos_ptr.x = safe_x;
+        ball_vel_ptr.get().x *= -1.2;
+        ball_pos_ptr.get().x = safe_x;
 
-        ball_vel_ptr.y = center_diff * BALL_MAX_SPEED;
+        ball_vel_ptr.get().y = center_diff * BALL_MAX_SPEED;
     }
 }
 
 fn checkTopBottomCollision(q: Query(.{ .q = &.{ Rect, *Position, *Velocity }, .with = &.{Ball} })) void {
     const rect, const pos_ptr, const vel_ptr = q.optSingle() orelse return;
 
-    if (pos_ptr.y + rect.height > @as(f32, @floatFromInt(rl.getScreenHeight())) and vel_ptr.y > 0) {
-        vel_ptr.y *= -1;
-        pos_ptr.y = @as(f32, @floatFromInt(rl.getScreenHeight())) - rect.height - 1;
-    } else if (pos_ptr.y < 0 and vel_ptr.y < 0) {
-        vel_ptr.y *= -1;
-        pos_ptr.y = 1;
+    if (pos_ptr.clone().y + rect.height > @as(f32, @floatFromInt(rl.getScreenHeight())) and vel_ptr.clone().y > 0) {
+        vel_ptr.get().y *= -1;
+        pos_ptr.get().y = @as(f32, @floatFromInt(rl.getScreenHeight())) - rect.height - 1;
+    } else if (pos_ptr.clone().y < 0 and vel_ptr.clone().y < 0) {
+        vel_ptr.get().y *= -1;
+        pos_ptr.get().y = 1;
     }
 }
 
@@ -191,13 +191,14 @@ fn handleControls(
     writer: EventWriter(ecs.AppEvents.AppExit),
 ) void {
     const pos_ptr, const rect = q.single();
+    const pos = pos_ptr.clone();
     if (rl.isKeyDown(rl.KeyboardKey.s)) {
-        if (pos_ptr.y + rect.height < @as(f32, @floatFromInt(rl.getScreenHeight()))) {
-            pos_ptr.y += PADDLE_SPEED;
+        if (pos.y + rect.height < @as(f32, @floatFromInt(rl.getScreenHeight()))) {
+            pos_ptr.get().y += PADDLE_SPEED;
         }
     } else if (rl.isKeyDown(rl.KeyboardKey.w)) {
-        if (pos_ptr.y > 0) {
-            pos_ptr.y -= PADDLE_SPEED;
+        if (pos.y > 0) {
+            pos_ptr.get().y -= PADDLE_SPEED;
         }
     }
     if (rl.windowShouldClose()) {
@@ -217,12 +218,12 @@ fn moveEnemy(q: Query(.{ .q = &.{ *Position, Rect }, .with = &.{Enemy} })) void 
     // }
     const pos_ptr, const rect = q.single();
     if (rl.isKeyDown(rl.KeyboardKey.down)) {
-        if (pos_ptr.y + rect.height < @as(f32, @floatFromInt(rl.getScreenHeight()))) {
-            pos_ptr.y += PADDLE_SPEED;
+        if (pos_ptr.clone().y + rect.height < @as(f32, @floatFromInt(rl.getScreenHeight()))) {
+            pos_ptr.get().y += PADDLE_SPEED;
         }
     } else if (rl.isKeyDown(rl.KeyboardKey.up)) {
-        if (pos_ptr.y > 0) {
-            pos_ptr.y -= PADDLE_SPEED;
+        if (pos_ptr.clone().y > 0) {
+            pos_ptr.get().y -= PADDLE_SPEED;
         }
     }
 }
@@ -256,7 +257,7 @@ fn flickerOffPaddles(q: Query(.{ .q = &.{*Visible}, .with = &.{Paddle} }), r: Re
     var iter = q.iter();
     while (iter.next()) |tuple| {
         const vis_ptr = tuple[0];
-        vis_ptr.* = Visible.Hidden;
+        vis_ptr.set(Visible.Hidden);
     }
 }
 
@@ -265,7 +266,7 @@ fn flickerOnPaddles(q: Query(.{ .q = &.{*Visible}, .with = &.{Paddle} }), ball_i
     var iter = q.iter();
     while (iter.next()) |tuple| {
         const vis_ptr = tuple[0];
-        vis_ptr.* = Visible.Visible;
+        vis_ptr.set(Visible.Visible);
     }
 }
 
@@ -286,8 +287,8 @@ fn repositionBall(q: Query(.{ .q = &.{ *Position, *Velocity }, .added = &.{Ball}
         const width: f32 = @floatFromInt(rl.getScreenWidth());
         const height: f32 = @floatFromInt(rl.getScreenHeight());
 
-        pos_ptr.* = Position{ .x = width / 2, .y = height / 2 };
-        vel_ptr.* = Velocity{ .x = @cos(angle) * speed, .y = @sin(angle) * speed };
+        pos_ptr.set(Position{ .x = width / 2, .y = height / 2 });
+        vel_ptr.set(Velocity{ .x = @cos(angle) * speed, .y = @sin(angle) * speed });
     }
 }
 

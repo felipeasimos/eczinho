@@ -1,8 +1,9 @@
 const std = @import("std");
 const Request = @import("request.zig").QueryRequest;
 const ComponentsFactory = @import("../components.zig").Components;
-const SystemData = @import("../system_data.zig").SystemData;
+const SystemData = @import("../system/system_data.zig").SystemData;
 const Tick = @import("../types.zig").Tick;
+const Mut = @import("mut.zig").Mut;
 
 pub const QueryFactoryOptions = struct {
     request: Request,
@@ -70,28 +71,44 @@ inline fn hasValidTicksGeneral(
     return true;
 }
 
+inline fn GetComponentStorage(comptime World: type, comptime Component: type) type {
+    return switch (comptime World.Components.getStorageType(Component)) {
+        .Dense => World.DenseStorage,
+        .Sparse => World.SparseSets,
+    };
+}
+
+inline fn GetComponentMut(comptime World: type, comptime Component: type) type {
+    return Mut(.{
+        .T = Component,
+        .Components = World.Components,
+        .Storage = GetComponentStorage(World, Component),
+    });
+}
+
 inline fn getComponent(
-    comptime Type: type,
+    comptime ResultType: type,
+    world: anytype,
     storage: anytype,
     index: anytype,
-    current_run: Tick,
-    comptime mark_change: bool,
-    comptime Components: type,
     entt: anytype,
-) Type {
+) WrappedType(@TypeOf(world.*), ResultType) {
     // if true, index is entt
-    const CanonicalType = comptime Components.getCanonicalType(Type);
-    const AccessType = comptime Components.getAccessType(Type);
-    const return_value: Type = switch (comptime AccessType) {
+    const World = @TypeOf(world.*);
+    const Components = World.Components;
+    const CanonicalType = comptime Components.getCanonicalType(ResultType);
+    const MutType = GetComponentMut(World, CanonicalType);
+    const AccessType = comptime Components.getAccessType(ResultType);
+    return switch (comptime AccessType) {
         .Const => storage.getConst(CanonicalType, index),
         .PointerConst => @ptrCast(storage.get(CanonicalType, index)),
-        .PointerMut => storage.get(CanonicalType, index),
+        .PointerMut => MutType.init(.{ storage, index }, world.getTick()),
         .OptionalConst => if (storage.contains(CanonicalType, entt, index))
             storage.getConst(CanonicalType, index)
         else
             null,
         .OptionalPointerMut => if (storage.contains(CanonicalType, entt, index))
-            storage.get(CanonicalType, index)
+            MutType.init(.{ storage, index }, world.getTick())
         else
             null,
         .OptionalPointerConst => if (storage.contains(CanonicalType, entt, index))
@@ -99,29 +116,41 @@ inline fn getComponent(
         else
             null,
     };
-    if (comptime (mark_change and Components.hasChangedMetadata(CanonicalType))) {
-        if (comptime (AccessType == .PointerMut)) {
-            storage.getChanged(CanonicalType, index).* = current_run;
-        } else if (comptime (AccessType == .OptionalPointerMut)) {
-            if (return_value != null) {
-                storage.getChanged(CanonicalType, index).* = current_run;
-            }
+}
+
+inline fn WrappedType(comptime World: type, comptime Component: type) type {
+    const Components = World.Components;
+    const CanonicalType = Components.getCanonicalType(Component);
+    const MutType = GetComponentMut(World, CanonicalType);
+    return switch (Components.getAccessType(Component)) {
+        .PointerMut => MutType,
+        .OptionalPointerMut => ?MutType,
+        inline else => Component,
+    };
+}
+
+inline fn GetResultTupleType(comptime ResultTypes: []const type, comptime World: type) type {
+    var types: []const type = &.{};
+    for (ResultTypes) |Type| {
+        if (Type == World.Entity) {
+            types = types ++ .{World.Entity};
+            continue;
         }
+        const ResultType = WrappedType(World, Type);
+        types = types ++ .{ResultType};
     }
-    return return_value;
+    return @Tuple(types);
 }
 
 inline fn getResultTupleGeneral(
+    world: anytype,
     entt: anytype,
     dense_storage_address: anytype,
-    sparse_sets: anytype,
-    current_run: Tick,
     comptime ResultTypes: []const type,
-    comptime mark_change: bool,
-) @Tuple(ResultTypes) {
+    comptime ResultTuple: type,
+) ResultTuple {
     const Entity = @TypeOf(entt);
-    const Components = @TypeOf(sparse_sets.*).Components;
-    const ResultTuple = @Tuple(ResultTypes);
+    const Components = @TypeOf(world.*).Components;
 
     const dense_storage, const dense_index = dense_storage_address;
     // SAFETY: filled immediatly after
@@ -133,8 +162,8 @@ inline fn getResultTupleGeneral(
             const CanonicalType = comptime Components.getCanonicalType(Type);
             const StorageType = comptime Components.getStorageType(CanonicalType);
             tuple[i] = switch (comptime StorageType) {
-                .Dense => getComponent(Type, dense_storage, dense_index, current_run, mark_change, Components, entt),
-                .Sparse => getComponent(Type, sparse_sets, entt, current_run, mark_change, Components, entt),
+                .Dense => getComponent(Type, world, dense_storage, dense_index, entt),
+                .Sparse => getComponent(Type, world, &world.sparse_sets, entt, entt),
             };
         }
     }
@@ -149,7 +178,7 @@ fn SparseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOption
     const CannotHave = options.CannotHave;
     const ResultTypes = options.Options.request.q;
     const request = options.Options.request;
-    const ResultTupleType = @Tuple(ResultTypes);
+    const ResultTupleType = GetResultTupleType(ResultTypes, World);
     const DenseStorage = World.DenseStorage;
 
     return struct {
@@ -187,15 +216,13 @@ fn SparseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOption
             self: *const @This(),
             entt: anytype,
             dense_storage_address: anytype,
-            comptime mark_change: bool,
-        ) @Tuple(ResultTypes) {
+        ) ResultTupleType {
             return getResultTupleGeneral(
+                self.world,
                 entt,
                 dense_storage_address,
-                &self.world.sparse_sets,
-                self.world.getTick(),
                 ResultTypes,
-                mark_change,
+                ResultTupleType,
             );
         }
         /// get number of entities in query
@@ -241,7 +268,7 @@ fn SparseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOption
                 while (arch_iter.next()) |entt| {
                     const dense_storage_address = self.world.getDenseStorageAddress(entt);
                     if (self.hasValidTicks(entt, dense_storage_address)) {
-                        return self.getResultTuple(entt, dense_storage_address, false);
+                        return self.getResultTuple(entt, dense_storage_address);
                     }
                 }
             }
@@ -259,7 +286,7 @@ fn SparseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOption
                     const dense_storage_address = self.world.getDenseStorageAddress(entt);
                     if (self.hasValidTicks(entt, dense_storage_address)) {
                         if (result != null) @panic("optSingle() found more than one valid tuple");
-                        result = self.getResultTuple(entt, dense_storage_address, true);
+                        result = self.getResultTuple(entt, dense_storage_address);
                     }
                 }
             }
@@ -276,7 +303,7 @@ fn SparseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOption
                 while (arch_iter.next()) |entt| {
                     const dense_storage_address = self.world.getDenseStorageAddress(entt);
                     if (self.hasValidTicks(entt, dense_storage_address)) {
-                        return self.getResultTuple(entt, dense_storage_address, true);
+                        return self.getResultTuple(entt, dense_storage_address);
                     }
                 }
             }
@@ -309,7 +336,7 @@ fn SparseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOption
                     while (self.archetype_iter.?.next()) |entt| {
                         const dense_storage_address = self.world.getDenseStorageAddress(entt);
                         if (self.query.hasValidTicks(entt, dense_storage_address)) {
-                            return self.query.getResultTuple(entt, dense_storage_address, true);
+                            return self.query.getResultTuple(entt, dense_storage_address);
                         }
                     }
                     if (self.archetypes.len == 0) {
@@ -335,7 +362,7 @@ fn DenseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOptions
     const CannotHave = options.CannotHave;
     const ResultTypes = options.Options.request.q;
     const request = options.Options.request;
-    const ResultTupleType = @Tuple(ResultTypes);
+    const ResultTupleType = GetResultTupleType(ResultTypes, World);
     const DenseStorage = World.DenseStorage;
 
     return struct {
@@ -373,15 +400,13 @@ fn DenseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOptions
             self: *const @This(),
             entt: anytype,
             dense_storage_address: anytype,
-            comptime mark_change: bool,
-        ) @Tuple(ResultTypes) {
+        ) ResultTupleType {
             return getResultTupleGeneral(
+                self.world,
                 entt,
                 dense_storage_address,
-                &self.world.sparse_sets,
-                self.world.getTick(),
                 ResultTypes,
-                mark_change,
+                ResultTupleType,
             );
         }
         /// get number of entities in query
@@ -426,7 +451,7 @@ fn DenseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOptions
                     if (self.hasValidTicks(dense_storage_address)) {
                         const dense_storage, const dense_index = dense_storage_address;
                         const entt = dense_storage.getConst(Entity, dense_index);
-                        return self.getResultTuple(entt, dense_storage_address, false);
+                        return self.getResultTuple(entt, dense_storage_address);
                     }
                 }
             }
@@ -445,7 +470,7 @@ fn DenseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOptions
                         if (result != null) @panic("optSingle() found more than one valid tuple");
                         const dense_storage, const dense_index = dense_storage_address;
                         const entt = dense_storage.getConst(Entity, dense_index);
-                        result = self.getResultTuple(entt, dense_storage_address, true);
+                        result = self.getResultTuple(entt, dense_storage_address);
                     }
                 }
             }
@@ -463,7 +488,7 @@ fn DenseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOptions
                     if (self.hasValidTicks(dense_storage_address)) {
                         const dense_storage, const dense_index = dense_storage_address;
                         const entt = dense_storage.getConst(Entity, dense_index);
-                        return self.getResultTuple(entt, dense_storage_address, true);
+                        return self.getResultTuple(entt, dense_storage_address);
                     }
                 }
             }
@@ -497,7 +522,7 @@ fn DenseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOptions
                         if (self.query.hasValidTicks(dense_storage_address)) {
                             const dense_storage, const dense_index = dense_storage_address;
                             const entt = dense_storage.getConst(Entity, dense_index);
-                            return self.query.getResultTuple(entt, dense_storage_address, true);
+                            return self.query.getResultTuple(entt, dense_storage_address);
                         }
                     }
                     if (self.storages.len == 0) {
