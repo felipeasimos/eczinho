@@ -50,6 +50,33 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
         pub const NumEventReaders = numOfMarker(ParamsSlice, event.EventReader);
         pub const NumRemovedReaders = numOfMarker(ParamsSlice, removed.Removed);
 
+        pub const DependencyType = union {
+            component: Components.ComponentTypeId,
+            resource: Resources.ResourceTypeId,
+
+            pub fn init(comptime ArgType: type) ?@This() {}
+        };
+        pub const DependencyAccessType = enum { Read, Write };
+
+        pub const Dependency = struct {
+            dependency_type: DependencyType,
+            access_type: DependencyAccessType,
+
+            pub fn init(comptime ArgType: type) ?@This() {}
+        };
+        pub const dependencies = Dependencies: {
+            const deps: []const Dependency = &.{};
+            for (ParamsSlice) |ArgType| {
+                if (ArgType.is_generic) {
+                    @compileError("anytype is not allowed as a system argument");
+                }
+                if (Dependency.init(ArgType)) |dep| {
+                    deps = deps ++ .{dep};
+                }
+            }
+            break :Dependencies deps;
+        };
+
         pub fn initData(alloc: std.mem.Allocator) !SystemData {
             return SystemData.init(alloc, NumEventReaders, NumRemovedReaders);
         }
@@ -105,7 +132,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             return count;
         }
 
-        const Dependencies = struct {
+        const ArgDependencies = struct {
             world: *World,
             type_store: *TypeStore,
             event_store: *EventStore,
@@ -114,7 +141,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             allocator: std.mem.Allocator,
             io: std.Io,
         };
-        inline fn initArg(comptime ArgType: type, deps: Dependencies) !ArgType {
+        inline fn initArg(comptime ArgType: type, deps: ArgDependencies) !ArgType {
             const InitFunc = @TypeOf(ArgType.init);
             const InitInfo = @typeInfo(InitFunc).@"fn";
             const InitArgsTuple = std.meta.ArgsTuple(InitFunc);
@@ -146,7 +173,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
                 else => @call(.always_inline, ArgType.init, args),
             };
         }
-        inline fn getArgs(deps: Dependencies) !ArgsTuple {
+        inline fn getArgs(deps: ArgDependencies) !ArgsTuple {
             // SAFETY: undefined is necessary to fill tuple with custom type
             var args: ArgsTuple = undefined;
             inline for (ParamsSlice, 0..) |param, i| {
@@ -167,7 +194,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             }
         }
 
-        pub inline fn call(deps: Dependencies) ReturnType {
+        pub inline fn call(deps: ArgDependencies) ReturnType {
             var args = getArgs(deps) catch @panic("Couldn't initialize system arguments");
             const result = @call(.always_inline, function, args);
             deinitArgs(&args);

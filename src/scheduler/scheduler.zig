@@ -98,19 +98,22 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
             // sync deferred changes
             try self.world.sync();
         }
+        fn runSystem(self: *@This(), system: anytype) !void {
+            const system_data_ptr = self.getSystemData(system);
+            try system.call(.{
+                .world = self.world,
+                .type_store = self.resource_store,
+                .event_store = self.event_store,
+                .removed_logs = &self.world.removed,
+                .io = self.io,
+                .allocator = self.world.allocator,
+                .system_data = system_data_ptr,
+            });
+            system_data_ptr.last_run = self.world.getTick();
+        }
         fn runStage(self: *@This(), comptime label: StageLabel) !void {
             inline for (comptime SchedulerStages.get(label)) |system| {
-                const system_data_ptr = self.getSystemData(system);
-                try system.call(.{
-                    .world = self.world,
-                    .type_store = self.resource_store,
-                    .event_store = self.event_store,
-                    .removed_logs = &self.world.removed,
-                    .io = self.io,
-                    .allocator = self.world.allocator,
-                    .system_data = system_data_ptr,
-                });
-                system_data_ptr.last_run = self.world.getTick();
+                try self.runSystem(system);
             }
         }
 

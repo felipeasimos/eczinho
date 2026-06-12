@@ -348,13 +348,10 @@ fn renderScore(score: Resource(Score)) !void {
     rl.drawText(str, @divFloor(screen_width, 2) - @divFloor(text_width, 2), @divFloor(screen_height, 2), 100, rl.Color.white);
 }
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
     var debug_allocator = std.heap.DebugAllocator(.{ .safety = true }).init;
     defer _ = debug_allocator.deinit();
     const allocator = debug_allocator.allocator();
-
-    var threaded = std.Io.Threaded.init(allocator, .{});
-    const io = threaded.io();
 
     rl.setConfigFlags(.{
         .fullscreen_mode = false,
@@ -382,12 +379,12 @@ pub fn main() !void {
         .addSystem(.Render, renderRectangles)
         .addSystem(.Render, renderScore)
         .addSystem(.Render, endRender)
-        .build(allocator, io);
+        .build(allocator, init.io);
     defer app.deinit();
     var prng = std.Random.DefaultPrng.init(blk: {
         // SAFETY: defined immediatly after
         var seed: u64 = undefined;
-        io.random(std.mem.asBytes(&seed));
+        init.io.random(std.mem.asBytes(&seed));
         break :blk seed;
     });
     app.insertResource(prng.random());
