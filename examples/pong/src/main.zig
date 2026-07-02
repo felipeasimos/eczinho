@@ -349,9 +349,16 @@ fn renderScore(score: Resource(Score)) !void {
 }
 
 pub fn main(init: std.process.Init) !void {
-    var debug_allocator = std.heap.DebugAllocator(.{ .safety = true }).init;
-    defer _ = debug_allocator.deinit();
-    const allocator = debug_allocator.allocator();
+    // var debug_allocator = std.heap.DebugAllocator(.{ .safety = true }).init;
+    // defer _ = debug_allocator.deinit();
+    // const allocator = debug_allocator.allocator();
+
+    const allocator = std.heap.smp_allocator;
+
+    // var uring: std.Io.Uring = undefined;
+    // try std.Io.Uring.init(&uring, allocator, .{});
+    // const io = uring.io();
+    const io = init.io;
 
     rl.setConfigFlags(.{
         .fullscreen_mode = false,
@@ -379,12 +386,13 @@ pub fn main(init: std.process.Init) !void {
         .addSystem(.Render, renderRectangles)
         .addSystem(.Render, renderScore)
         .addSystem(.Render, endRender)
-        .build(allocator, init.io);
+        .numThreads(4)
+        .build(allocator, io);
     defer app.deinit();
     var prng = std.Random.DefaultPrng.init(blk: {
         // SAFETY: defined immediatly after
         var seed: u64 = undefined;
-        init.io.random(std.mem.asBytes(&seed));
+        io.random(std.mem.asBytes(&seed));
         break :blk seed;
     });
     app.insertResource(prng.random());

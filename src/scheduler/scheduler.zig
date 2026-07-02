@@ -4,11 +4,13 @@ const EventStoreFactory = @import("../event/event_store.zig").EventStore;
 const RemovedLogFactory = @import("../removed/removed_log.zig").RemovedComponentsLog;
 const SystemData = @import("../system/system_data.zig").SystemData;
 const StageLabel = @import("stage_label.zig").StageLabel;
+const dag = @import("dag.zig");
 
 pub const SchedulerOptions = struct {
     Context: type,
     Systems: []const type,
     Labels: []const StageLabel,
+    NumThreads: usize,
 };
 
 fn initSchedulerStages(
@@ -48,6 +50,7 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
             .Components = Components,
             .Entity = Entity,
         });
+        const Sched = @This();
 
         world: *World,
         resource_store: *TypeStore,
@@ -98,18 +101,41 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
             // sync deferred changes
             try self.world.sync();
         }
-        fn runSystem(self: *@This(), system: anytype) !void {
-            const system_data_ptr = self.getSystemData(system);
-            try system.call(.{
-                .world = self.world,
-                .type_store = self.resource_store,
-                .event_store = self.event_store,
-                .removed_logs = &self.world.removed,
-                .io = self.io,
-                .allocator = self.world.allocator,
-                .system_data = system_data_ptr,
-            });
-            system_data_ptr.last_run = self.world.getTick();
+        fn Runnable(comptime S: type) type {
+            return struct {
+                pub fn run(scheduler: *Sched) std.Io.Cancelable!void {
+                    const system_data_ptr = scheduler.getSystemData(S);
+                    S.call(.{
+                        .world = scheduler.world,
+                        .type_store = scheduler.resource_store,
+                        .event_store = scheduler.event_store,
+                        .removed_logs = &scheduler.world.removed,
+                        .io = scheduler.io,
+                        .allocator = scheduler.world.allocator,
+                        .system_data = system_data_ptr,
+                    }) catch {
+                        return error.Canceled;
+                    };
+                    system_data_ptr.last_run = scheduler.world.getTick();
+                }
+            };
+        }
+        fn runSystemsInParallel(self: *@This(), comptime systems: []const type) !void {
+            var group = std.Io.Group.init;
+            inline for (systems) |system| {
+                try group.concurrent(self.io, Runnable(system).run, .{self});
+            }
+            try group.await(self.io);
+        }
+        fn runSystem(self: *@This(), comptime system: type) !void {
+            return try Runnable(system).run(self);
+        }
+        fn runStageDAG(self: *@This(), comptime label: StageLabel) !void {
+            const systems = comptime SchedulerStages.get(label);
+            const DAG = dag.DAG(systems, Components, Resources, options.NumThreads);
+            inline for (DAG.ParallelGroups) |ParallelGroup| {
+                try self.runSystemsInParallel(ParallelGroup.Systems);
+            }
         }
         fn runStage(self: *@This(), comptime label: StageLabel) !void {
             inline for (comptime SchedulerStages.get(label)) |system| {
@@ -119,9 +145,17 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
 
         pub fn run(self: *@This()) !void {
             try self.syncBarrier();
-            // run every stage in order, except for startup
             inline for (comptime std.enums.values(StageLabel)[1..]) |label| {
-                try self.runStage(label);
+                // final rendering (GPU) must always be done single-threaded by the same thread
+                if (label == .Render) {
+                    try self.runStage(label);
+                } else {
+                    if (comptime options.NumThreads == 1) {
+                        try self.runStage(label);
+                    } else {
+                        try self.runStageDAG(label);
+                    }
+                }
             }
         }
     };

@@ -38,6 +38,7 @@ test "check if event was written" {
                 write_count.get().*.count += 1;
             }
         }).writeEvent)
+        .numThreads(1)
         .build(std.testing.allocator, std.testing.io);
     defer app.deinit();
 

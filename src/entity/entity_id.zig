@@ -13,6 +13,7 @@ pub fn EntityTypeFactory(comptime options: EntityOptions) type {
     const EntityBackingInt = std.meta.Int(.unsigned, total_bits);
 
     return packed struct(EntityBackingInt) {
+        pub const Marker = EntityTypeFactory;
         pub const Int = EntityBackingInt;
         pub const Index = std.meta.Int(.unsigned, options.index_bits);
         pub const Version = std.meta.Int(.unsigned, options.version_bits);

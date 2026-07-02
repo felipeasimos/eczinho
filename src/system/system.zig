@@ -7,7 +7,8 @@ const types = @import("../types.zig");
 const event = @import("../event/event.zig");
 const removed = @import("../removed/removed.zig");
 const commands = @import("../commands/commands.zig");
-const SystemData = @import("system_data.zig").SystemData;
+const query = @import("../query/query.zig");
+const SystemData = @import("./system_data.zig").SystemData;
 const ParameterData = @import("parameter_data.zig").ParameterData;
 
 pub fn System(comptime function: anytype, comptime Context: type) type {
@@ -15,67 +16,41 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
         @compileError("a function should be provided to System(), not " ++ @typeName(@TypeOf(function)));
     }
     return struct {
-        pub const Entity = Context.Entity;
-        pub const Components = Context.Components;
-        pub const Resources = Context.Resources;
-        pub const Events = Context.Events;
+        const Entity = Context.Entity;
+        const Components = Context.Components;
+        const Resources = Context.Resources;
+        const Events = Context.Events;
 
-        pub const World = Context.GetWorldType();
-        pub const TypeStore = TypeStoreFactory(.{
+        const World = Context.GetWorldType();
+        const TypeStore = TypeStoreFactory(.{
             .TypeHasher = Resources,
         });
-        pub const EventStore = EventStoreFactory(.{
+        const EventStore = EventStoreFactory(.{
             .Events = Events,
         });
-        pub const RemovedLog = RemovedLogFactory(.{
+        const RemovedLog = RemovedLogFactory(.{
             .Components = Components,
             .Entity = Entity,
         });
-        pub const CommandsQueue = commands.CommandsQueue(.{
+        const CommandsQueue = commands.CommandsQueue(.{
             .Components = Components,
             .Entity = Entity,
         });
 
-        pub const FuncType = @TypeOf(function);
-        pub const FuncInfo = @typeInfo(FuncType).@"fn";
+        const FuncType = @TypeOf(function);
+        const FuncInfo = @typeInfo(FuncType).@"fn";
 
-        pub const RawReturnType: type = FuncInfo.return_type.?;
-        pub const ReturnType: type = switch (@typeInfo(RawReturnType)) {
+        const RawReturnType: type = FuncInfo.return_type.?;
+        const ReturnType: type = switch (@typeInfo(RawReturnType)) {
             .error_set, .error_union => RawReturnType,
             else => anyerror!RawReturnType,
         };
+        const ArgsTuple = std.meta.ArgsTuple(FuncType);
+
+        const NumEventReaders = numOfMarker(ParamsSlice, event.EventReader);
+        const NumRemovedReaders = numOfMarker(ParamsSlice, removed.Removed);
+
         pub const ParamsSlice = FuncInfo.params;
-        pub const ArgsTuple = std.meta.ArgsTuple(FuncType);
-
-        pub const NumEventReaders = numOfMarker(ParamsSlice, event.EventReader);
-        pub const NumRemovedReaders = numOfMarker(ParamsSlice, removed.Removed);
-
-        pub const DependencyType = union {
-            component: Components.ComponentTypeId,
-            resource: Resources.ResourceTypeId,
-
-            pub fn init(comptime ArgType: type) ?@This() {}
-        };
-        pub const DependencyAccessType = enum { Read, Write };
-
-        pub const Dependency = struct {
-            dependency_type: DependencyType,
-            access_type: DependencyAccessType,
-
-            pub fn init(comptime ArgType: type) ?@This() {}
-        };
-        pub const dependencies = Dependencies: {
-            const deps: []const Dependency = &.{};
-            for (ParamsSlice) |ArgType| {
-                if (ArgType.is_generic) {
-                    @compileError("anytype is not allowed as a system argument");
-                }
-                if (Dependency.init(ArgType)) |dep| {
-                    deps = deps ++ .{dep};
-                }
-            }
-            break :Dependencies deps;
-        };
 
         pub fn initData(alloc: std.mem.Allocator) !SystemData {
             return SystemData.init(alloc, NumEventReaders, NumRemovedReaders);

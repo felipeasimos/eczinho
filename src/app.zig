@@ -117,6 +117,7 @@ pub const AppOptions = struct {
     Context: type,
     Systems: []const type = &.{},
     Labels: []const StageLabel = &.{},
+    NumThreads: usize = 4,
 };
 
 /// comptime struct used to encapsulate part of an application in modularized
@@ -151,6 +152,7 @@ pub fn App(comptime options: AppOptions) type {
             .Context = options.Context,
             .Systems = options.Systems,
             .Labels = options.Labels,
+            .NumThreads = options.NumThreads,
         });
 
         allocator: std.mem.Allocator,

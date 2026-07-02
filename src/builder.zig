@@ -207,6 +207,11 @@ pub const AppBuilder = struct {
             .options = .{ .Context = ctx },
         };
     }
+    pub fn numThreads(comptime self: @This(), comptime n: usize) @This() {
+        var new = self;
+        new.options.NumThreads = n;
+        return new;
+    }
     pub fn addSystem(comptime self: @This(), comptime label: StageLabel, comptime function: anytype) @This() {
         var new = self;
         const system_slice: []const type = &.{System(function, self.options.Context)};

@@ -11,7 +11,7 @@ Eczinho is a little hybrid ECS built in pure Zig with a bevy-flavored API.
 
 ## Running examples
 
-```
+```zig
 # pong example using raylib, W and S to move paddle. ESC to exit
 zig build --build-file examples/pong/build.zig
 ```
@@ -37,10 +37,12 @@ zig build --build-file examples/pong/build.zig
    * write/read conflicts automatically handled
    * with chunking: work unit is each chunk (better for high cpu counts!)
    * with table and sparse sets storage: work unit is systems
-   * scheduling strategy resolved completely at comptime
-      * system sets!
-         * add systems to sets
-         * add constraints between sets
+   * scheduling strategy resolved completely at comptime or use runtime dependency tracking
+      - [ ] basic static scheduling
+      - [ ] optional runtime dependency tracking to move between batches
+
+- [ ] parse system dependencies
+- [ ] partial apply deferred
 - [ ] conditional systems
    * only run if query is not empty
 - [ ] optional world logging
