@@ -7,7 +7,9 @@ const AccessType = struct {
 };
 
 fn generateComponentMatrix(systems: []const type, Components: type) [Components.Len][systems.len]AccessType {
-    var matrix: [Components.Len][systems.len]AccessType = .{.{AccessType{ .read = false, .write = false }} ** systems.len} ** Components.Len;
+    var matrix: [Components.Len][systems.len]AccessType = .{.{AccessType{ .read = false, .write = false }} **
+        systems.len} **
+        Components.Len;
     for (systems, 0..) |system, system_index| {
         for (system.ParamsSlice) |ParamType| {
             const param_type = ParamType.type.?;
