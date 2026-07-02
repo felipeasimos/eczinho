@@ -128,7 +128,7 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
             try group.await(self.io);
         }
         fn runSystem(self: *@This(), comptime system: type) !void {
-            return try Runnable(system).run(self);
+            return Runnable(system).run(self);
         }
         fn runStageDAG(self: *@This(), comptime label: StageLabel) !void {
             const systems = comptime SchedulerStages.get(label);

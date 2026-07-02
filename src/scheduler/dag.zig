@@ -7,7 +7,9 @@ const AccessType = struct {
 };
 
 fn generateComponentMatrix(systems: []const type, Components: type) [Components.Len][systems.len]AccessType {
-    var matrix: [Components.Len][systems.len]AccessType = .{.{AccessType{ .read = false, .write = false }} ** systems.len} ** Components.Len;
+    var matrix: [Components.Len][systems.len]AccessType = .{.{AccessType{ .read = false, .write = false }} **
+        systems.len} **
+        Components.Len;
     for (systems, 0..) |system, system_index| {
         for (system.ParamsSlice) |ParamType| {
             const param_type = ParamType.type.?;
@@ -20,7 +22,11 @@ fn generateComponentMatrix(systems: []const type, Components: type) [Components.
                     const component_index = Components.getIndex(Component);
                     const access_type = Components.getAccessType(component_access);
                     switch (access_type) {
-                        .Const, .PointerConst, .OptionalConst, .OptionalPointerConst => matrix[component_index][system_index].read = true,
+                        .Const,
+                        .PointerConst,
+                        .OptionalConst,
+                        .OptionalPointerConst,
+                        => matrix[component_index][system_index].read = true,
                         .PointerMut, .OptionalPointerMut => matrix[component_index][system_index].write = true,
                     }
                 }
@@ -31,7 +37,9 @@ fn generateComponentMatrix(systems: []const type, Components: type) [Components.
 }
 
 fn generateResourceMatrix(systems: []const type, Resources: type) [Resources.Len][systems.len]AccessType {
-    var matrix: [Resources.Len][systems.len]AccessType = .{.{AccessType{ .read = false, .write = false }} ** systems.len} ** Resources.Len;
+    var matrix: [Resources.Len][systems.len]AccessType = .{.{AccessType{ .read = false, .write = false }} **
+        systems.len} **
+        Resources.Len;
     for (systems, 0..) |system, system_index| {
         for (system.ParamsSlice) |ParamType| {
             if (Resources.isResource(ParamType.type.?)) {
@@ -39,7 +47,11 @@ fn generateResourceMatrix(systems: []const type, Resources: type) [Resources.Len
                 const component_index = Resources.getIndex(Resource);
                 const access_type = Resources.getAccessType(ParamType);
                 switch (access_type) {
-                    .Const, .PointerConst, .OptionalConst, .OptionalPointerConst => matrix[component_index][system_index].read = true,
+                    .Const,
+                    .PointerConst,
+                    .OptionalConst,
+                    .OptionalPointerConst,
+                    => matrix[component_index][system_index].read = true,
                     .PointerMut, .OptionalPointerMut => matrix[component_index][system_index].write = true,
                 }
             }
@@ -60,7 +72,7 @@ fn hasConflict(matrix: anytype, i: usize, j: usize) bool {
     return false;
 }
 
-fn systemsSubSlice(comptime systems: []const type, comptime system_indices: []const usize) []const type {
+fn SystemsSubSlice(comptime systems: []const type, comptime system_indices: []const usize) []const type {
     var systems_subslice: []const type = &.{};
     inline for (system_indices) |idx| {
         systems_subslice = systems_subslice ++ .{systems[idx]};
@@ -68,7 +80,12 @@ fn systemsSubSlice(comptime systems: []const type, comptime system_indices: []co
     return systems_subslice;
 }
 
-fn generateParallelGroups(component_matrix: anytype, resource_matrix: anytype, systems: []const type, num_threads: usize) []const type {
+fn GenerateParallelGroups(
+    component_matrix: anytype,
+    resource_matrix: anytype,
+    systems: []const type,
+    num_threads: usize,
+) []const type {
     var visited: [systems.len]bool = .{false} ** systems.len;
     var parallel_groups: []const type = &.{};
 
@@ -83,7 +100,7 @@ fn generateParallelGroups(component_matrix: anytype, resource_matrix: anytype, s
             visited[j] = true;
             parallel_indices = parallel_indices ++ .{j};
         }
-        parallel_groups = parallel_groups ++ .{ParallelGroup(systemsSubSlice(systems, parallel_indices))};
+        parallel_groups = parallel_groups ++ .{ParallelGroup(SystemsSubSlice(systems, parallel_indices))};
     }
     return parallel_groups;
 }
@@ -96,11 +113,16 @@ pub fn ParallelGroup(comptime systems: []const type) type {
 }
 
 /// Dependency DAG
-pub fn DAG(comptime systems: []const type, comptime Components: type, comptime Resources: type, comptime num_threads: usize) type {
+pub fn DAG(
+    comptime systems: []const type,
+    comptime Components: type,
+    comptime Resources: type,
+    comptime num_threads: usize,
+) type {
     @setEvalBranchQuota(1000000);
     const component_matrix: [Components.Len][systems.len]AccessType = generateComponentMatrix(systems, Components);
     const resource_matrix: [Resources.Len][systems.len]AccessType = generateResourceMatrix(systems, Resources);
-    const parallel_groups: []const type = generateParallelGroups(component_matrix, resource_matrix, systems, num_threads);
+    const parallel_groups: []const type = GenerateParallelGroups(component_matrix, resource_matrix, systems, num_threads);
     return struct {
         pub const ParallelGroups = parallel_groups;
     };

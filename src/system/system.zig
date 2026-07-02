@@ -7,7 +7,6 @@ const types = @import("../types.zig");
 const event = @import("../event/event.zig");
 const removed = @import("../removed/removed.zig");
 const commands = @import("../commands/commands.zig");
-const query = @import("../query/query.zig");
 const SystemData = @import("./system_data.zig").SystemData;
 const ParameterData = @import("parameter_data.zig").ParameterData;
 
