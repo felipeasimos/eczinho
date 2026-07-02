@@ -15,5 +15,5 @@ jobs:
           submodules: false
       - uses: mlugg/setup-zig@v2
         with:
-          version: 0.16
+          version: 0.16.0
       - run: zig build test
