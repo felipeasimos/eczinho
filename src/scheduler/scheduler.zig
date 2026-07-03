@@ -151,6 +151,7 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
             inline for (comptime std.enums.values(StageLabel)[1..]) |label| {
                 const num_threads = comptime Constraint.getStageNumThreads(Constraints, label);
                 if (comptime num_threads == 1) {
+                    // using the main thread instead of worker threads is important for final rendering using opengl/raylib
                     try self.runStage(label);
                 } else {
                     try self.runStageDAG(label, num_threads);

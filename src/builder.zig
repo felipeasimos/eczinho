@@ -238,7 +238,7 @@ pub const AppBuilder = struct {
         });
         return app.App(self.options){
             .allocator = allocator,
-            .world = try World.init(allocator),
+            .world = try World.init(allocator, io),
             .resource_store = TypeStore.init(),
             .event_store = EventStore.init(allocator),
             .scheduler = null,
