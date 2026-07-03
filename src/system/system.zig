@@ -9,12 +9,33 @@ const removed = @import("../removed/removed.zig");
 const commands = @import("../commands/commands.zig");
 const SystemData = @import("./system_data.zig").SystemData;
 const ParameterData = @import("parameter_data.zig").ParameterData;
+const StageLabel = @import("../scheduler/stage_label.zig").StageLabel;
 
-pub fn System(comptime function: anytype, comptime Context: type) type {
+pub fn isSystem(comptime T: type) bool {
+    return @typeInfo(T) == .@"struct" and
+        @hasDecl(T, "Marker") and
+        @hasDecl(T, "Fn") and
+        @TypeOf(T.Marker) == @TypeOf(System) and
+        T.Marker == System;
+}
+pub fn isSameSystem(comptime a: type, comptime b: type) bool {
+    if (comptime !isSystem(a)) {
+        @compileError("type 'a' (" ++ @typeName(a) ++ ") is not a system type");
+    }
+    if (comptime !isSystem(b)) {
+        @compileError("type 'b' (" ++ @typeName(b) ++ ") is not a system type");
+    }
+    return comptime @TypeOf(a.Fn) == @TypeOf(b.Fn) and a.Fn == b.Fn and a.Stage == b.Stage;
+}
+
+pub fn System(comptime function: anytype, comptime Context: type, comptime stage: StageLabel) type {
     if (@typeInfo(@TypeOf(function)) != .@"fn") {
         @compileError("a function should be provided to System(), not " ++ @typeName(@TypeOf(function)));
     }
     return struct {
+        pub const Marker = System;
+        pub const Fn = function;
+        pub const Stage = stage;
         const Entity = Context.Entity;
         const Components = Context.Components;
         const Resources = Context.Resources;
@@ -36,7 +57,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             .Entity = Entity,
         });
 
-        const FuncType = @TypeOf(function);
+        const FuncType = @TypeOf(Fn);
         const FuncInfo = @typeInfo(FuncType).@"fn";
 
         const RawReturnType: type = FuncInfo.return_type.?;
@@ -75,19 +96,19 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             return true;
         }
 
-        fn matchMarker(comptime T: type, comptime Marker: anytype) bool {
+        fn matchMarker(comptime T: type, comptime M: anytype) bool {
             const t = GetBaseType(T);
             if (!@hasDecl(t, "Marker")) return false;
-            if (@TypeOf(t.Marker) != @TypeOf(Marker)) return false;
-            if (t.Marker != Marker) return false;
+            if (@TypeOf(t.Marker) != @TypeOf(M)) return false;
+            if (t.Marker != M) return false;
             return true;
         }
 
-        fn numOfMarker(comptime ParamSlice: []const std.builtin.Type.Fn.Param, comptime Marker: anytype) usize {
+        fn numOfMarker(comptime ParamSlice: []const std.builtin.Type.Fn.Param, comptime M: anytype) usize {
             comptime var count = 0;
             inline for (ParamSlice) |param| {
                 if (param.type) |t| {
-                    if (comptime matchMarker(t, Marker)) {
+                    if (comptime matchMarker(t, M)) {
                         count += 1;
                     }
                 }

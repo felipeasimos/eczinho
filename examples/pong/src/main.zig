@@ -348,6 +348,7 @@ fn renderScore(score: Resource(Score)) !void {
     rl.drawText(str, @divFloor(screen_width, 2) - @divFloor(text_width, 2), @divFloor(screen_height, 2), 100, rl.Color.white);
 }
 
+const ConstraintBuilder = Context.ConstraintBuilder;
 pub fn main(init: std.process.Init) !void {
     // var debug_allocator = std.heap.DebugAllocator(.{ .safety = true }).init;
     // defer _ = debug_allocator.deinit();
@@ -386,7 +387,7 @@ pub fn main(init: std.process.Init) !void {
         .addSystem(.Render, renderRectangles)
         .addSystem(.Render, renderScore)
         .addSystem(.Render, endRender)
-        .numThreads(4)
+        .addConstraint(ConstraintBuilder.stageNumThreads(.Render, 1))
         .build(allocator, io);
     defer app.deinit();
     var prng = std.Random.DefaultPrng.init(blk: {

@@ -3,6 +3,7 @@ const WorldFactory = @import("world.zig").World;
 const SchedulerFactory = @import("scheduler/scheduler.zig").Scheduler;
 const EntityTypeFactory = @import("entity/entity.zig").EntityTypeFactory;
 const StageLabel = @import("scheduler/stage_label.zig").StageLabel;
+const constraint = @import("constraint/constraint.zig");
 const query = @import("query/query.zig");
 const commands = @import("commands/commands.zig");
 const resource = @import("resource/resource.zig");
@@ -103,6 +104,9 @@ pub fn AppContext(comptime options: AppContextOptions) type {
             });
         }
 
+        /// use to build constraints for your systems (ordering, number of threads, parallelism details)
+        pub const ConstraintBuilder = constraint.Constraint.Builder(@This());
+
         pub fn GetWorldType() type {
             return WorldFactory(.{
                 .Entity = Entity,
@@ -117,7 +121,7 @@ pub const AppOptions = struct {
     Context: type,
     Systems: []const type = &.{},
     Labels: []const StageLabel = &.{},
-    NumThreads: usize = 4,
+    Constraints: []const constraint.Constraint = &.{},
 };
 
 /// comptime struct used to encapsulate part of an application in modularized
@@ -152,7 +156,7 @@ pub fn App(comptime options: AppOptions) type {
             .Context = options.Context,
             .Systems = options.Systems,
             .Labels = options.Labels,
-            .NumThreads = options.NumThreads,
+            .Constraints = options.Constraints,
         });
 
         allocator: std.mem.Allocator,

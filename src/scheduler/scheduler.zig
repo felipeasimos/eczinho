@@ -4,13 +4,15 @@ const EventStoreFactory = @import("../event/event_store.zig").EventStore;
 const RemovedLogFactory = @import("../removed/removed_log.zig").RemovedComponentsLog;
 const SystemData = @import("../system/system_data.zig").SystemData;
 const StageLabel = @import("stage_label.zig").StageLabel;
+const Constraint = @import("../constraint/constraint.zig").Constraint;
 const dag = @import("dag.zig");
+const system = @import("../system/system.zig");
 
 pub const SchedulerOptions = struct {
     Context: type,
     Systems: []const type,
     Labels: []const StageLabel,
-    NumThreads: usize,
+    Constraints: []const Constraint,
 };
 
 fn initSchedulerStages(
@@ -20,9 +22,9 @@ fn initSchedulerStages(
     var stages = std.EnumArray(StageLabel, []const type).initFill(&.{});
     for (std.enums.values(StageLabel)) |label| {
         var stage_systems: []const type = &.{};
-        for (systems, 0..) |system, i| {
+        for (systems, 0..) |sys, i| {
             if (labels[i] == label) {
-                stage_systems = stage_systems ++ .{system};
+                stage_systems = stage_systems ++ .{sys};
             }
         }
         stages.set(label, stage_systems);
@@ -50,6 +52,7 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
             .Components = Components,
             .Entity = Entity,
         });
+        const Constraints: []const Constraint = options.Constraints;
         const Sched = @This();
 
         world: *World,
@@ -83,7 +86,7 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
 
         fn getSystemIndex(comptime System: type) usize {
             inline for (Systems, 0..) |_, i| {
-                if (Systems[i] == System) {
+                if (comptime system.isSameSystem(Systems[i], System)) {
                     return i;
                 }
             }
@@ -122,39 +125,35 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
         }
         fn runSystemsInParallel(self: *@This(), comptime systems: []const type) !void {
             var group = std.Io.Group.init;
-            inline for (systems) |system| {
-                try group.concurrent(self.io, Runnable(system).run, .{self});
+            inline for (systems) |sys| {
+                try group.concurrent(self.io, Runnable(sys).run, .{self});
             }
             try group.await(self.io);
         }
-        fn runSystem(self: *@This(), comptime system: type) !void {
-            return Runnable(system).run(self);
+        fn runSystem(self: *@This(), comptime sys: type) !void {
+            return Runnable(sys).run(self);
         }
-        fn runStageDAG(self: *@This(), comptime label: StageLabel) !void {
+        fn runStageDAG(self: *@This(), comptime label: StageLabel, comptime num_threads: usize) !void {
             const systems = comptime SchedulerStages.get(label);
-            const DAG = dag.DAG(systems, Components, Resources, options.NumThreads);
+            const DAG = dag.DAG(systems, Components, Resources, num_threads);
             inline for (DAG.ParallelGroups) |ParallelGroup| {
                 try self.runSystemsInParallel(ParallelGroup.Systems);
             }
         }
         fn runStage(self: *@This(), comptime label: StageLabel) !void {
-            inline for (comptime SchedulerStages.get(label)) |system| {
-                try self.runSystem(system);
+            inline for (comptime SchedulerStages.get(label)) |sys| {
+                try self.runSystem(sys);
             }
         }
 
         pub fn run(self: *@This()) !void {
             try self.syncBarrier();
             inline for (comptime std.enums.values(StageLabel)[1..]) |label| {
-                // final rendering (GPU) must always be done single-threaded by the same thread
-                if (label == .Render) {
+                const num_threads = comptime Constraint.getStageNumThreads(Constraints, label);
+                if (comptime num_threads == 1) {
                     try self.runStage(label);
                 } else {
-                    if (comptime options.NumThreads == 1) {
-                        try self.runStage(label);
-                    } else {
-                        try self.runStageDAG(label);
-                    }
+                    try self.runStageDAG(label, num_threads);
                 }
             }
         }
