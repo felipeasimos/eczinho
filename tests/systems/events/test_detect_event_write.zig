@@ -26,16 +26,16 @@ test "check if event was written" {
             }
         }).insertResources)
         .addSystem(.Update, (struct {
-            pub fn readEvent(reader: EventReader(EventA), read_count: Resource(ReadCounter)) void {
+            pub fn readEvent(reader: EventReader(EventA), read_count: Resource(*ReadCounter)) void {
                 if (reader.readOne()) |_| {
-                    read_count.get().*.count += 1;
+                    read_count.*.count += 1;
                 }
             }
         }).readEvent)
         .addSystem(.Update, (struct {
-            pub fn writeEvent(writer: EventWriter(EventA), write_count: Resource(WriteCounter)) void {
+            pub fn writeEvent(writer: EventWriter(EventA), write_count: Resource(*WriteCounter)) void {
                 writer.write(@as(EventA, 2));
-                write_count.get().*.count += 1;
+                write_count.*.count += 1;
             }
         }).writeEvent)
         .build(std.testing.allocator, std.testing.io);

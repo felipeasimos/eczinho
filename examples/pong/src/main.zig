@@ -88,7 +88,7 @@ fn updatePositions(q: Query(.{ .q = &.{ *Position, Velocity } })) void {
 
 fn reactGoalCollision(
     commands: Commands,
-    res: Resource(Score),
+    res: Resource(*Score),
     q: Query(.{ .q = &.{Entity}, .with = &.{Ball} }),
     reader: EventReader(GoalCollision),
 ) !void {
@@ -98,8 +98,8 @@ fn reactGoalCollision(
         const entt = single[0];
         commands.remove(Ball, entt);
         switch (goal) {
-            .Right => res.get().enemy += 1,
-            .Left => res.get().player += 1,
+            .Right => res.enemy += 1,
+            .Left => res.player += 1,
         }
     }
 }
@@ -236,9 +236,8 @@ fn createBall(commands: Commands, random: Resource(std.Random), q: Query(.{ .wit
     if (q.len() != 0) {
         return;
     }
-    const rnd: std.Random = random.clone();
-    const angle = randomInRange(rnd, std.math.pi * 3.0 / 4.0, std.math.pi * 5.0 / 4.0);
-    const speed = BALL_MIN_SPEED + (rnd.float(f32) * (BALL_MAX_SPEED - BALL_MIN_SPEED));
+    const angle = randomInRange(random, std.math.pi * 3.0 / 4.0, std.math.pi * 5.0 / 4.0);
+    const speed = BALL_MIN_SPEED + (random.float(f32) * (BALL_MAX_SPEED - BALL_MIN_SPEED));
 
     const width: f32 = @floatFromInt(rl.getScreenWidth());
     const height: f32 = @floatFromInt(rl.getScreenHeight());
@@ -280,9 +279,8 @@ fn respawnBall(commands: Commands, r: Removed(Ball)) void {
 fn repositionBall(q: Query(.{ .q = &.{ *Position, *Velocity }, .added = &.{Ball} }), random: Resource(std.Random)) void {
     if (q.optSingle()) |data| {
         const pos_ptr, const vel_ptr = data;
-        const rnd: std.Random = random.clone();
-        const angle = randomInRange(rnd, std.math.pi * 3.0 / 4.0, std.math.pi * 5.0 / 4.0);
-        const speed = BALL_MIN_SPEED + (rnd.float(f32) * (BALL_MAX_SPEED - BALL_MIN_SPEED));
+        const angle = randomInRange(random, std.math.pi * 3.0 / 4.0, std.math.pi * 5.0 / 4.0);
+        const speed = BALL_MIN_SPEED + (random.float(f32) * (BALL_MAX_SPEED - BALL_MIN_SPEED));
 
         const width: f32 = @floatFromInt(rl.getScreenWidth());
         const height: f32 = @floatFromInt(rl.getScreenHeight());
@@ -338,8 +336,8 @@ fn renderRectangles(q: Query(.{ .q = &.{ Position, Rect, Visible } })) void {
 }
 
 fn renderScore(score: Resource(Score)) !void {
-    const enemy_score = score.clone().enemy;
-    const player_score = score.clone().player;
+    const enemy_score = score.enemy;
+    const player_score = score.player;
     var buf: [1024]u8 = undefined;
     const str = try std.fmt.bufPrintZ(&buf, "{} | {}", .{ enemy_score, player_score });
     const screen_width: i32 = rl.getScreenWidth();

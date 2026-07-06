@@ -98,6 +98,8 @@ pub fn System(comptime function: anytype, comptime Context: type, comptime stage
 
         fn matchMarker(comptime T: type, comptime M: anytype) bool {
             const t = GetBaseType(T);
+            const info = @typeInfo(t);
+            if (info != .@"struct" and info != .@"enum" and info != .@"union") return false;
             if (!@hasDecl(t, "Marker")) return false;
             if (@TypeOf(t.Marker) != @TypeOf(M)) return false;
             if (t.Marker != M) return false;
@@ -178,14 +180,29 @@ pub fn System(comptime function: anytype, comptime Context: type, comptime stage
                     *TypeStore => deps.type_store,
                     std.mem.Allocator => deps.world.allocator,
                     std.Io => deps.io,
-                    else => try initArg(ArgType, deps),
+                    else => _else: {
+                        if (comptime Resources.getTypeInfo(ArgType)) |info| {
+                            const Root = info.root;
+                            break :_else switch (comptime info.access) {
+                                .Const => deps.type_store.clone(Root),
+                                .PointerConst => deps.type_store.getConst(Root),
+                                .PointerMut => deps.type_store.get(Root),
+                                inline else => @compileError("Resources can't be optional"),
+                            };
+                        }
+                        break :_else try initArg(ArgType, deps);
+                    },
                 };
             }
             return args;
         }
         inline fn deinitArgs(args: anytype) void {
-            inline for (ParamsSlice, 0..) |_, i| {
-                args[i].deinit();
+            inline for (ParamsSlice, 0..) |Param, i| {
+                // if not resource
+                const T = Param.type.?;
+                if (comptime Resources.getTypeInfo(T) == null) {
+                    args[i].deinit();
+                }
             }
         }
 

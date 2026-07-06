@@ -3,6 +3,7 @@ const WorldFactory = @import("world.zig").World;
 const SchedulerFactory = @import("scheduler/scheduler.zig").Scheduler;
 const EntityTypeFactory = @import("entity/entity.zig").EntityTypeFactory;
 const StageLabel = @import("scheduler/stage_label.zig").StageLabel;
+const system = @import("system/system.zig");
 const constraint = @import("constraint/constraint.zig");
 const query = @import("query/query.zig");
 const commands = @import("commands/commands.zig");
@@ -62,10 +63,10 @@ pub fn AppContext(comptime options: AppContextOptions) type {
         });
 
         /// use in systems to obtain access to resource. System signature should be like:
-        /// fn systemExample(q: Resource(typeA), ...) !void {
+        /// fn systemExample(q: Resource(typeA), b: Resource(*typeB), c: Resource(*const typeC), ...) !void {
         ///     ...
         /// }
-        /// returned handle can access resource using get() *T or getConst() *const T
+        /// returned with the proper access modifier (const, ponter or pointer to const)
         pub fn Resource(comptime T: type) type {
             return resource.Resource(.{
                 .TypeStore = ResourceStore,
@@ -122,6 +123,17 @@ pub const AppOptions = struct {
     Systems: []const type = &.{},
     Labels: []const StageLabel = &.{},
     Constraints: []const constraint.Constraint = &.{},
+
+    /// check for system duplicates and conflicting constraints
+    pub fn validate(self: @This()) void {
+        inline for (self.Systems, 1..) |a, i| {
+            inline for (self.Systems[i..]) |b| {
+                if (system.isSameSystem(a, b)) {
+                    @compileError(std.fmt.comptimePrint("duplicate system detected at stage {}: {} and {}", .{ a.Stage, a.Fn, b.Fn }));
+                }
+            }
+        }
+    }
 };
 
 /// comptime struct used to encapsulate part of an application in modularized

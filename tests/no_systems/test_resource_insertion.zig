@@ -18,7 +18,7 @@ test "resource insertion" {
         }).insert)
         .addSystem(.Update, (struct {
             pub fn get(res: Resource(ResourceA)) !void {
-                try std.testing.expectEqual(@as(ResourceA, 34), res.clone());
+                try std.testing.expectEqual(@as(ResourceA, 34), res);
             }
         }).get)
         .build(std.testing.allocator, std.testing.io);

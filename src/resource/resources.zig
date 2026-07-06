@@ -8,6 +8,8 @@ pub fn Resources(comptime ResourceTypes: []const type) type {
         pub const Len = Hasher.Len;
         pub const Union = Hasher.Union;
         pub const getCanonicalType = Hasher.getCanonicalType;
+        pub const getTypeInfo = Hasher.getTypeInfo;
+        pub const getAccessType = Hasher.getAccessType;
         pub const getAlignment = Hasher.getAlignment;
         pub const getSize = Hasher.getSize;
         pub const getIndex = Hasher.getIndex;

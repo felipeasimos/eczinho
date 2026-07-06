@@ -41,21 +41,21 @@ test "check if tabled component was just added" {
         }).spawnEntity)
         .addSystem(.Update, (struct {
             pub fn checkIfNotAdded(
-                res: Resource(NotAddedTicks),
+                res: Resource(*NotAddedTicks),
                 q: Query(.{ .q = &.{ComponentA}, .added = &.{ComponentB} }),
             ) void {
                 if (q.len() == 0) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfNotAdded)
         .addSystem(.Update, (struct {
             pub fn checkIfAdded(
-                res: Resource(AddedTicks),
+                res: Resource(*AddedTicks),
                 q: Query(.{ .q = &.{ComponentA}, .added = &.{ComponentB} }),
             ) void {
                 if (q.len() > 0) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfAdded)
@@ -137,21 +137,21 @@ test "check if chunked component was just added" {
         }).spawnEntity)
         .addSystem(.Update, (struct {
             pub fn checkIfNotAdded(
-                res: Resource(NotAddedTicks),
+                res: Resource(*NotAddedTicks),
                 q: Query(.{ .q = &.{ComponentA}, .added = &.{ComponentB} }),
             ) void {
                 if (q.len() == 0) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfNotAdded)
         .addSystem(.Update, (struct {
             pub fn checkIfAdded(
-                res: Resource(AddedTicks),
+                res: Resource(*AddedTicks),
                 q: Query(.{ .q = &.{ComponentA}, .added = &.{ComponentB} }),
             ) void {
                 if (q.len() > 0) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfAdded)
@@ -239,21 +239,21 @@ test "check if sparse component was just added" {
         }).spawnEntity)
         .addSystem(.Update, (struct {
             pub fn checkIfNotAdded(
-                res: Resource(NotAddedTicks),
+                res: Resource(*NotAddedTicks),
                 q: Query(.{ .q = &.{ComponentA}, .added = &.{ComponentB} }),
             ) void {
                 if (q.len() == 0) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfNotAdded)
         .addSystem(.Update, (struct {
             pub fn checkIfAdded(
-                res: Resource(AddedTicks),
+                res: Resource(*AddedTicks),
                 q: Query(.{ .q = &.{ComponentA}, .added = &.{ComponentB} }),
             ) void {
                 if (q.len() > 0) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfAdded)

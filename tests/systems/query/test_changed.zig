@@ -40,21 +40,21 @@ test "check if tabled component was just changed" {
         }).spawnEntity)
         .addSystem(.Update, (struct {
             pub fn checkIfNotChanged(
-                res: Resource(NotChangedTicks),
+                res: Resource(*NotChangedTicks),
                 q: Query(.{ .q = &.{ComponentA}, .changed = &.{ComponentB} }),
             ) void {
                 if (q.len() == 0) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfNotChanged)
         .addSystem(.Update, (struct {
             pub fn checkIfChanged(
-                res: Resource(ChangedTicks),
+                res: Resource(*ChangedTicks),
                 q: Query(.{ .q = &.{ComponentA}, .changed = &.{ComponentB} }),
             ) void {
                 if (q.len() > 0) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfChanged)
@@ -136,21 +136,21 @@ test "check if chunked component was just changed" {
         }).spawnEntity)
         .addSystem(.Update, (struct {
             pub fn checkIfNotChanged(
-                res: Resource(NotChangedTicks),
+                res: Resource(*NotChangedTicks),
                 q: Query(.{ .q = &.{ComponentA}, .changed = &.{ComponentB} }),
             ) void {
                 if (q.len() == 0) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfNotChanged)
         .addSystem(.Update, (struct {
             pub fn checkIfChanged(
-                res: Resource(ChangedTicks),
+                res: Resource(*ChangedTicks),
                 q: Query(.{ .q = &.{ComponentA}, .changed = &.{ComponentB} }),
             ) void {
                 if (q.len() > 0) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfChanged)
@@ -239,21 +239,21 @@ test "check if sparse component was just changed" {
         }).spawnEntity)
         .addSystem(.Update, (struct {
             pub fn checkIfNotChanged(
-                res: Resource(NotChangedTicks),
+                res: Resource(*NotChangedTicks),
                 q: Query(.{ .q = &.{ComponentA}, .changed = &.{ComponentB} }),
             ) void {
                 if (q.len() == 0) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfNotChanged)
         .addSystem(.Update, (struct {
             pub fn checkIfChanged(
-                res: Resource(ChangedTicks),
+                res: Resource(*ChangedTicks),
                 q: Query(.{ .q = &.{ComponentA}, .changed = &.{ComponentB} }),
             ) void {
                 if (q.len() > 0) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfChanged)

@@ -42,22 +42,46 @@ fn generateResourceMatrix(systems: []const type, Resources: type) [Resources.Len
         Resources.Len;
     for (systems, 0..) |system, system_index| {
         for (system.ParamsSlice) |ParamType| {
-            if (Resources.isResource(ParamType.type.?)) {
-                const Resource = Resources.getCanonicalType(ParamType);
-                const component_index = Resources.getIndex(Resource);
-                const access_type = Resources.getAccessType(ParamType);
+            const T = ParamType.type.?;
+            if (Resources.isResource(T)) {
+                const Resource = Resources.getCanonicalType(T);
+                const resource_index = Resources.getIndex(Resource);
+                const access_type = Resources.getAccessType(T);
                 switch (access_type) {
                     .Const,
                     .PointerConst,
                     .OptionalConst,
                     .OptionalPointerConst,
-                    => matrix[component_index][system_index].read = true,
-                    .PointerMut, .OptionalPointerMut => matrix[component_index][system_index].write = true,
+                    => matrix[resource_index][system_index].read = true,
+                    .PointerMut, .OptionalPointerMut => matrix[resource_index][system_index].write = true,
                 }
             }
         }
     }
     return matrix;
+}
+
+fn generateEventMatrix(systems: []const type, Events: type) [Events.Len][systems.len]AccessType {
+    var matrix: [Events.Len][systems.len]AccessType = .{.{AccessType{ .read = false, .write = false }} **
+        systems.len} **
+        Events.Len;
+    for (systems, 0..) |system, system_index| {
+        for (system.ParamsSlice) |ParamType| {
+            if (Events.isEvent(ParamType.type.?)) {
+                const Event = Events.getCanonicalType(ParamType);
+                const event_index = Events.getIndex(Event);
+                const access_type = Events.getAccessType(ParamType);
+                switch (access_type) {
+                    .Const,
+                    .PointerConst,
+                    .OptionalConst,
+                    .OptionalPointerConst,
+                    => matrix[event_index][system_index].read = true,
+                    .PointerMut, .OptionalPointerMut => matrix[event_index][system_index].write = true,
+                }
+            }
+        }
+    }
 }
 
 fn hasConflict(matrix: anytype, i: usize, j: usize) bool {
@@ -117,11 +141,14 @@ pub fn DAG(
     comptime systems: []const type,
     comptime Components: type,
     comptime Resources: type,
+    comptime Events: type,
     comptime num_threads: usize,
 ) type {
+    _ = Events;
     @setEvalBranchQuota(1000000);
     const component_matrix: [Components.Len][systems.len]AccessType = generateComponentMatrix(systems, Components);
     const resource_matrix: [Resources.Len][systems.len]AccessType = generateResourceMatrix(systems, Resources);
+    // const event_matrix: [Events.Len][systems.len]AccessType = generateEventMatrix(systems, Events);
     const parallel_groups: []const type = GenerateParallelGroups(component_matrix, resource_matrix, systems, num_threads);
     return struct {
         pub const ParallelGroups = parallel_groups;

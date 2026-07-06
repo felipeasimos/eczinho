@@ -44,21 +44,21 @@ test "check if tabled component was just removed" {
         }).spawnEntity)
         .addSystem(.Update, (struct {
             pub fn checkIfNotRemoved(
-                res: Resource(NotRemovedTicks),
+                res: Resource(*NotRemovedTicks),
                 removed: Removed(ComponentB),
             ) void {
                 if (removed.readOne() == null) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfNotRemoved)
         .addSystem(.Update, (struct {
             pub fn checkIfRemoved(
-                res: Resource(RemovedTicks),
+                res: Resource(*RemovedTicks),
                 removed: Removed(ComponentB),
             ) void {
                 if (removed.readOne() != null) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfRemoved)
@@ -141,21 +141,21 @@ test "check if chunked component was just removed" {
         }).spawnEntity)
         .addSystem(.Update, (struct {
             pub fn checkIfNotRemoved(
-                res: Resource(NotRemovedTicks),
+                res: Resource(*NotRemovedTicks),
                 removed: Removed(ComponentB),
             ) void {
                 if (removed.readOne() == null) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfNotRemoved)
         .addSystem(.Update, (struct {
             pub fn checkIfRemoved(
-                res: Resource(RemovedTicks),
+                res: Resource(*RemovedTicks),
                 removed: Removed(ComponentB),
             ) void {
                 if (removed.readOne() != null) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfRemoved)
@@ -245,21 +245,21 @@ test "check if sparse component was just removed" {
         }).spawnEntity)
         .addSystem(.Update, (struct {
             pub fn checkIfNotRemoved(
-                res: Resource(NotRemovedTicks),
+                res: Resource(*NotRemovedTicks),
                 removed: Removed(ComponentB),
             ) void {
                 if (removed.readOne() == null) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfNotRemoved)
         .addSystem(.Update, (struct {
             pub fn checkIfRemoved(
-                res: Resource(RemovedTicks),
+                res: Resource(*RemovedTicks),
                 removed: Removed(ComponentB),
             ) void {
                 if (removed.readOne() != null) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfRemoved)
