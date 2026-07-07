@@ -1,5 +1,7 @@
 const query = @import("../query/query.zig");
 const entity = @import("../entity/entity.zig");
+const event = @import("../event/event.zig");
+const removed = @import("../removed/removed.zig");
 
 const AccessType = struct {
     read: bool,
@@ -67,21 +69,19 @@ fn generateEventMatrix(systems: []const type, Events: type) [Events.Len][systems
         Events.Len;
     for (systems, 0..) |system, system_index| {
         for (system.ParamsSlice) |ParamType| {
-            if (Events.isEvent(ParamType.type.?)) {
-                const Event = Events.getCanonicalType(ParamType);
+            const T = ParamType.type.?;
+            if (event.isEventReader(T) or event.isEventWriter(T)) {
+                const Event = T.T;
                 const event_index = Events.getIndex(Event);
-                const access_type = Events.getAccessType(ParamType);
-                switch (access_type) {
-                    .Const,
-                    .PointerConst,
-                    .OptionalConst,
-                    .OptionalPointerConst,
-                    => matrix[event_index][system_index].read = true,
-                    .PointerMut, .OptionalPointerMut => matrix[event_index][system_index].write = true,
+                if (event.isEventReader(T)) {
+                    matrix[event_index][system_index].read = true;
+                } else {
+                    matrix[event_index][system_index].write = true;
                 }
             }
         }
     }
+    return matrix;
 }
 
 fn hasConflict(matrix: anytype, i: usize, j: usize) bool {
@@ -107,6 +107,7 @@ fn SystemsSubSlice(comptime systems: []const type, comptime system_indices: []co
 fn GenerateParallelGroups(
     component_matrix: anytype,
     resource_matrix: anytype,
+    event_matrix: anytype,
     systems: []const type,
     num_threads: usize,
 ) []const type {
@@ -121,6 +122,7 @@ fn GenerateParallelGroups(
             if (parallel_indices.len > num_threads) break :inner;
             if (hasConflict(component_matrix, i, j)) continue :inner;
             if (hasConflict(resource_matrix, i, j)) continue :inner;
+            if (hasConflict(event_matrix, i, j)) continue :inner;
             visited[j] = true;
             parallel_indices = parallel_indices ++ .{j};
         }
@@ -144,12 +146,11 @@ pub fn DAG(
     comptime Events: type,
     comptime num_threads: usize,
 ) type {
-    _ = Events;
     @setEvalBranchQuota(1000000);
     const component_matrix: [Components.Len][systems.len]AccessType = generateComponentMatrix(systems, Components);
     const resource_matrix: [Resources.Len][systems.len]AccessType = generateResourceMatrix(systems, Resources);
-    // const event_matrix: [Events.Len][systems.len]AccessType = generateEventMatrix(systems, Events);
-    const parallel_groups: []const type = GenerateParallelGroups(component_matrix, resource_matrix, systems, num_threads);
+    const event_matrix: [Events.Len][systems.len]AccessType = generateEventMatrix(systems, Events);
+    const parallel_groups: []const type = GenerateParallelGroups(component_matrix, resource_matrix, event_matrix, systems, num_threads);
     return struct {
         pub const ParallelGroups = parallel_groups;
     };
