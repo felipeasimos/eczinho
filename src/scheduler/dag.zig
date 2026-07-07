@@ -2,6 +2,7 @@ const query = @import("../query/query.zig");
 const entity = @import("../entity/entity.zig");
 const event = @import("../event/event.zig");
 const removed = @import("../removed/removed.zig");
+const constraint = @import("../constraint/constraint.zig");
 
 const AccessType = struct {
     read: bool,
@@ -84,6 +85,16 @@ fn generateEventMatrix(systems: []const type, Events: type) [Events.Len][systems
     return matrix;
 }
 
+fn hasWriteWriteConflict(matrix: anytype, i: usize, j: usize) bool {
+    const num_rows = @typeInfo(@TypeOf(matrix)).array.len;
+    inline for (0..num_rows) |row_idx| {
+        const i_access = matrix[row_idx][i];
+        const j_access = matrix[row_idx][j];
+        if (i_access.write and j_access.write) return true;
+    }
+    return false;
+}
+
 fn hasConflict(matrix: anytype, i: usize, j: usize) bool {
     const num_rows = @typeInfo(@TypeOf(matrix)).array.len;
     inline for (0..num_rows) |row_idx| {
@@ -122,7 +133,7 @@ fn GenerateParallelGroups(
             if (parallel_indices.len > num_threads) break :inner;
             if (hasConflict(component_matrix, i, j)) continue :inner;
             if (hasConflict(resource_matrix, i, j)) continue :inner;
-            if (hasConflict(event_matrix, i, j)) continue :inner;
+            if (hasWriteWriteConflict(event_matrix, i, j)) continue :inner;
             visited[j] = true;
             parallel_indices = parallel_indices ++ .{j};
         }

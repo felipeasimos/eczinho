@@ -36,9 +36,11 @@ pub fn AppContext(comptime options: AppContextOptions) type {
             .TypeHasher = Resources,
         });
         /// use in systems to obtain a query. System signature should be like:
+        /// ```zig
         /// fn systemExample(q: Query(.{.q = &.{typeA, *const typeB}, .with = &.{typeC}}), ...) !void {
         ///     ...
         /// }
+        /// ```
         /// checkout QueryRequest for more information
         pub fn Query(comptime req: query.Request) type {
             return query.Factory(.{
@@ -49,19 +51,27 @@ pub fn AppContext(comptime options: AppContextOptions) type {
             });
         }
         /// use in systems to obtain a Commands object. System signature should be like:
+        /// ```zig
         /// fn systemExample(comms: Commands, ...) !void {
         ///     ...
         /// }
+        /// ```
         pub const Commands = commands.Commands(.{
             .Components = Components,
             .Entity = Entity,
         });
 
         /// use in systems to obtain access to resource. System signature should be like:
+        /// ```
         /// fn systemExample(q: Resource(typeA), b: Resource(*typeB), c: Resource(*const typeC), ...) !void {
         ///     ...
         /// }
-        /// returned with the proper access modifier (const, ponter or pointer to const)
+        /// ```
+        /// returned with the proper access modifier (const, ponter or pointer to const).
+        /// Resources are really general, so the parallelism is in your control (it is also your responsability):
+        /// - `T` and `*const T` -> (read)
+        /// - `*T` -> (write)
+        /// (read, read) pairs are parallelizable, all others are not. When in doubt always use `*T`
         pub fn Resource(comptime T: type) type {
             return resource.Resource(.{
                 .TypeStore = ResourceStore,
@@ -70,15 +80,23 @@ pub fn AppContext(comptime options: AppContextOptions) type {
         }
 
         /// use in systems to obtain a event writer or an event reader. System signature should be like:
-        /// fn systemExample(w: EventWriter(u64), r: EventReader(u8), ...) !void {
+        /// ```zig
+        /// fn systemExample(w: EventWriter(u64), ...) !void {
         ///     ...
         /// }
+        /// ```
         pub fn EventWriter(comptime T: type) type {
             return event.EventWriter(.{
                 .Events = Events,
                 .T = T,
             });
         }
+        /// use in systems to obtain a event writer or an event reader. System signature should be like:
+        /// ```zig
+        /// fn systemExample(r: EventReader(u8), ...) !void {
+        ///     ...
+        /// }
+        /// ```
         pub fn EventReader(comptime T: type) type {
             return event.EventReader(.{
                 .Events = Events,
@@ -88,9 +106,11 @@ pub fn AppContext(comptime options: AppContextOptions) type {
 
         /// use in systems to return entities which had components recently removed (in the last schedule run).
         /// System signature should be like:
+        /// ```zig
         /// fn systemExample(r: Removed(u64), ...) !void {
         ///     ...
         /// }
+        /// ```
         pub fn Removed(comptime T: type) type {
             return removed.Removed(.{
                 .Components = Components,
@@ -101,6 +121,12 @@ pub fn AppContext(comptime options: AppContextOptions) type {
         }
 
         /// use to build constraints for your systems (ordering, number of threads, parallelism details)
+        /// ```zig
+        /// ConstraintBuilder.stageNumThreads(.Update, 2);
+        /// ConstraintBuilder.systemNumThreads(.Update, systemBFn, 2);
+        /// ConstraintBuilder.after(.Update, systemAFn, systemBFn);
+        /// ConstraintBuilder.directlyAfter(.Update, systemAFn, systemBFn);
+        /// ```
         pub const ConstraintBuilder = constraint.Constraint.Builder(@This());
 
         pub fn GetWorldType() type {
