@@ -21,16 +21,15 @@ test "check if tabled component was just changed" {
         .build();
 
     const Resource = Context.Resource;
-    const ResourceStore = Context.ResourceStore;
     const Commands = Context.Commands;
     const Query = Context.Query;
     const Entity = Context.Entity;
 
     var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
-            pub fn addResource(store: *ResourceStore) !void {
-                store.insert(@as(ChangedTicks, 0));
-                store.insert(@as(NotChangedTicks, 0));
+            pub fn addResource(changed: *ChangedTicks, not_changed: *NotChangedTicks) !void {
+                changed.* = 0;
+                not_changed.* = 0;
             }
         }).addResource)
         .addSystem(.Startup, (struct {
@@ -117,16 +116,15 @@ test "check if chunked component was just changed" {
         .build();
 
     const Resource = Context.Resource;
-    const ResourceStore = Context.ResourceStore;
     const Commands = Context.Commands;
     const Query = Context.Query;
     const Entity = Context.Entity;
 
     var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
-            pub fn addResource(store: *ResourceStore) !void {
-                store.insert(@as(ChangedTicks, 0));
-                store.insert(@as(NotChangedTicks, 0));
+            pub fn addResource(changed: *ChangedTicks, not_changed: *NotChangedTicks) !void {
+                changed.* = 0;
+                not_changed.* = 0;
             }
         }).addResource)
         .addSystem(.Startup, (struct {
@@ -220,16 +218,15 @@ test "check if sparse component was just changed" {
         .build();
 
     const Resource = Context.Resource;
-    const ResourceStore = Context.ResourceStore;
     const Commands = Context.Commands;
     const Query = Context.Query;
     const Entity = Context.Entity;
 
     var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
-            pub fn addResource(store: *ResourceStore) !void {
-                store.insert(@as(ChangedTicks, 0));
-                store.insert(@as(NotChangedTicks, 0));
+            pub fn addResource(changed: *ChangedTicks, not_changed: *NotChangedTicks) !void {
+                changed.* = 0;
+                not_changed.* = 0;
             }
         }).addResource)
         .addSystem(.Startup, (struct {

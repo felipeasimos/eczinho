@@ -32,12 +32,7 @@ pub fn AppContext(comptime options: AppContextOptions) type {
         pub const Events = options.Events;
         pub const Bundles = options.Bundles;
         pub const DenseStorageConfig = options.DenseStorageConfig;
-
-        /// use in systems to obtain access to the whole resource store
-        /// fn systemExample(store: *ResourceStore(typeA), ...) !void {
-        ///     ...
-        /// }
-        pub const ResourceStore = resource.TypeStore(.{
+        const ResourceStore = resource.TypeStore(.{
             .TypeHasher = Resources,
         });
         /// use in systems to obtain a query. System signature should be like:

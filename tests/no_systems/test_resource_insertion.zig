@@ -8,12 +8,11 @@ test "resource insertion" {
         .build();
 
     const Resource = Context.Resource;
-    const ResourceStore = Context.ResourceStore;
 
     var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
-            pub fn insert(store: *ResourceStore) !void {
-                store.insert(@as(ResourceA, 34));
+            pub fn insert(res_a: *ResourceA) !void {
+                res_a.* = 34;
             }
         }).insert)
         .addSystem(.Update, (struct {

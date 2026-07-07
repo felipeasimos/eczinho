@@ -45,6 +45,14 @@ pub fn CommandsFactory(comptime options: CommandsFactoryOptions) type {
                 .remove = Components.hash(Component),
             }) catch @panic("Commands `remove` error because of ArrayList.append");
         }
+        /// not deferred
+        pub fn insertResource(self: @This(), resource: anytype) void {
+            self.queue.resource_store.insert(resource);
+        }
+        /// not deferred
+        pub fn removeResource(self: @This(), comptime Resource: type) void {
+            self.queue.resource_store.remove(Resource);
+        }
         pub fn despawn(self: @This(), entt: Entity) void {
             self.getQueue().despawn(.{ .entity = entt }) catch @panic("Commands `despawn` error because of ArrayList.append");
         }

@@ -9,7 +9,7 @@ fn CreateTupleType(comptime TypeHasher: type) type {
     var iter = comptime TypeHasher.Iterator.init();
     var i = 0;
     inline while (iter.nextType()) |Type| {
-        field_types[i] = ?Type;
+        field_types[i] = Type;
         i += 1;
     }
     return @Tuple(&field_types);
@@ -30,7 +30,8 @@ pub fn TypeStore(comptime options: TypeStoreOptions) type {
             // SAFETY: immediatly filled in the following lines
             var values: TypesTuple = undefined;
             inline while (iter.nextType()) |_| {
-                values[i] = null;
+                // values[i] = null;
+                values[i] = undefined;
                 i += 1;
             }
             return .{
@@ -38,26 +39,35 @@ pub fn TypeStore(comptime options: TypeStoreOptions) type {
             };
         }
         pub inline fn clone(self: *@This(), comptime T: type) T {
-            return self.optGetConst(T).?.*;
+            // return self.optGetConst(T).?.*;
+            return self.values[comptime TypeHasher.getIndex(T)];
         }
         pub inline fn get(self: *@This(), comptime T: type) *T {
-            return self.optGet(T).?;
+            // return self.optGet(T).?;
+            return &self.values[comptime TypeHasher.getIndex(T)];
         }
         pub inline fn getConst(self: *@This(), comptime T: type) *const T {
-            return self.optGetConst(T).?;
+            // return self.optGetConst(T).?;
+            return &self.values[comptime TypeHasher.getIndex(T)];
         }
-        pub inline fn optGet(self: *@This(), comptime T: type) ?*T {
-            if (self.values[comptime TypeHasher.getIndex(T)]) |*value| {
-                return value;
-            }
-            return null;
-        }
-        pub inline fn optGetConst(self: *@This(), comptime T: type) ?*const T {
-            if (self.values[comptime TypeHasher.getIndex(T)]) |*value| {
-                return value;
-            }
-            return null;
-        }
+        // pub inline fn optConst(self: *@This(), comptime T: type) ?T {
+        //     if (self.optGetConst(T)) |ptr| {
+        //         return ptr.*;
+        //     }
+        //     return null;
+        // }
+        // pub inline fn optGet(self: *@This(), comptime T: type) ?*T {
+        //     if (self.values[comptime TypeHasher.getIndex(T)]) |*value| {
+        //         return value;
+        //     }
+        //     return null;
+        // }
+        // pub inline fn optGetConst(self: *@This(), comptime T: type) ?*const T {
+        //     if (self.values[comptime TypeHasher.getIndex(T)]) |*value| {
+        //         return value;
+        //     }
+        //     return null;
+        // }
         pub fn insert(self: *@This(), value: anytype) void {
             self.values[comptime TypeHasher.getIndex(@TypeOf(value))] = value;
         }

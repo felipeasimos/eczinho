@@ -14,15 +14,14 @@ test "check if event was written" {
         .build();
 
     const Resource = Context.Resource;
-    const ResourceStore = Context.ResourceStore;
     const EventWriter = Context.EventWriter;
     const EventReader = Context.EventReader;
 
     var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
-            pub fn insertResources(store: *ResourceStore) !void {
-                store.insert(ReadCounter{});
-                store.insert(WriteCounter{});
+            pub fn insertResources(read_counter: *ReadCounter, writer_counter: *WriteCounter) !void {
+                read_counter.* = ReadCounter{};
+                writer_counter.* = WriteCounter{};
             }
         }).insertResources)
         .addSystem(.Update, (struct {

@@ -22,7 +22,6 @@ test "check if tabled component was just removed" {
         .build();
 
     const Resource = Context.Resource;
-    const ResourceStore = Context.ResourceStore;
     const Commands = Context.Commands;
     const Query = Context.Query;
     const Entity = Context.Entity;
@@ -30,9 +29,9 @@ test "check if tabled component was just removed" {
 
     var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
-            pub fn addResource(store: *ResourceStore) !void {
-                store.insert(@as(RemovedTicks, 0));
-                store.insert(@as(NotRemovedTicks, 0));
+            pub fn addResource(removed: *RemovedTicks, not_removed: *NotRemovedTicks) !void {
+                removed.* = 0;
+                not_removed.* = 0;
             }
         }).addResource)
         .addSystem(.Startup, (struct {
@@ -119,7 +118,6 @@ test "check if chunked component was just removed" {
         .build();
 
     const Resource = Context.Resource;
-    const ResourceStore = Context.ResourceStore;
     const Commands = Context.Commands;
     const Query = Context.Query;
     const Entity = Context.Entity;
@@ -127,9 +125,9 @@ test "check if chunked component was just removed" {
 
     var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
-            pub fn addResource(store: *ResourceStore) !void {
-                store.insert(@as(RemovedTicks, 0));
-                store.insert(@as(NotRemovedTicks, 0));
+            pub fn addResource(removed: *RemovedTicks, not_removed: *NotRemovedTicks) !void {
+                removed.* = 0;
+                not_removed.* = 0;
             }
         }).addResource)
         .addSystem(.Startup, (struct {
@@ -223,7 +221,6 @@ test "check if sparse component was just removed" {
         .build();
 
     const Resource = Context.Resource;
-    const ResourceStore = Context.ResourceStore;
     const Commands = Context.Commands;
     const Query = Context.Query;
     const Entity = Context.Entity;
@@ -231,9 +228,9 @@ test "check if sparse component was just removed" {
 
     var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
-            pub fn addResource(store: *ResourceStore) !void {
-                store.insert(@as(RemovedTicks, 0));
-                store.insert(@as(NotRemovedTicks, 0));
+            pub fn addResource(removed: *RemovedTicks, not_removed: *NotRemovedTicks) !void {
+                removed.* = 0;
+                not_removed.* = 0;
             }
         }).addResource)
         .addSystem(.Startup, (struct {

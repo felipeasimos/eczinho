@@ -22,16 +22,15 @@ test "check if tabled component was just added" {
         .build();
 
     const Resource = Context.Resource;
-    const ResourceStore = Context.ResourceStore;
     const Commands = Context.Commands;
     const Query = Context.Query;
     const Entity = Context.Entity;
 
     var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
-            pub fn addResource(store: *ResourceStore) !void {
-                store.insert(@as(AddedTicks, 0));
-                store.insert(@as(NotAddedTicks, 0));
+            pub fn addResource(added: *AddedTicks, not_added: *NotAddedTicks) !void {
+                added.* = 0;
+                not_added.* = 0;
             }
         }).addResource)
         .addSystem(.Startup, (struct {
@@ -118,16 +117,15 @@ test "check if chunked component was just added" {
         .build();
 
     const Resource = Context.Resource;
-    const ResourceStore = Context.ResourceStore;
     const Commands = Context.Commands;
     const Query = Context.Query;
     const Entity = Context.Entity;
 
     var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
-            pub fn addResource(store: *ResourceStore) !void {
-                store.insert(@as(AddedTicks, 0));
-                store.insert(@as(NotAddedTicks, 0));
+            pub fn addResource(added: *AddedTicks, not_added: *NotAddedTicks) !void {
+                added.* = 0;
+                not_added.* = 0;
             }
         }).addResource)
         .addSystem(.Startup, (struct {
@@ -220,16 +218,15 @@ test "check if sparse component was just added" {
         .build();
 
     const Resource = Context.Resource;
-    const ResourceStore = Context.ResourceStore;
     const Commands = Context.Commands;
     const Query = Context.Query;
     const Entity = Context.Entity;
 
     var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
-            pub fn addResource(store: *ResourceStore) !void {
-                store.insert(@as(AddedTicks, 0));
-                store.insert(@as(NotAddedTicks, 0));
+            pub fn addResource(added: *AddedTicks, not_added: *NotAddedTicks) !void {
+                added.* = 0;
+                not_added.* = 0;
             }
         }).addResource)
         .addSystem(.Startup, (struct {

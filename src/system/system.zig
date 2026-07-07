@@ -177,7 +177,6 @@ pub fn System(comptime function: anytype, comptime Context: type, comptime stage
                 const ArgType = param.type.?;
                 args[i] = switch (comptime ArgType) {
                     types.Tick => deps.world.getTick(),
-                    *TypeStore => deps.type_store,
                     std.mem.Allocator => deps.world.allocator,
                     std.Io => deps.io,
                     else => _else: {
@@ -187,7 +186,10 @@ pub fn System(comptime function: anytype, comptime Context: type, comptime stage
                                 .Const => deps.type_store.clone(Root),
                                 .PointerConst => deps.type_store.getConst(Root),
                                 .PointerMut => deps.type_store.get(Root),
-                                inline else => @compileError("Resources can't be optional"),
+                                else => @compileError("No optionals for Resources"),
+                                // .OptionalConst => deps.type_store.optConst(Root),
+                                // .OptionalPointerMut => deps.type_store.optGet(Root),
+                                // .OptionalPointerConst => deps.type_store.optGetConst(Root),
                             };
                         }
                         break :_else try initArg(ArgType, deps);
