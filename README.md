@@ -33,12 +33,12 @@ zig build --build-file examples/pong/build.zig
    * don't pay for what you don't use!
    * don't worry about it being off by default! Queries that use metadata for components without it will show a helpful compile error message to remind you!
 - [ ] multithreading & scheduling
-   - [ ] set explicit system ordering
+   - [x] set explicit system ordering
    - [x] write/read conflicts automatically handled
    * with chunking: work unit is each chunk (better for high cpu counts!)
    * with table and sparse sets storage: work unit is systems
    * scheduling strategy resolved completely at comptime or use runtime dependency tracking
-      - [x] basic static scheduling
+      - [x] basic static comptime scheduling
       - [ ] optional runtime dependency tracking to move between batches
 
 - [ ] parse system dependencies

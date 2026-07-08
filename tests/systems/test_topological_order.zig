@@ -30,7 +30,14 @@ test "DAG has two paralle. groups" {
         .build(std.testing.allocator, std.testing.io);
     defer app.deinit();
 
-    const DAG = @TypeOf(app).Scheduler.DAG(@TypeOf(app).Scheduler.Systems, Context.Components, Context.Resources, Context.Events, 4, &.{});
+    const DAG = @TypeOf(app).Scheduler.DAG(
+        @TypeOf(app).Scheduler.Systems,
+        Context.Components,
+        Context.Resources,
+        Context.Events,
+        4,
+        &.{},
+    );
     try std.testing.expectEqual(1, DAG.ParallelGroups.len);
     try std.testing.expectEqual(2, DAG.ParallelGroups[0].Systems.len);
 }
@@ -69,7 +76,14 @@ test "DAG has one parallel groups due to directional constraint" {
         .build(std.testing.allocator, std.testing.io);
     defer app.deinit();
 
-    const DAG = @TypeOf(app).Scheduler.DAG(@TypeOf(app).Scheduler.Systems, Context.Components, Context.Resources, Context.Events, 4, @TypeOf(app).Scheduler.Constraints);
+    const DAG = @TypeOf(app).Scheduler.DAG(
+        @TypeOf(app).Scheduler.Systems,
+        Context.Components,
+        Context.Resources,
+        Context.Events,
+        4,
+        @TypeOf(app).Scheduler.Constraints,
+    );
     try std.testing.expectEqual(2, DAG.ParallelGroups.len);
     try std.testing.expectEqual(1, DAG.ParallelGroups[0].Systems.len);
     try std.testing.expectEqual(1, DAG.ParallelGroups[1].Systems.len);

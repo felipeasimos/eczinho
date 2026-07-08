@@ -31,6 +31,7 @@ pub fn TypeStore(comptime options: TypeStoreOptions) type {
             var values: TypesTuple = undefined;
             inline while (iter.nextType()) |_| {
                 // values[i] = null;
+                // SAFETY: it is the user responsability to manage this
                 values[i] = undefined;
                 i += 1;
             }

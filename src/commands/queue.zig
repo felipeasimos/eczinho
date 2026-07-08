@@ -1,5 +1,4 @@
 const std = @import("std");
-const TypeStore = @import("../resource/type_store.zig").TypeStore;
 
 pub const CommandsQueueOptions = struct {
     Components: type,

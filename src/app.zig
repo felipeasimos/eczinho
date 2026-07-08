@@ -150,7 +150,11 @@ pub const AppOptions = struct {
         inline for (self.Systems, 1..) |a, i| {
             inline for (self.Systems[i..]) |b| {
                 if (system.isSameSystem(a, b)) {
-                    @compileError(std.fmt.comptimePrint("duplicate system detected at stage {}: {} and {}", .{ a.Stage, a.Fn, b.Fn }));
+                    @compileError(std.fmt.comptimePrint("duplicate system detected at stage {}: {} and {}", .{
+                        a.Stage,
+                        a.Fn,
+                        b.Fn,
+                    }));
                 }
             }
         }

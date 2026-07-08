@@ -270,7 +270,8 @@ pub fn World(comptime options: WorldOptions) type {
             return .{ location.storage, location.dense_index };
         }
 
-        /// thread-safe: each command queue is allocated by its own callee thread and the append in the global queue pointer array is managed by a mutex
+        /// thread-safe: each command queue is allocated by its own callee thread and
+        /// the append in the global queue pointer array is managed by a mutex
         pub fn createQueue(self: *@This()) !*CommandsQueue {
             const command_queue_ptr = try self.allocator.create(CommandsQueue);
             command_queue_ptr.* = CommandsQueue.init(self.allocator);

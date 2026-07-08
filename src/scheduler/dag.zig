@@ -1,7 +1,6 @@
 const query = @import("../query/query.zig");
 const entity = @import("../entity/entity.zig");
 const event = @import("../event/event.zig");
-const removed = @import("../removed/removed.zig");
 const constraint = @import("../constraint/constraint.zig");
 const system = @import("../system/system.zig");
 
@@ -286,7 +285,14 @@ pub fn DAG(
         const resource_matrix: [Resources.Len][systems.len]AccessType = generateResourceMatrix(systems, Resources);
         const event_matrix: [Events.Len][systems.len]AccessType = generateEventMatrix(systems, Events);
         const dependency_matrix: [systems.len][systems.len]bool = generateDependencyMatrix(systems, constraints);
-        break :parallel_groups GenerateParallelGroups(component_matrix, resource_matrix, event_matrix, dependency_matrix, systems, num_threads);
+        break :parallel_groups GenerateParallelGroups(
+            component_matrix,
+            resource_matrix,
+            event_matrix,
+            dependency_matrix,
+            systems,
+            num_threads,
+        );
     };
     return struct {
         pub const ParallelGroups = parallel_groups;
