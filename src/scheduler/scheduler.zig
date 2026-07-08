@@ -39,6 +39,7 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
         pub const Resources = options.Context.Resources;
         pub const Events = options.Context.Events;
         pub const Systems = options.Systems;
+        pub const DAG = dag.DAG;
         pub const Labels = options.Labels;
         pub const SchedulerStages = initSchedulerStages(Systems, Labels);
         pub const World = options.Context.GetWorldType();
@@ -52,7 +53,7 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
             .Components = Components,
             .Entity = Entity,
         });
-        const Constraints: []const Constraint = options.Constraints;
+        pub const Constraints: []const Constraint = options.Constraints;
         const Sched = @This();
 
         world: *World,
@@ -135,8 +136,8 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
         }
         fn runStageDAG(self: *@This(), comptime label: StageLabel, comptime num_threads: usize) !void {
             const systems = comptime SchedulerStages.get(label);
-            const DAG = dag.DAG(systems, Components, Resources, Events, num_threads, Constraints);
-            inline for (DAG.ParallelGroups) |ParallelGroup| {
+            const LabelDAG = dag.DAG(systems, Components, Resources, Events, num_threads, Constraints);
+            inline for (LabelDAG.ParallelGroups) |ParallelGroup| {
                 try self.runSystemsInParallel(ParallelGroup.Systems);
             }
         }

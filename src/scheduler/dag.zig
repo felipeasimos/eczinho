@@ -146,25 +146,30 @@ fn SystemsSubSlice(comptime systems: []const type, comptime system_indices: []co
     return systems_subslice;
 }
 
-fn topologicalSort(comptime systems: []const type, comptime dependency_matrix: anytype) [systems.len]usize {
-    var order: [systems.len]usize = undefined;
-    var out: usize = 0;
-    var indegree: [systems.len]usize = .{0} ** systems.len;
-
-    // hold index of next system to visit
-    var queue: [systems.len]usize = undefined;
-    var qhead: usize = 0;
-    var qtail: usize = 0;
-
+fn getIndegree(dependency_matrix: anytype) [@typeInfo(@TypeOf(dependency_matrix)).array.len]usize {
+    const side = @typeInfo(@TypeOf(dependency_matrix)).array.len;
+    var indegree: [side]usize = .{0} ** side;
     // 1. compute indegree of every node
-    for (systems, 0..) |_, i| {
-        for (systems, 0..) |_, j| {
+    for (0..side) |i| {
+        for (0..side) |j| {
             // check if j -> i
             if (dependency_matrix[i][j]) {
                 indegree[i] += 1;
             }
         }
     }
+    return indegree;
+}
+
+fn topologicalSort(comptime systems: []const type, comptime dependency_matrix: anytype) [systems.len]usize {
+    var order: [systems.len]usize = undefined;
+    var out: usize = 0;
+    var indegree: [systems.len]usize = getIndegree(dependency_matrix);
+
+    // hold index of next system to visit
+    var queue: [systems.len]usize = undefined;
+    var qhead: usize = 0;
+    var qtail: usize = 0;
 
     // 2. use a queue (breath first search). add indgree == 0 nodes to it first
     for (systems, 0..) |_, i| {
@@ -214,19 +219,41 @@ fn GenerateParallelGroups(
     var parallel_groups: []const type = &.{};
 
     const system_topo_order = topologicalSort(systems, dependency_matrix);
+    // keep track of which nodes had their dependecies satisfied
+    var indegree = getIndegree(dependency_matrix);
 
     outer: inline for (system_topo_order, 0..) |i, idx| {
+        if (comptime indegree[i] != 0) {
+            @compileError("Error when generating comptime DAG: system dependencies not ordered before it");
+        }
         if (visited[i]) continue :outer;
         visited[i] = true;
+
         var parallel_indices: []const usize = &.{i};
         inner: inline for (system_topo_order[idx + 1 ..]) |j| {
             if (visited[j]) continue :inner;
             if (parallel_indices.len >= num_threads) break :inner;
+            if (indegree[j] != 0) break :inner;
             if (hasConflict(component_matrix, i, j)) continue :inner;
             if (hasConflict(resource_matrix, i, j)) continue :inner;
             if (hasWriteWriteConflict(event_matrix, i, j)) continue :inner;
+
             visited[j] = true;
+            // remove this dependency
+            // [k][j] (j -> k)
+            for (0..systems.len) |k| {
+                if (dependency_matrix[k][j]) {
+                    indegree[k] -= 1;
+                }
+            }
             parallel_indices = parallel_indices ++ .{j};
+        }
+        // remove this dependency
+        // [k][i] (i -> k)
+        for (0..systems.len) |k| {
+            if (dependency_matrix[k][i]) {
+                indegree[k] -= 1;
+            }
         }
         current_parallel_group_idx += 1;
         parallel_groups = parallel_groups ++ .{ParallelGroup(SystemsSubSlice(systems, parallel_indices))};
