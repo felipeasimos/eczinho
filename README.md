@@ -35,7 +35,7 @@ zig build --build-file examples/pong/build.zig
 - [ ] multithreading & scheduling
    - [x] set explicit system ordering
    - [x] write/read conflicts automatically handled
-   * with chunking: work unit is each chunk (better for high cpu counts!)
+   - [ ] with chunking: work unit is each chunk (better for high cpu counts!)
    * with table and sparse sets storage: work unit is systems
    * scheduling strategy resolved completely at comptime or use runtime dependency tracking
       - [x] basic static comptime scheduling

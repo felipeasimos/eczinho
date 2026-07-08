@@ -85,12 +85,13 @@ fn generateEventMatrix(systems: []const type, Events: type) [Events.Len][systems
     return matrix;
 }
 
-fn getSystemIndex(systems: []const type, sys: type) usize {
-    for (systems, 0..) |s, i| {
-        if (system.isSameSystem(s, sys)) {
+fn getSystemIndex(comptime systems: []const type, sys: type) ?usize {
+    inline for (systems, 0..) |s, i| {
+        if (comptime system.isSameSystem(s, sys)) {
             return i;
         }
     }
+    return null;
 }
 
 /// lower triangle matrix with dependencies
@@ -103,8 +104,8 @@ fn generateDependencyMatrix(systems: []const type, constraints: []const constrai
         switch (constr) {
             .system => |sys_constr| switch (sys_constr.constraint) {
                 .comes_after => |sys| {
-                    const before = getSystemIndex(systems, sys_constr.system);
-                    const after = getSystemIndex(systems, sys);
+                    const before = comptime getSystemIndex(systems, sys_constr.system).?;
+                    const after = comptime getSystemIndex(systems, sys).?;
                     matrix[after][before] = true;
                 },
                 else => {},
@@ -256,6 +257,11 @@ fn GenerateParallelGroups(
         }
         current_parallel_group_idx += 1;
         parallel_groups = parallel_groups ++ .{ParallelGroup(SystemsSubSlice(systems, parallel_indices))};
+    }
+    for (0..systems.len) |k| {
+        if (indegree[k] != 0) {
+            @compileError("Error when building comptime schedule");
+        }
     }
     return parallel_groups;
 }

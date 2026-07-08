@@ -32,6 +32,28 @@ fn initSchedulerStages(
     return stages;
 }
 
+fn initSchedulerDAGs(
+    StageSystems: std.EnumArray(StageLabel, []const type),
+    Components: type,
+    Resources: type,
+    Events: type,
+    Constraints: []const Constraint,
+) std.EnumArray(
+    StageLabel,
+    ?type,
+) {
+    var stages = std.EnumArray(StageLabel, ?type).initFill(null);
+    inline for (std.enums.values(StageLabel)) |label| {
+        const num_threads = comptime Constraint.getStageNumThreads(Constraints, label);
+        if (comptime num_threads > 1) {
+            const systems = StageSystems.get(label);
+            const LabelDAG = dag.DAG(systems, Components, Resources, Events, num_threads, Constraints);
+            stages.set(label, LabelDAG);
+        }
+    }
+    return stages;
+}
+
 pub fn Scheduler(comptime options: SchedulerOptions) type {
     return struct {
         pub const Components = options.Context.Components;
@@ -41,7 +63,9 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
         pub const Systems = options.Systems;
         pub const DAG = dag.DAG;
         pub const Labels = options.Labels;
-        pub const SchedulerStages = initSchedulerStages(Systems, Labels);
+        pub const StageSystems = initSchedulerStages(Systems, Labels);
+        pub const StageDAGs = initSchedulerDAGs(StageSystems, Components, Resources, Events, Constraints);
+
         pub const World = options.Context.GetWorldType();
         pub const TypeStore = TypeStoreFactory(.{
             .TypeHasher = Resources,
@@ -134,29 +158,31 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
         fn runSystem(self: *@This(), comptime sys: type) !void {
             return Runnable(sys).run(self);
         }
-        fn runStageDAG(self: *@This(), comptime label: StageLabel, comptime num_threads: usize) !void {
-            const systems = comptime SchedulerStages.get(label);
-            const LabelDAG = dag.DAG(systems, Components, Resources, Events, num_threads, Constraints);
-            inline for (LabelDAG.ParallelGroups) |ParallelGroup| {
+        fn runStageSequential(self: *@This(), comptime label: StageLabel) !void {
+            inline for (comptime StageSystems.get(label)) |sys| {
+                try self.runSystem(sys);
+            }
+        }
+        fn runStageDAG(self: *@This(), comptime LabelDAG: type) !void {
+            inline for (comptime LabelDAG.ParallelGroups) |ParallelGroup| {
                 try self.runSystemsInParallel(ParallelGroup.Systems);
             }
         }
         fn runStage(self: *@This(), comptime label: StageLabel) !void {
-            inline for (comptime SchedulerStages.get(label)) |sys| {
-                try self.runSystem(sys);
+            if (comptime StageDAGs.get(label)) |LabelDAG| {
+                try self.runStageDAG(LabelDAG);
+            } else {
+                // if stage num_threads == 1, just run on the main thread
+                // running just on the main threaded allows stuff like raylib/opengl
+                // to work easily (useful for .Render stage)
+                try self.runStageSequential(label);
             }
         }
 
         pub fn run(self: *@This()) !void {
             try self.syncBarrier();
             inline for (comptime std.enums.values(StageLabel)[1..]) |label| {
-                const num_threads = comptime Constraint.getStageNumThreads(Constraints, label);
-                if (comptime num_threads == 1) {
-                    // using the main thread instead of worker threads is important for final rendering using opengl/raylib
-                    try self.runStage(label);
-                } else {
-                    try self.runStageDAG(label, num_threads);
-                }
+                try self.runStage(label);
             }
         }
     };
