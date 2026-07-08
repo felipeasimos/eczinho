@@ -386,6 +386,7 @@ pub fn main(init: std.process.Init) !void {
         .addSystem(.Render, renderScore)
         .addSystem(.Render, endRender)
         .addConstraint(ConstraintBuilder.stageNumThreads(.Render, 1))
+        .addConstraint(ConstraintBuilder.after(.Update, flickerOffPaddles, flickerOnPaddles))
         .build(allocator, io);
     defer app.deinit();
     var prng = std.Random.DefaultPrng.init(blk: {

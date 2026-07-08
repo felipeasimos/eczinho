@@ -135,7 +135,7 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
         }
         fn runStageDAG(self: *@This(), comptime label: StageLabel, comptime num_threads: usize) !void {
             const systems = comptime SchedulerStages.get(label);
-            const DAG = dag.DAG(systems, Components, Resources, Events, num_threads);
+            const DAG = dag.DAG(systems, Components, Resources, Events, num_threads, Constraints);
             inline for (DAG.ParallelGroups) |ParallelGroup| {
                 try self.runSystemsInParallel(ParallelGroup.Systems);
             }

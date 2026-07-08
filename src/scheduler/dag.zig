@@ -3,6 +3,7 @@ const entity = @import("../entity/entity.zig");
 const event = @import("../event/event.zig");
 const removed = @import("../removed/removed.zig");
 const constraint = @import("../constraint/constraint.zig");
+const system = @import("../system/system.zig");
 
 const AccessType = struct {
     read: bool,
@@ -13,8 +14,8 @@ fn generateComponentMatrix(systems: []const type, Components: type) [Components.
     var matrix: [Components.Len][systems.len]AccessType = .{.{AccessType{ .read = false, .write = false }} **
         systems.len} **
         Components.Len;
-    for (systems, 0..) |system, system_index| {
-        for (system.ParamsSlice) |ParamType| {
+    for (systems, 0..) |sys, system_index| {
+        for (sys.ParamsSlice) |ParamType| {
             const param_type = ParamType.type.?;
             if (query.isQuery(param_type)) {
                 const component_accesses = param_type.request.q;
@@ -43,8 +44,8 @@ fn generateResourceMatrix(systems: []const type, Resources: type) [Resources.Len
     var matrix: [Resources.Len][systems.len]AccessType = .{.{AccessType{ .read = false, .write = false }} **
         systems.len} **
         Resources.Len;
-    for (systems, 0..) |system, system_index| {
-        for (system.ParamsSlice) |ParamType| {
+    for (systems, 0..) |sys, system_index| {
+        for (sys.ParamsSlice) |ParamType| {
             const T = ParamType.type.?;
             if (Resources.isResource(T)) {
                 const Resource = Resources.getCanonicalType(T);
@@ -68,8 +69,8 @@ fn generateEventMatrix(systems: []const type, Events: type) [Events.Len][systems
     var matrix: [Events.Len][systems.len]AccessType = .{.{AccessType{ .read = false, .write = false }} **
         systems.len} **
         Events.Len;
-    for (systems, 0..) |system, system_index| {
-        for (system.ParamsSlice) |ParamType| {
+    for (systems, 0..) |sys, system_index| {
+        for (sys.ParamsSlice) |ParamType| {
             const T = ParamType.type.?;
             if (event.isEventReader(T) or event.isEventWriter(T)) {
                 const Event = T.T;
@@ -80,6 +81,36 @@ fn generateEventMatrix(systems: []const type, Events: type) [Events.Len][systems
                     matrix[event_index][system_index].write = true;
                 }
             }
+        }
+    }
+    return matrix;
+}
+
+fn getSystemIndex(systems: []const type, sys: type) usize {
+    for (systems, 0..) |s, i| {
+        if (system.isSameSystem(s, sys)) {
+            return i;
+        }
+    }
+}
+
+/// lower triangle matrix with dependencies
+/// [i][j] = true -> i depends on j
+fn generateDependencyMatrix(systems: []const type, constraints: []const constraint.Constraint) [systems.len][systems.len]bool {
+    var matrix: [systems.len][systems.len]bool = .{.{false} **
+        systems.len} **
+        systems.len;
+    for (constraints) |constr| {
+        switch (constr) {
+            .system => |sys_constr| switch (sys_constr.constraint) {
+                .comes_after => |sys| {
+                    const before = getSystemIndex(systems, sys_constr.system);
+                    const after = getSystemIndex(systems, sys);
+                    matrix[after][before] = true;
+                },
+                else => {},
+            },
+            else => {},
         }
     }
     return matrix;
@@ -115,28 +146,89 @@ fn SystemsSubSlice(comptime systems: []const type, comptime system_indices: []co
     return systems_subslice;
 }
 
+fn topologicalSort(comptime systems: []const type, comptime dependency_matrix: anytype) [systems.len]usize {
+    var order: [systems.len]usize = undefined;
+    var out: usize = 0;
+    var indegree: [systems.len]usize = .{0} ** systems.len;
+
+    // hold index of next system to visit
+    var queue: [systems.len]usize = undefined;
+    var qhead: usize = 0;
+    var qtail: usize = 0;
+
+    // 1. compute indegree of every node
+    for (systems, 0..) |_, i| {
+        for (systems, 0..) |_, j| {
+            // check if j -> i
+            if (dependency_matrix[i][j]) {
+                indegree[i] += 1;
+            }
+        }
+    }
+
+    // 2. use a queue (breath first search). add indgree == 0 nodes to it first
+    for (systems, 0..) |_, i| {
+        if (indegree[i] == 0) {
+            queue[qtail] = i;
+            qtail += 1;
+        }
+    }
+
+    // 3. iterate over queue, adding unvisited nodes to it
+    while (qtail > qhead) {
+        // pop from queu
+        const u = queue[qhead];
+        qhead += 1;
+
+        order[out] = u;
+        out += 1;
+
+        // look for connections, push them to queue
+        for (systems, 0..) |_, v| {
+            // check if u -> v
+            if (dependency_matrix[v][u]) {
+                indegree[v] -= 1;
+                if (indegree[v] == 0) {
+                    queue[qtail] = v;
+                    qtail += 1;
+                }
+            }
+        }
+    }
+    if (out != systems.len) {
+        @compileLog("Dependency graph contains a cycle");
+    }
+    return order;
+}
+
 fn GenerateParallelGroups(
     component_matrix: anytype,
     resource_matrix: anytype,
     event_matrix: anytype,
+    dependency_matrix: anytype,
     systems: []const type,
     num_threads: usize,
 ) []const type {
     var visited: [systems.len]bool = .{false} ** systems.len;
+    var current_parallel_group_idx = 0;
     var parallel_groups: []const type = &.{};
 
-    outer: inline for (systems, 0..) |_, i| {
+    const system_topo_order = topologicalSort(systems, dependency_matrix);
+
+    outer: inline for (system_topo_order, 0..) |i, idx| {
         if (visited[i]) continue :outer;
+        visited[i] = true;
         var parallel_indices: []const usize = &.{i};
-        inner: inline for (systems[i + 1 ..], i + 1..) |_, j| {
-            if (visited[i + 1]) continue :inner;
-            if (parallel_indices.len > num_threads) break :inner;
+        inner: inline for (system_topo_order[idx + 1 ..]) |j| {
+            if (visited[j]) continue :inner;
+            if (parallel_indices.len >= num_threads) break :inner;
             if (hasConflict(component_matrix, i, j)) continue :inner;
             if (hasConflict(resource_matrix, i, j)) continue :inner;
             if (hasWriteWriteConflict(event_matrix, i, j)) continue :inner;
             visited[j] = true;
             parallel_indices = parallel_indices ++ .{j};
         }
+        current_parallel_group_idx += 1;
         parallel_groups = parallel_groups ++ .{ParallelGroup(SystemsSubSlice(systems, parallel_indices))};
     }
     return parallel_groups;
@@ -156,12 +248,19 @@ pub fn DAG(
     comptime Resources: type,
     comptime Events: type,
     comptime num_threads: usize,
+    comptime constraints: []const constraint.Constraint,
 ) type {
     @setEvalBranchQuota(1000000);
-    const component_matrix: [Components.Len][systems.len]AccessType = generateComponentMatrix(systems, Components);
-    const resource_matrix: [Resources.Len][systems.len]AccessType = generateResourceMatrix(systems, Resources);
-    const event_matrix: [Events.Len][systems.len]AccessType = generateEventMatrix(systems, Events);
-    const parallel_groups: []const type = GenerateParallelGroups(component_matrix, resource_matrix, event_matrix, systems, num_threads);
+    const parallel_groups: []const type = parallel_groups: {
+        if (comptime systems.len == 0) {
+            break :parallel_groups &.{};
+        }
+        const component_matrix: [Components.Len][systems.len]AccessType = generateComponentMatrix(systems, Components);
+        const resource_matrix: [Resources.Len][systems.len]AccessType = generateResourceMatrix(systems, Resources);
+        const event_matrix: [Events.Len][systems.len]AccessType = generateEventMatrix(systems, Events);
+        const dependency_matrix: [systems.len][systems.len]bool = generateDependencyMatrix(systems, constraints);
+        break :parallel_groups GenerateParallelGroups(component_matrix, resource_matrix, event_matrix, dependency_matrix, systems, num_threads);
+    };
     return struct {
         pub const ParallelGroups = parallel_groups;
     };

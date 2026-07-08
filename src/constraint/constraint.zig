@@ -1,11 +1,10 @@
 const StageLabel = @import("../scheduler/stage_label.zig").StageLabel;
 const defaults = @import("../defaults.zig");
-const System = @import("../system/system.zig");
+const System = @import("../system/system.zig").System;
 
 pub const SystemConstraint = union(enum) {
     num_threads: usize,
     comes_after: type,
-    comes_directly_after: type,
 };
 
 pub const StageConstraint = union(enum) {
@@ -31,16 +30,6 @@ pub const Constraint = union(enum) {
                 return .{ .system = .{
                     .system = System(functionA, Context, stage),
                     .constraint = .{ .comes_after = System(functionB, Context, stage) },
-                } };
-            }
-            pub fn directlyAfter(
-                comptime stage: StageLabel,
-                comptime functionA: anytype,
-                comptime functionB: anytype,
-            ) Constraint {
-                return .{ .system = .{
-                    .system = System(functionA, Context, stage),
-                    .constraint = .{ .comes_directly_after = System(functionB, Context, stage) },
                 } };
             }
         };
