@@ -26,6 +26,7 @@ test "check if tabled component was just removed" {
     const Query = Context.Query;
     const Entity = Context.Entity;
     const Removed = Context.Removed;
+    const ConstraintBuilder = Context.ConstraintBuilder;
 
     var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
@@ -72,6 +73,8 @@ test "check if tabled component was just removed" {
                 }
             }
         }).removeIfPresent)
+        .addConstraint(ConstraintBuilder.stageNumThreads(.Startup, 1))
+        .addConstraint(ConstraintBuilder.stageNumThreads(.Update, 1))
         .build(std.testing.allocator, std.testing.io);
     defer app.deinit();
 
@@ -122,6 +125,7 @@ test "check if chunked component was just removed" {
     const Query = Context.Query;
     const Entity = Context.Entity;
     const Removed = Context.Removed;
+    const ConstraintBuilder = Context.ConstraintBuilder;
 
     var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
@@ -168,6 +172,8 @@ test "check if chunked component was just removed" {
                 }
             }
         }).removeIfPresent)
+        .addConstraint(ConstraintBuilder.stageNumThreads(.Startup, 1))
+        .addConstraint(ConstraintBuilder.stageNumThreads(.Update, 1))
         .build(std.testing.allocator, std.testing.io);
     defer app.deinit();
 
@@ -225,6 +231,7 @@ test "check if sparse component was just removed" {
     const Query = Context.Query;
     const Entity = Context.Entity;
     const Removed = Context.Removed;
+    const ConstraintBuilder = Context.ConstraintBuilder;
 
     var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
@@ -271,6 +278,8 @@ test "check if sparse component was just removed" {
                 }
             }
         }).removeIfPresent)
+        .addConstraint(ConstraintBuilder.stageNumThreads(.Startup, 1))
+        .addConstraint(ConstraintBuilder.stageNumThreads(.Update, 1))
         .build(std.testing.allocator, std.testing.io);
     defer app.deinit();
 
