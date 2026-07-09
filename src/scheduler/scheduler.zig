@@ -150,8 +150,17 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
         }
         fn runSystemsInParallel(self: *@This(), comptime systems: []const type) !void {
             var group = std.Io.Group.init;
+            // launch concurrent systems
             inline for (systems) |sys| {
-                try group.concurrent(self.io, Runnable(sys).run, .{self});
+                if (comptime !Constraint.getSystemUseMainThread(Constraints, sys)) {
+                    try group.concurrent(self.io, Runnable(sys).run, .{self});
+                }
+            }
+            // run systems that need to run in the main thread
+            inline for (systems) |sys| {
+                if (comptime Constraint.getSystemUseMainThread(Constraints, sys)) {
+                    try Runnable(sys).run(self);
+                }
             }
             try group.await(self.io);
         }

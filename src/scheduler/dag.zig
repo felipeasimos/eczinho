@@ -104,9 +104,11 @@ fn generateDependencyMatrix(systems: []const type, constraints: []const constrai
         switch (constr) {
             .system => |sys_constr| switch (sys_constr.constraint) {
                 .comes_after => |sys| {
-                    const before = comptime getSystemIndex(systems, sys_constr.system).?;
-                    const after = comptime getSystemIndex(systems, sys).?;
-                    matrix[after][before] = true;
+                    if (comptime getSystemIndex(systems, sys_constr.system)) |before| {
+                        if (comptime getSystemIndex(systems, sys)) |after| {
+                            matrix[after][before] = true;
+                        }
+                    }
                 },
                 else => {},
             },

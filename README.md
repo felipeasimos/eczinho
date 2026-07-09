@@ -35,19 +35,19 @@ zig build --build-file examples/pong/build.zig
 - [ ] multithreading & scheduling
    - [x] set explicit system ordering
    - [x] write/read conflicts automatically handled
-   - [ ] with chunking: work unit is each chunk (better for high cpu counts!)
    * with table and sparse sets storage: work unit is systems
+   * customize work unit for chunks:
+     - [ ] option to use chunks for systems with queries with only chunk storage (better for high cpu counts!)
    * scheduling strategy resolved completely at comptime or use runtime dependency tracking
       - [x] basic static comptime scheduling
       - [ ] optional runtime dependency tracking to move between batches
 
-- [ ] parse system dependencies
-- [ ] partial apply deferred
+- [x] parse system dependencies
+- [x] partial apply deferred
 - [ ] conditional systems
    * only run if query is not empty
 - [ ] optional world logging
-- [ ] system explicit ordering
-- [ ] hooks
+- [x] system explicit ordering
 - [ ] bulk operations
 - [ ] time and delta time (bundle)
 - [ ] storage options

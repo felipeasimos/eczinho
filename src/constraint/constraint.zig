@@ -1,10 +1,10 @@
 const StageLabel = @import("../scheduler/stage_label.zig").StageLabel;
-const defaults = @import("../defaults.zig");
-const System = @import("../system/system.zig").System;
+const system = @import("../system/system.zig");
 
 pub const SystemConstraint = union(enum) {
     num_threads: usize,
     comes_after: type,
+    use_main_thread: void,
 };
 
 pub const StageConstraint = union(enum) {
@@ -14,6 +14,7 @@ pub const StageConstraint = union(enum) {
 pub const Constraint = union(enum) {
     pub fn Builder(comptime Context: type) type {
         return struct {
+            /// will use only main thread without multithreading overhead if set to 1
             pub fn stageNumThreads(comptime stage: StageLabel, comptime n: usize) Constraint {
                 return .{ .stage = .{
                     .stage = stage,
@@ -22,14 +23,21 @@ pub const Constraint = union(enum) {
             }
             pub fn systemNumThreads(comptime stage: StageLabel, comptime function: anytype, comptime n: usize) Constraint {
                 return .{ .system = .{
-                    .system = System(function, Context, stage),
+                    .system = system.System(function, Context, stage),
                     .constraint = .{ .max_num_threads = n },
+                } };
+            }
+            /// calling systemNumThreads to set the number of threads to 1 is redudant
+            pub fn systemUseMainThread(comptime stage: StageLabel, comptime function: anytype) Constraint {
+                return .{ .system = .{
+                    .system = system.System(function, Context, stage),
+                    .constraint = .use_main_thread,
                 } };
             }
             pub fn after(comptime stage: StageLabel, comptime functionA: anytype, comptime functionB: anytype) Constraint {
                 return .{ .system = .{
-                    .system = System(functionA, Context, stage),
-                    .constraint = .{ .comes_after = System(functionB, Context, stage) },
+                    .system = system.System(functionA, Context, stage),
+                    .constraint = .{ .comes_after = system.System(functionB, Context, stage) },
                 } };
             }
         };
@@ -52,9 +60,23 @@ pub const Constraint = union(enum) {
                         .max_num_threads => |n| return n,
                     }
                 },
-                .system => {},
+                else => {},
             }
         }
-        return defaults.NUM_THREADS;
+        return 4;
+    }
+    pub fn getSystemUseMainThread(comptime constraints: []const @This(), comptime sys: type) bool {
+        inline for (constraints) |constraint| {
+            switch (constraint) {
+                .system => |s| if (system.isSameSystem(sys, s.system)) {
+                    switch (s.constraint) {
+                        .use_main_thread => return true,
+                        else => {},
+                    }
+                },
+                else => {},
+            }
+        }
+        return false;
     }
 };

@@ -385,7 +385,11 @@ pub fn main(init: std.process.Init) !void {
         .addSystem(.Render, renderRectangles)
         .addSystem(.Render, renderScore)
         .addSystem(.Render, endRender)
-        .addConstraint(ConstraintBuilder.stageNumThreads(.Render, 1))
+        // .addConstraint(ConstraintBuilder.stageNumThreads(.Render, 1))
+        .addConstraint(ConstraintBuilder.systemUseMainThread(.Render, startRender))
+        .addConstraint(ConstraintBuilder.systemUseMainThread(.Render, renderRectangles))
+        .addConstraint(ConstraintBuilder.systemUseMainThread(.Render, renderScore))
+        .addConstraint(ConstraintBuilder.systemUseMainThread(.Render, endRender))
         .addConstraint(ConstraintBuilder.after(.Update, flickerOffPaddles, flickerOnPaddles))
         .build(allocator, io);
     defer app.deinit();
