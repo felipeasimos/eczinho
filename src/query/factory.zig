@@ -177,11 +177,11 @@ fn SparseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOption
     const MustHave = options.MustHave;
     const CannotHave = options.CannotHave;
     const ResultTypes = options.Options.request.q;
-    const request = options.Options.request;
     const ResultTupleType = GetResultTupleType(ResultTypes, World);
     const DenseStorage = World.DenseStorage;
 
     return struct {
+        pub const request = options.Options.request;
         pub const Marker = mark;
         const Query = @This();
         archetypes: std.ArrayList(Components),
@@ -361,11 +361,11 @@ fn DenseQueryFactory(comptime mark: anytype, comptime options: InnerQueryOptions
     const MustHave = options.MustHave;
     const CannotHave = options.CannotHave;
     const ResultTypes = options.Options.request.q;
-    const request = options.Options.request;
     const ResultTupleType = GetResultTupleType(ResultTypes, World);
     const DenseStorage = World.DenseStorage;
 
     return struct {
+        pub const request = options.Options.request;
         pub const Marker = mark;
         const Query = @This();
         storages: std.ArrayList(Components),

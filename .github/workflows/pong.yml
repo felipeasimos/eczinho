@@ -1,0 +1,25 @@
+name: Build pong
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-pong:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: libgl-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev xz-utils curl libwayland-dev libegl1-mesa-dev libxkbcommon-dev
+          version: 1.0
+
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - run: zig build --build-file examples/pong/build.zig

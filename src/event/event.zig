@@ -3,6 +3,20 @@ pub const EventStore = @import("event_store.zig").EventStore;
 pub const EventReader = @import("factory.zig").EventReader;
 pub const EventWriter = @import("factory.zig").EventWriter;
 
+pub fn isEventWriter(comptime T: type) bool {
+    return @typeInfo(T) == .@"struct" and
+        @hasDecl(T, "Marker") and
+        @TypeOf(T.Marker) == @TypeOf(EventWriter) and
+        T.Marker == EventWriter;
+}
+
+pub fn isEventReader(comptime T: type) bool {
+    return @typeInfo(T) == .@"struct" and
+        @hasDecl(T, "Marker") and
+        @TypeOf(T.Marker) == @TypeOf(EventReader) and
+        T.Marker == EventReader;
+}
+
 test "event" {
     const std = @import("std");
     const SystemData = @import("../system/system_data.zig").SystemData;

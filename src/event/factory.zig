@@ -8,6 +8,9 @@ pub const EventOptions = struct {
 };
 
 pub fn EventWriter(comptime options: EventOptions) type {
+    if (!options.Events.isEvent(options.T)) {
+        @compileError("type '" ++ @typeName(options.T) ++ "' is not a registered Event");
+    }
     return struct {
         pub const Marker = EventWriter;
         pub const T = options.T;
@@ -32,6 +35,9 @@ pub fn EventWriter(comptime options: EventOptions) type {
 }
 
 pub fn EventReader(comptime options: EventOptions) type {
+    if (!options.Events.isEvent(options.T)) {
+        @compileError("type '" ++ @typeName(options.T) ++ "' is not a registered Event");
+    }
     return struct {
         pub const Marker = EventReader;
         pub const T = options.T;

@@ -4,3 +4,10 @@ pub const EntityLocation = @import("entity_location.zig").EntityLocation;
 pub const EntityLocationOptions = @import("entity_location.zig").EntityLocationOptions;
 pub const EntityRegistry = @import("entity_registry.zig").EntityRegistry;
 pub const EntityRegistryOptions = @import("entity_registry.zig").EntityRegistryOptions;
+
+pub fn isEntity(comptime T: type) bool {
+    return @typeInfo(T) == .@"struct" and
+        @hasDecl(T, "Marker") and
+        @TypeOf(T.Marker) == @TypeOf(EntityTypeFactory) and
+        T.Marker == EntityTypeFactory;
+}

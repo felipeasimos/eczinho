@@ -4,11 +4,15 @@ const EventStoreFactory = @import("../event/event_store.zig").EventStore;
 const RemovedLogFactory = @import("../removed/removed_log.zig").RemovedComponentsLog;
 const SystemData = @import("../system/system_data.zig").SystemData;
 const StageLabel = @import("stage_label.zig").StageLabel;
+const Constraint = @import("../constraint/constraint.zig").Constraint;
+const dag = @import("dag.zig");
+const system = @import("../system/system.zig");
 
 pub const SchedulerOptions = struct {
     Context: type,
     Systems: []const type,
     Labels: []const StageLabel,
+    Constraints: []const Constraint,
 };
 
 fn initSchedulerStages(
@@ -18,12 +22,34 @@ fn initSchedulerStages(
     var stages = std.EnumArray(StageLabel, []const type).initFill(&.{});
     for (std.enums.values(StageLabel)) |label| {
         var stage_systems: []const type = &.{};
-        for (systems, 0..) |system, i| {
+        for (systems, 0..) |sys, i| {
             if (labels[i] == label) {
-                stage_systems = stage_systems ++ .{system};
+                stage_systems = stage_systems ++ .{sys};
             }
         }
         stages.set(label, stage_systems);
+    }
+    return stages;
+}
+
+fn initSchedulerDAGs(
+    StageSystems: std.EnumArray(StageLabel, []const type),
+    Components: type,
+    Resources: type,
+    Events: type,
+    Constraints: []const Constraint,
+) std.EnumArray(
+    StageLabel,
+    ?type,
+) {
+    var stages = std.EnumArray(StageLabel, ?type).initFill(null);
+    inline for (std.enums.values(StageLabel)) |label| {
+        const num_threads = comptime Constraint.getStageNumThreads(Constraints, label);
+        if (comptime num_threads > 1) {
+            const systems = StageSystems.get(label);
+            const LabelDAG = dag.DAG(systems, Components, Resources, Events, num_threads, Constraints);
+            stages.set(label, LabelDAG);
+        }
     }
     return stages;
 }
@@ -35,8 +61,11 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
         pub const Resources = options.Context.Resources;
         pub const Events = options.Context.Events;
         pub const Systems = options.Systems;
+        pub const DAG = dag.DAG;
         pub const Labels = options.Labels;
-        pub const SchedulerStages = initSchedulerStages(Systems, Labels);
+        pub const StageSystems = initSchedulerStages(Systems, Labels);
+        pub const StageDAGs = initSchedulerDAGs(StageSystems, Components, Resources, Events, Constraints);
+
         pub const World = options.Context.GetWorldType();
         pub const TypeStore = TypeStoreFactory(.{
             .TypeHasher = Resources,
@@ -48,6 +77,8 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
             .Components = Components,
             .Entity = Entity,
         });
+        pub const Constraints: []const Constraint = options.Constraints;
+        const Sched = @This();
 
         world: *World,
         resource_store: *TypeStore,
@@ -80,7 +111,7 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
 
         fn getSystemIndex(comptime System: type) usize {
             inline for (Systems, 0..) |_, i| {
-                if (Systems[i] == System) {
+                if (comptime system.isSameSystem(Systems[i], System)) {
                     return i;
                 }
             }
@@ -98,25 +129,67 @@ pub fn Scheduler(comptime options: SchedulerOptions) type {
             // sync deferred changes
             try self.world.sync();
         }
+        fn Runnable(comptime S: type) type {
+            return struct {
+                pub fn run(scheduler: *Sched) std.Io.Cancelable!void {
+                    const system_data_ptr = scheduler.getSystemData(S);
+                    S.call(.{
+                        .world = scheduler.world,
+                        .type_store = scheduler.resource_store,
+                        .event_store = scheduler.event_store,
+                        .removed_logs = &scheduler.world.removed,
+                        .io = scheduler.io,
+                        .allocator = scheduler.world.allocator,
+                        .system_data = system_data_ptr,
+                    }) catch {
+                        return error.Canceled;
+                    };
+                    system_data_ptr.last_run = scheduler.world.getTick();
+                }
+            };
+        }
+        fn runSystemsInParallel(self: *@This(), comptime systems: []const type) !void {
+            var group = std.Io.Group.init;
+            // launch concurrent systems
+            inline for (systems) |sys| {
+                if (comptime !Constraint.getSystemUseMainThread(Constraints, sys)) {
+                    try group.concurrent(self.io, Runnable(sys).run, .{self});
+                }
+            }
+            // run systems that need to run in the main thread
+            inline for (systems) |sys| {
+                if (comptime Constraint.getSystemUseMainThread(Constraints, sys)) {
+                    try Runnable(sys).run(self);
+                }
+            }
+            try group.await(self.io);
+        }
+        fn runSystem(self: *@This(), comptime sys: type) !void {
+            return Runnable(sys).run(self);
+        }
+        fn runStageSequential(self: *@This(), comptime label: StageLabel) !void {
+            inline for (comptime StageSystems.get(label)) |sys| {
+                try self.runSystem(sys);
+            }
+        }
+        fn runStageDAG(self: *@This(), comptime LabelDAG: type) !void {
+            inline for (comptime LabelDAG.ParallelGroups) |ParallelGroup| {
+                try self.runSystemsInParallel(ParallelGroup.Systems);
+            }
+        }
         fn runStage(self: *@This(), comptime label: StageLabel) !void {
-            inline for (comptime SchedulerStages.get(label)) |system| {
-                const system_data_ptr = self.getSystemData(system);
-                try system.call(.{
-                    .world = self.world,
-                    .type_store = self.resource_store,
-                    .event_store = self.event_store,
-                    .removed_logs = &self.world.removed,
-                    .io = self.io,
-                    .allocator = self.world.allocator,
-                    .system_data = system_data_ptr,
-                });
-                system_data_ptr.last_run = self.world.getTick();
+            if (comptime StageDAGs.get(label)) |LabelDAG| {
+                try self.runStageDAG(LabelDAG);
+            } else {
+                // if stage num_threads == 1, just run on the main thread
+                // running just on the main threaded allows stuff like raylib/opengl
+                // to work easily (useful for .Render stage)
+                try self.runStageSequential(label);
             }
         }
 
         pub fn run(self: *@This()) !void {
             try self.syncBarrier();
-            // run every stage in order, except for startup
             inline for (comptime std.enums.values(StageLabel)[1..]) |label| {
                 try self.runStage(label);
             }

@@ -22,16 +22,16 @@ test "check if tabled component was just added" {
         .build();
 
     const Resource = Context.Resource;
-    const ResourceStore = Context.ResourceStore;
     const Commands = Context.Commands;
     const Query = Context.Query;
     const Entity = Context.Entity;
+    const ConstraintBuilder = Context.ConstraintBuilder;
 
     var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
-            pub fn addResource(store: *ResourceStore) !void {
-                store.insert(@as(AddedTicks, 0));
-                store.insert(@as(NotAddedTicks, 0));
+            pub fn addResource(added: *AddedTicks, not_added: *NotAddedTicks) !void {
+                added.* = 0;
+                not_added.* = 0;
             }
         }).addResource)
         .addSystem(.Startup, (struct {
@@ -41,21 +41,21 @@ test "check if tabled component was just added" {
         }).spawnEntity)
         .addSystem(.Update, (struct {
             pub fn checkIfNotAdded(
-                res: Resource(NotAddedTicks),
+                res: Resource(*NotAddedTicks),
                 q: Query(.{ .q = &.{ComponentA}, .added = &.{ComponentB} }),
             ) void {
                 if (q.len() == 0) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfNotAdded)
         .addSystem(.Update, (struct {
             pub fn checkIfAdded(
-                res: Resource(AddedTicks),
+                res: Resource(*AddedTicks),
                 q: Query(.{ .q = &.{ComponentA}, .added = &.{ComponentB} }),
             ) void {
                 if (q.len() > 0) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfAdded)
@@ -70,6 +70,8 @@ test "check if tabled component was just added" {
                 }
             }
         }).addIfNotPresent)
+        .addConstraint(ConstraintBuilder.stageNumThreads(.Startup, 1))
+        .addConstraint(ConstraintBuilder.stageNumThreads(.Update, 1))
         .build(std.testing.allocator, std.testing.io);
     defer app.deinit();
 
@@ -118,16 +120,16 @@ test "check if chunked component was just added" {
         .build();
 
     const Resource = Context.Resource;
-    const ResourceStore = Context.ResourceStore;
     const Commands = Context.Commands;
     const Query = Context.Query;
     const Entity = Context.Entity;
+    const ConstraintBuilder = Context.ConstraintBuilder;
 
     var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
-            pub fn addResource(store: *ResourceStore) !void {
-                store.insert(@as(AddedTicks, 0));
-                store.insert(@as(NotAddedTicks, 0));
+            pub fn addResource(added: *AddedTicks, not_added: *NotAddedTicks) !void {
+                added.* = 0;
+                not_added.* = 0;
             }
         }).addResource)
         .addSystem(.Startup, (struct {
@@ -137,21 +139,21 @@ test "check if chunked component was just added" {
         }).spawnEntity)
         .addSystem(.Update, (struct {
             pub fn checkIfNotAdded(
-                res: Resource(NotAddedTicks),
+                res: Resource(*NotAddedTicks),
                 q: Query(.{ .q = &.{ComponentA}, .added = &.{ComponentB} }),
             ) void {
                 if (q.len() == 0) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfNotAdded)
         .addSystem(.Update, (struct {
             pub fn checkIfAdded(
-                res: Resource(AddedTicks),
+                res: Resource(*AddedTicks),
                 q: Query(.{ .q = &.{ComponentA}, .added = &.{ComponentB} }),
             ) void {
                 if (q.len() > 0) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfAdded)
@@ -166,6 +168,8 @@ test "check if chunked component was just added" {
                 }
             }
         }).addIfNotPresent)
+        .addConstraint(ConstraintBuilder.stageNumThreads(.Startup, 1))
+        .addConstraint(ConstraintBuilder.stageNumThreads(.Update, 1))
         .build(std.testing.allocator, std.testing.io);
     defer app.deinit();
 
@@ -220,16 +224,16 @@ test "check if sparse component was just added" {
         .build();
 
     const Resource = Context.Resource;
-    const ResourceStore = Context.ResourceStore;
     const Commands = Context.Commands;
     const Query = Context.Query;
     const Entity = Context.Entity;
+    const ConstraintBuilder = Context.ConstraintBuilder;
 
     var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
-            pub fn addResource(store: *ResourceStore) !void {
-                store.insert(@as(AddedTicks, 0));
-                store.insert(@as(NotAddedTicks, 0));
+            pub fn addResource(added: *AddedTicks, not_added: *NotAddedTicks) !void {
+                added.* = 0;
+                not_added.* = 0;
             }
         }).addResource)
         .addSystem(.Startup, (struct {
@@ -239,21 +243,21 @@ test "check if sparse component was just added" {
         }).spawnEntity)
         .addSystem(.Update, (struct {
             pub fn checkIfNotAdded(
-                res: Resource(NotAddedTicks),
+                res: Resource(*NotAddedTicks),
                 q: Query(.{ .q = &.{ComponentA}, .added = &.{ComponentB} }),
             ) void {
                 if (q.len() == 0) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfNotAdded)
         .addSystem(.Update, (struct {
             pub fn checkIfAdded(
-                res: Resource(AddedTicks),
+                res: Resource(*AddedTicks),
                 q: Query(.{ .q = &.{ComponentA}, .added = &.{ComponentB} }),
             ) void {
                 if (q.len() > 0) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfAdded)
@@ -268,6 +272,8 @@ test "check if sparse component was just added" {
                 }
             }
         }).addIfNotPresent)
+        .addConstraint(ConstraintBuilder.stageNumThreads(.Startup, 1))
+        .addConstraint(ConstraintBuilder.stageNumThreads(.Update, 1))
         .build(std.testing.allocator, std.testing.io);
     defer app.deinit();
 

@@ -224,6 +224,48 @@ pub fn TypeHasher(comptime Types: []const type) type {
             };
         }
 
+        pub const TypeInfo = struct {
+            access: AccessType,
+            root: type,
+        };
+
+        /// returns null if root type is not registered or access type is invalid
+        /// returns TypeInfo otherwise
+        pub fn getTypeInfo(comptime T: type) ?TypeInfo {
+            if (isRegisteredType(T)) return .{ .access = .Const, .root = T };
+            return switch (@typeInfo(T)) {
+                .pointer => |p| {
+                    if (!isRegisteredType(p.child)) {
+                        return null;
+                    }
+                    return if (p.is_const)
+                        .{ .access = .PointerConst, .root = p.child }
+                    else
+                        .{ .access = .PointerMut, .root = p.child };
+                },
+                .optional => |o| switch (@typeInfo(o.child)) {
+                    .pointer => |p| {
+                        if (!isRegisteredType(p.child)) {
+                            return null;
+                        }
+                        return if (p.is_const)
+                            .{ .access = .OptionalPointerConst, .root = p.child }
+                        else
+                            .{ .access = .OptionalPointerMut, .root = p.child };
+                    },
+                    else => {
+                        if (!isRegisteredType(o.child)) {
+                            return null;
+                        }
+                        return .{ .access = .OptionalConst, .root = o.child };
+                    },
+                },
+                else => {
+                    return null;
+                },
+            };
+        }
+
         pub inline fn checkType(tid_or_type: anytype) void {
             if (comptime @TypeOf(tid_or_type) != TypeId and !@This().isRegisteredType(tid_or_type)) {
                 const T = T: {

@@ -55,18 +55,21 @@ pub fn World(comptime options: WorldOptions) type {
         });
 
         allocator: std.mem.Allocator,
+        io: std.Io,
         entity_registry: EntityRegistry,
         storage_store: DenseStorageStore,
         archetype_store: ArchetypeStore,
         sparse_sets: SparseSets = .empty,
-        queues: std.ArrayList(CommandsQueue) = .empty,
+        queue_mutex: std.Io.Mutex = .init,
+        queues: std.ArrayList(*CommandsQueue) = .empty,
         removed: RemovedLog,
         global_tick: Tick = .zero,
 
-        pub fn init(allocator: std.mem.Allocator) !*@This() {
+        pub fn init(allocator: std.mem.Allocator, io: std.Io) !*@This() {
             const new = try allocator.create(@This());
             new.* = @This(){
                 .allocator = allocator,
+                .io = io,
                 .storage_store = @FieldType(@This(), "storage_store").init(allocator),
                 // SAFETY: set right after, using storage_store address
                 .archetype_store = undefined,
@@ -88,8 +91,9 @@ pub fn World(comptime options: WorldOptions) type {
         }
 
         fn deinitQueues(self: *@This()) void {
-            for (self.queues.items) |*queue| {
+            for (self.queues.items) |queue| {
                 queue.deinit();
+                self.allocator.destroy(queue);
             }
             self.queues.deinit(self.allocator);
             self.queues = .empty;
@@ -266,16 +270,23 @@ pub fn World(comptime options: WorldOptions) type {
             return .{ location.storage, location.dense_index };
         }
 
+        /// thread-safe: each command queue is allocated by its own callee thread and
+        /// the append in the global queue pointer array is managed by a mutex
         pub fn createQueue(self: *@This()) !*CommandsQueue {
-            try self.queues.append(self.allocator, CommandsQueue.init(self.allocator));
-            return &self.queues.items[self.queues.items.len - 1];
+            const command_queue_ptr = try self.allocator.create(CommandsQueue);
+            command_queue_ptr.* = CommandsQueue.init(self.allocator);
+
+            try self.queue_mutex.lock(self.io);
+            try self.queues.append(self.allocator, command_queue_ptr);
+            self.queue_mutex.unlock(self.io);
+            return command_queue_ptr;
         }
 
         pub fn sync(self: *@This()) !void {
             // swap removed
             self.removed.swap(self.allocator);
             // sync queues
-            for (self.queues.items) |*queue| {
+            for (self.queues.items) |queue| {
                 try self.syncQueue(queue);
             }
             self.deinitQueues();

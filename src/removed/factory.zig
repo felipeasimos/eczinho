@@ -10,6 +10,9 @@ pub const RemovedOptions = struct {
 };
 
 pub fn Removed(comptime options: RemovedOptions) type {
+    if (!options.Components.isComponent(options.T)) {
+        @compileError("type '" ++ @typeName(options.T) ++ "' is not a registered Component");
+    }
     if (!options.Components.hasRemovedMetadata(options.T)) {
         @compileError("Component " ++ @typeName(options.T) ++ " is being queried for `removed` metadata, " ++
             "which it doesn't have. Please include it in the component config");

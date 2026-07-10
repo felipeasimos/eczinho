@@ -22,17 +22,17 @@ test "check if tabled component was just removed" {
         .build();
 
     const Resource = Context.Resource;
-    const ResourceStore = Context.ResourceStore;
     const Commands = Context.Commands;
     const Query = Context.Query;
     const Entity = Context.Entity;
     const Removed = Context.Removed;
+    const ConstraintBuilder = Context.ConstraintBuilder;
 
     var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
-            pub fn addResource(store: *ResourceStore) !void {
-                store.insert(@as(RemovedTicks, 0));
-                store.insert(@as(NotRemovedTicks, 0));
+            pub fn addResource(removed: *RemovedTicks, not_removed: *NotRemovedTicks) !void {
+                removed.* = 0;
+                not_removed.* = 0;
             }
         }).addResource)
         .addSystem(.Startup, (struct {
@@ -44,21 +44,21 @@ test "check if tabled component was just removed" {
         }).spawnEntity)
         .addSystem(.Update, (struct {
             pub fn checkIfNotRemoved(
-                res: Resource(NotRemovedTicks),
+                res: Resource(*NotRemovedTicks),
                 removed: Removed(ComponentB),
             ) void {
                 if (removed.readOne() == null) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfNotRemoved)
         .addSystem(.Update, (struct {
             pub fn checkIfRemoved(
-                res: Resource(RemovedTicks),
+                res: Resource(*RemovedTicks),
                 removed: Removed(ComponentB),
             ) void {
                 if (removed.readOne() != null) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfRemoved)
@@ -73,6 +73,8 @@ test "check if tabled component was just removed" {
                 }
             }
         }).removeIfPresent)
+        .addConstraint(ConstraintBuilder.stageNumThreads(.Startup, 1))
+        .addConstraint(ConstraintBuilder.stageNumThreads(.Update, 1))
         .build(std.testing.allocator, std.testing.io);
     defer app.deinit();
 
@@ -119,17 +121,17 @@ test "check if chunked component was just removed" {
         .build();
 
     const Resource = Context.Resource;
-    const ResourceStore = Context.ResourceStore;
     const Commands = Context.Commands;
     const Query = Context.Query;
     const Entity = Context.Entity;
     const Removed = Context.Removed;
+    const ConstraintBuilder = Context.ConstraintBuilder;
 
     var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
-            pub fn addResource(store: *ResourceStore) !void {
-                store.insert(@as(RemovedTicks, 0));
-                store.insert(@as(NotRemovedTicks, 0));
+            pub fn addResource(removed: *RemovedTicks, not_removed: *NotRemovedTicks) !void {
+                removed.* = 0;
+                not_removed.* = 0;
             }
         }).addResource)
         .addSystem(.Startup, (struct {
@@ -141,21 +143,21 @@ test "check if chunked component was just removed" {
         }).spawnEntity)
         .addSystem(.Update, (struct {
             pub fn checkIfNotRemoved(
-                res: Resource(NotRemovedTicks),
+                res: Resource(*NotRemovedTicks),
                 removed: Removed(ComponentB),
             ) void {
                 if (removed.readOne() == null) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfNotRemoved)
         .addSystem(.Update, (struct {
             pub fn checkIfRemoved(
-                res: Resource(RemovedTicks),
+                res: Resource(*RemovedTicks),
                 removed: Removed(ComponentB),
             ) void {
                 if (removed.readOne() != null) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfRemoved)
@@ -170,6 +172,8 @@ test "check if chunked component was just removed" {
                 }
             }
         }).removeIfPresent)
+        .addConstraint(ConstraintBuilder.stageNumThreads(.Startup, 1))
+        .addConstraint(ConstraintBuilder.stageNumThreads(.Update, 1))
         .build(std.testing.allocator, std.testing.io);
     defer app.deinit();
 
@@ -223,17 +227,17 @@ test "check if sparse component was just removed" {
         .build();
 
     const Resource = Context.Resource;
-    const ResourceStore = Context.ResourceStore;
     const Commands = Context.Commands;
     const Query = Context.Query;
     const Entity = Context.Entity;
     const Removed = Context.Removed;
+    const ConstraintBuilder = Context.ConstraintBuilder;
 
     var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
-            pub fn addResource(store: *ResourceStore) !void {
-                store.insert(@as(RemovedTicks, 0));
-                store.insert(@as(NotRemovedTicks, 0));
+            pub fn addResource(removed: *RemovedTicks, not_removed: *NotRemovedTicks) !void {
+                removed.* = 0;
+                not_removed.* = 0;
             }
         }).addResource)
         .addSystem(.Startup, (struct {
@@ -245,21 +249,21 @@ test "check if sparse component was just removed" {
         }).spawnEntity)
         .addSystem(.Update, (struct {
             pub fn checkIfNotRemoved(
-                res: Resource(NotRemovedTicks),
+                res: Resource(*NotRemovedTicks),
                 removed: Removed(ComponentB),
             ) void {
                 if (removed.readOne() == null) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfNotRemoved)
         .addSystem(.Update, (struct {
             pub fn checkIfRemoved(
-                res: Resource(RemovedTicks),
+                res: Resource(*RemovedTicks),
                 removed: Removed(ComponentB),
             ) void {
                 if (removed.readOne() != null) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfRemoved)
@@ -274,6 +278,8 @@ test "check if sparse component was just removed" {
                 }
             }
         }).removeIfPresent)
+        .addConstraint(ConstraintBuilder.stageNumThreads(.Startup, 1))
+        .addConstraint(ConstraintBuilder.stageNumThreads(.Update, 1))
         .build(std.testing.allocator, std.testing.io);
     defer app.deinit();
 

@@ -11,6 +11,7 @@ const EventStoreFactory = @import("event/event_store.zig").EventStore;
 const EventsFactory = @import("event/events.zig").Events;
 const BundleContext = @import("bundle/bundle.zig").BundleContext;
 const Bundle = @import("bundle/bundle.zig").Bundle;
+const Constraint = @import("constraint/constraint.zig").Constraint;
 const app = @import("app.zig");
 const app_events = @import("app_events.zig");
 const ComponentConfig = @import("components.zig").ComponentConfig;
@@ -207,10 +208,15 @@ pub const AppBuilder = struct {
             .options = .{ .Context = ctx },
         };
     }
-    pub fn addSystem(comptime self: @This(), comptime label: StageLabel, comptime function: anytype) @This() {
+    pub fn addConstraint(comptime self: @This(), comptime constraint: Constraint) @This() {
         var new = self;
-        const system_slice: []const type = &.{System(function, self.options.Context)};
-        const label_slice: []const StageLabel = &.{label};
+        new.options.Constraints = new.options.Constraints ++ .{constraint};
+        return new;
+    }
+    pub fn addSystem(comptime self: @This(), comptime stage: StageLabel, comptime function: anytype) @This() {
+        var new = self;
+        const system_slice: []const type = &.{System(function, self.options.Context, stage)};
+        const label_slice: []const StageLabel = &.{stage};
         new.options.Systems = new.options.Systems ++ system_slice;
         new.options.Labels = new.options.Labels ++ label_slice;
         return new;
@@ -232,7 +238,7 @@ pub const AppBuilder = struct {
         });
         return app.App(self.options){
             .allocator = allocator,
-            .world = try World.init(allocator),
+            .world = try World.init(allocator, io),
             .resource_store = TypeStore.init(),
             .event_store = EventStore.init(allocator),
             .scheduler = null,

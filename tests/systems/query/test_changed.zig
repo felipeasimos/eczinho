@@ -21,16 +21,16 @@ test "check if tabled component was just changed" {
         .build();
 
     const Resource = Context.Resource;
-    const ResourceStore = Context.ResourceStore;
     const Commands = Context.Commands;
     const Query = Context.Query;
     const Entity = Context.Entity;
+    const ConstraintBuilder = Context.ConstraintBuilder;
 
     var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
-            pub fn addResource(store: *ResourceStore) !void {
-                store.insert(@as(ChangedTicks, 0));
-                store.insert(@as(NotChangedTicks, 0));
+            pub fn addResource(changed: *ChangedTicks, not_changed: *NotChangedTicks) !void {
+                changed.* = 0;
+                not_changed.* = 0;
             }
         }).addResource)
         .addSystem(.Startup, (struct {
@@ -40,21 +40,21 @@ test "check if tabled component was just changed" {
         }).spawnEntity)
         .addSystem(.Update, (struct {
             pub fn checkIfNotChanged(
-                res: Resource(NotChangedTicks),
+                res: Resource(*NotChangedTicks),
                 q: Query(.{ .q = &.{ComponentA}, .changed = &.{ComponentB} }),
             ) void {
                 if (q.len() == 0) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfNotChanged)
         .addSystem(.Update, (struct {
             pub fn checkIfChanged(
-                res: Resource(ChangedTicks),
+                res: Resource(*ChangedTicks),
                 q: Query(.{ .q = &.{ComponentA}, .changed = &.{ComponentB} }),
             ) void {
                 if (q.len() > 0) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfChanged)
@@ -69,6 +69,8 @@ test "check if tabled component was just changed" {
                 }
             }
         }).changeIfNotChanged)
+        .addConstraint(ConstraintBuilder.stageNumThreads(.Startup, 1))
+        .addConstraint(ConstraintBuilder.stageNumThreads(.Update, 1))
         .build(std.testing.allocator, std.testing.io);
     defer app.deinit();
 
@@ -117,16 +119,16 @@ test "check if chunked component was just changed" {
         .build();
 
     const Resource = Context.Resource;
-    const ResourceStore = Context.ResourceStore;
     const Commands = Context.Commands;
     const Query = Context.Query;
     const Entity = Context.Entity;
+    const ConstraintBuilder = Context.ConstraintBuilder;
 
     var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
-            pub fn addResource(store: *ResourceStore) !void {
-                store.insert(@as(ChangedTicks, 0));
-                store.insert(@as(NotChangedTicks, 0));
+            pub fn addResource(changed: *ChangedTicks, not_changed: *NotChangedTicks) !void {
+                changed.* = 0;
+                not_changed.* = 0;
             }
         }).addResource)
         .addSystem(.Startup, (struct {
@@ -136,21 +138,21 @@ test "check if chunked component was just changed" {
         }).spawnEntity)
         .addSystem(.Update, (struct {
             pub fn checkIfNotChanged(
-                res: Resource(NotChangedTicks),
+                res: Resource(*NotChangedTicks),
                 q: Query(.{ .q = &.{ComponentA}, .changed = &.{ComponentB} }),
             ) void {
                 if (q.len() == 0) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfNotChanged)
         .addSystem(.Update, (struct {
             pub fn checkIfChanged(
-                res: Resource(ChangedTicks),
+                res: Resource(*ChangedTicks),
                 q: Query(.{ .q = &.{ComponentA}, .changed = &.{ComponentB} }),
             ) void {
                 if (q.len() > 0) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfChanged)
@@ -165,6 +167,8 @@ test "check if chunked component was just changed" {
                 }
             }
         }).changeIfNotChanged)
+        .addConstraint(ConstraintBuilder.stageNumThreads(.Startup, 1))
+        .addConstraint(ConstraintBuilder.stageNumThreads(.Update, 1))
         .build(std.testing.allocator, std.testing.io);
     defer app.deinit();
 
@@ -220,16 +224,16 @@ test "check if sparse component was just changed" {
         .build();
 
     const Resource = Context.Resource;
-    const ResourceStore = Context.ResourceStore;
     const Commands = Context.Commands;
     const Query = Context.Query;
     const Entity = Context.Entity;
+    const ConstraintBuilder = Context.ConstraintBuilder;
 
     var app = try eczinho.AppBuilder.init(Context)
         .addSystem(.Startup, (struct {
-            pub fn addResource(store: *ResourceStore) !void {
-                store.insert(@as(ChangedTicks, 0));
-                store.insert(@as(NotChangedTicks, 0));
+            pub fn addResource(changed: *ChangedTicks, not_changed: *NotChangedTicks) !void {
+                changed.* = 0;
+                not_changed.* = 0;
             }
         }).addResource)
         .addSystem(.Startup, (struct {
@@ -239,21 +243,21 @@ test "check if sparse component was just changed" {
         }).spawnEntity)
         .addSystem(.Update, (struct {
             pub fn checkIfNotChanged(
-                res: Resource(NotChangedTicks),
+                res: Resource(*NotChangedTicks),
                 q: Query(.{ .q = &.{ComponentA}, .changed = &.{ComponentB} }),
             ) void {
                 if (q.len() == 0) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfNotChanged)
         .addSystem(.Update, (struct {
             pub fn checkIfChanged(
-                res: Resource(ChangedTicks),
+                res: Resource(*ChangedTicks),
                 q: Query(.{ .q = &.{ComponentA}, .changed = &.{ComponentB} }),
             ) void {
                 if (q.len() > 0) {
-                    res.get().* += 1;
+                    res.* += 1;
                 }
             }
         }).checkIfChanged)
@@ -268,6 +272,8 @@ test "check if sparse component was just changed" {
                 }
             }
         }).changeIfNotChanged)
+        .addConstraint(ConstraintBuilder.stageNumThreads(.Startup, 1))
+        .addConstraint(ConstraintBuilder.stageNumThreads(.Update, 1))
         .build(std.testing.allocator, std.testing.io);
     defer app.deinit();
 

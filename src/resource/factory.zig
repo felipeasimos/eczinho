@@ -3,29 +3,14 @@ pub const ResourceFactoryOptions = struct {
     T: type,
 };
 
+/// Really just a compilation guard that checks if the given type is properly registered as a Resource.
 pub fn ResourceFactory(comptime options: ResourceFactoryOptions) type {
-    return struct {
-        pub const Marker = ResourceFactory;
-        pub const TypeStore = options.TypeStore;
-        pub const T = options.T;
-
-        store: *TypeStore,
-        pub fn init(store: *TypeStore) @This() {
-            return .{
-                .store = store,
-            };
+    const Resources = options.TypeStore.TypeHasher;
+    if (comptime !Resources.isResource(options.T)) {
+        const CanonicalType = Resources.getCanonicalType(options.T);
+        if (comptime !Resources.isResource(CanonicalType)) {
+            @compileError("type '" ++ @typeName(CanonicalType) ++ "' is not a registered Resource");
         }
-        pub fn clone(self: @This()) T {
-            return self.store.clone(T);
-        }
-        pub fn get(self: @This()) *T {
-            return self.store.get(T);
-        }
-        pub fn getConst(self: @This()) *const T {
-            return self.store.getConst(T);
-        }
-        pub fn deinit(self: @This()) void {
-            _ = self;
-        }
-    };
+    }
+    return options.T;
 }

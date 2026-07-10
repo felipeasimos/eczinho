@@ -7,48 +7,70 @@ const types = @import("../types.zig");
 const event = @import("../event/event.zig");
 const removed = @import("../removed/removed.zig");
 const commands = @import("../commands/commands.zig");
-const SystemData = @import("system_data.zig").SystemData;
+const SystemData = @import("./system_data.zig").SystemData;
 const ParameterData = @import("parameter_data.zig").ParameterData;
+const StageLabel = @import("../scheduler/stage_label.zig").StageLabel;
 
-pub fn System(comptime function: anytype, comptime Context: type) type {
+pub fn isSystem(comptime T: type) bool {
+    return @typeInfo(T) == .@"struct" and
+        @hasDecl(T, "Marker") and
+        @hasDecl(T, "Fn") and
+        @TypeOf(T.Marker) == @TypeOf(System) and
+        T.Marker == System;
+}
+pub fn isSameSystem(comptime a: type, comptime b: type) bool {
+    if (comptime !isSystem(a)) {
+        @compileError("type 'a' (" ++ @typeName(a) ++ ") is not a system type");
+    }
+    if (comptime !isSystem(b)) {
+        @compileError("type 'b' (" ++ @typeName(b) ++ ") is not a system type");
+    }
+    return comptime @TypeOf(a.Fn) == @TypeOf(b.Fn) and a.Fn == b.Fn and a.Stage == b.Stage;
+}
+
+pub fn System(comptime function: anytype, comptime Context: type, comptime stage: StageLabel) type {
     if (@typeInfo(@TypeOf(function)) != .@"fn") {
         @compileError("a function should be provided to System(), not " ++ @typeName(@TypeOf(function)));
     }
     return struct {
-        pub const Entity = Context.Entity;
-        pub const Components = Context.Components;
-        pub const Resources = Context.Resources;
-        pub const Events = Context.Events;
+        pub const Marker = System;
+        pub const Fn = function;
+        pub const Stage = stage;
+        const Entity = Context.Entity;
+        const Components = Context.Components;
+        const Resources = Context.Resources;
+        const Events = Context.Events;
 
-        pub const World = Context.GetWorldType();
-        pub const TypeStore = TypeStoreFactory(.{
+        const World = Context.GetWorldType();
+        const TypeStore = TypeStoreFactory(.{
             .TypeHasher = Resources,
         });
-        pub const EventStore = EventStoreFactory(.{
+        const EventStore = EventStoreFactory(.{
             .Events = Events,
         });
-        pub const RemovedLog = RemovedLogFactory(.{
+        const RemovedLog = RemovedLogFactory(.{
             .Components = Components,
             .Entity = Entity,
         });
-        pub const CommandsQueue = commands.CommandsQueue(.{
+        const CommandsQueue = commands.CommandsQueue(.{
             .Components = Components,
             .Entity = Entity,
         });
 
-        pub const FuncType = @TypeOf(function);
-        pub const FuncInfo = @typeInfo(FuncType).@"fn";
+        const FuncType = @TypeOf(Fn);
+        const FuncInfo = @typeInfo(FuncType).@"fn";
 
-        pub const RawReturnType: type = FuncInfo.return_type.?;
-        pub const ReturnType: type = switch (@typeInfo(RawReturnType)) {
+        const RawReturnType: type = FuncInfo.return_type.?;
+        const ReturnType: type = switch (@typeInfo(RawReturnType)) {
             .error_set, .error_union => RawReturnType,
             else => anyerror!RawReturnType,
         };
-        pub const ParamsSlice = FuncInfo.params;
-        pub const ArgsTuple = std.meta.ArgsTuple(FuncType);
+        const ArgsTuple = std.meta.ArgsTuple(FuncType);
 
-        pub const NumEventReaders = numOfMarker(ParamsSlice, event.EventReader);
-        pub const NumRemovedReaders = numOfMarker(ParamsSlice, removed.Removed);
+        const NumEventReaders = numOfMarker(ParamsSlice, event.EventReader);
+        const NumRemovedReaders = numOfMarker(ParamsSlice, removed.Removed);
+
+        pub const ParamsSlice = FuncInfo.params;
 
         pub fn initData(alloc: std.mem.Allocator) !SystemData {
             return SystemData.init(alloc, NumEventReaders, NumRemovedReaders);
@@ -74,19 +96,21 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             return true;
         }
 
-        fn matchMarker(comptime T: type, comptime Marker: anytype) bool {
+        fn matchMarker(comptime T: type, comptime M: anytype) bool {
             const t = GetBaseType(T);
+            const info = @typeInfo(t);
+            if (info != .@"struct" and info != .@"enum" and info != .@"union") return false;
             if (!@hasDecl(t, "Marker")) return false;
-            if (@TypeOf(t.Marker) != @TypeOf(Marker)) return false;
-            if (t.Marker != Marker) return false;
+            if (@TypeOf(t.Marker) != @TypeOf(M)) return false;
+            if (t.Marker != M) return false;
             return true;
         }
 
-        fn numOfMarker(comptime ParamSlice: []const std.builtin.Type.Fn.Param, comptime Marker: anytype) usize {
+        fn numOfMarker(comptime ParamSlice: []const std.builtin.Type.Fn.Param, comptime M: anytype) usize {
             comptime var count = 0;
             inline for (ParamSlice) |param| {
                 if (param.type) |t| {
-                    if (comptime matchMarker(t, Marker)) {
+                    if (comptime matchMarker(t, M)) {
                         count += 1;
                     }
                 }
@@ -105,7 +129,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             return count;
         }
 
-        const Dependencies = struct {
+        const ArgDependencies = struct {
             world: *World,
             type_store: *TypeStore,
             event_store: *EventStore,
@@ -114,7 +138,7 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
             allocator: std.mem.Allocator,
             io: std.Io,
         };
-        inline fn initArg(comptime ArgType: type, deps: Dependencies) !ArgType {
+        inline fn initArg(comptime ArgType: type, deps: ArgDependencies) !ArgType {
             const InitFunc = @TypeOf(ArgType.init);
             const InitInfo = @typeInfo(InitFunc).@"fn";
             const InitArgsTuple = std.meta.ArgsTuple(InitFunc);
@@ -146,28 +170,45 @@ pub fn System(comptime function: anytype, comptime Context: type) type {
                 else => @call(.always_inline, ArgType.init, args),
             };
         }
-        inline fn getArgs(deps: Dependencies) !ArgsTuple {
+        inline fn getArgs(deps: ArgDependencies) !ArgsTuple {
             // SAFETY: undefined is necessary to fill tuple with custom type
             var args: ArgsTuple = undefined;
             inline for (ParamsSlice, 0..) |param, i| {
                 const ArgType = param.type.?;
                 args[i] = switch (comptime ArgType) {
                     types.Tick => deps.world.getTick(),
-                    *TypeStore => deps.type_store,
                     std.mem.Allocator => deps.world.allocator,
                     std.Io => deps.io,
-                    else => try initArg(ArgType, deps),
+                    else => _else: {
+                        if (comptime Resources.getTypeInfo(ArgType)) |info| {
+                            const Root = info.root;
+                            break :_else switch (comptime info.access) {
+                                .Const => deps.type_store.clone(Root),
+                                .PointerConst => deps.type_store.getConst(Root),
+                                .PointerMut => deps.type_store.get(Root),
+                                else => @compileError("No optionals for Resources"),
+                                // .OptionalConst => deps.type_store.optConst(Root),
+                                // .OptionalPointerMut => deps.type_store.optGet(Root),
+                                // .OptionalPointerConst => deps.type_store.optGetConst(Root),
+                            };
+                        }
+                        break :_else try initArg(ArgType, deps);
+                    },
                 };
             }
             return args;
         }
         inline fn deinitArgs(args: anytype) void {
-            inline for (ParamsSlice, 0..) |_, i| {
-                args[i].deinit();
+            inline for (ParamsSlice, 0..) |Param, i| {
+                // if not resource
+                const T = Param.type.?;
+                if (comptime Resources.getTypeInfo(T) == null) {
+                    args[i].deinit();
+                }
             }
         }
 
-        pub inline fn call(deps: Dependencies) ReturnType {
+        pub inline fn call(deps: ArgDependencies) ReturnType {
             var args = getArgs(deps) catch @panic("Couldn't initialize system arguments");
             const result = @call(.always_inline, function, args);
             deinitArgs(&args);
